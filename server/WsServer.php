@@ -451,7 +451,7 @@ class WsServer
 //			echo 'FIN:', $FIN, PHP_EOL;
 
 			//0x0附加数据帧 0x1文本数据帧 0x2二进制数据帧 0x3-7无定义，保留 0x8连接关闭 0x9ping 0xApong 0xB-F无定义，保留
-			$OPCODE = ord($buffer[0]) & 15;
+			$OPCODE = ord($buffer[0]) & 15; //... & 1111
 
 //			echo 'OPCODE:', sprintf('%08b', $OPCODE), PHP_EOL;
 
@@ -498,7 +498,8 @@ class WsServer
 //			echo 'RECEIVE:', $receive, PHP_EOL;
 //			var_dump($unpack);
 
-			if ($receive <= 0) {
+			if (($receive <= 0) || (strlen($masks) < 4)) {
+				$params['is_exception'] = true;
 				break;
 			}
 
