@@ -60,7 +60,8 @@ Swipe.prototype = {
         if (this.length < 2) return null;
 
         // determine width of each slide
-        this.width = this.container.getBoundingClientRect().width || this.container.parentNode.offsetWidth;
+        //this.container.getBoundingClientRect().width
+        this.width = this.container.parentNode.offsetWidth;
 
         // return immediately if measurement fails
         if (!this.width) return null;
@@ -75,7 +76,7 @@ Swipe.prototype = {
             var el = this.slides[index];
             el.style.width = this.width + 'px';
             el.style.display = 'table-cell';
-            el.style.verticalAlign = 'top';
+            el.style.verticalAlign = 'middle';
         }
 
         // set start position and force translate to remove initial flickering

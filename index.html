@@ -18,7 +18,7 @@
 			overflow: hidden;
 		}
 		#room {
-			border-radius: 4px 4px 0 0;
+			border-radius: 0;
 			box-shadow: none;
 			margin-left: 0;
 			margin-right: 0;
@@ -80,7 +80,6 @@
 
 		.bubble-left {
 			float: left;
-			/*border: 1px solid gold;*/
 			background-color: #FFF;
 			border-radius: 10px;
 			padding: 10px;
@@ -89,7 +88,6 @@
 
 		.bubble-right {
 			float: right;
-			/*border: 1px solid gold;*/
 			background-color: #AAD2FF;
 			border-radius: 10px;
 			padding: 10px;
@@ -129,15 +127,34 @@
 		}
 
 		/*********************touch**************************/
-		div.page {
+
+		#slider {
 			position: fixed;
-			text-align: center;
 			top: 0;
 			left: 0;
-			right: 0;
-			bottom: 0;
+			width: 100%;
+			height: 100%;
 			z-index: 14;
-			padding-top: 30px;
+			text-align: center;
+		}
+
+		#img-container {
+			position: fixed;
+			top: 0;
+			left: 0;
+			height: 100%;
+			width: 100%;
+			display: table !important;
+		}
+
+		#img-container li {
+			display: table-cell !important;
+			vertical-align: middle !important;
+		}
+
+		#img-container li .description {
+			background: black;
+			color: white;
 		}
 
 		div.pinch-zoom {
@@ -153,16 +170,6 @@
 			background: #333;
 			padding: 3px;
 			font-size: 11px;
-		}
-
-		div.pinch-zoom div.description {
-			position: absolute;
-			bottom: 0;
-			left: 0;
-			width: 100%;
-			background: black;
-			opacity: 0.5;
-			color: white;
 		}
 
 		ul, ol {
@@ -187,12 +194,6 @@
 			background-color: #000;
 			display: none;
 			opacity: 0.5;
-		}
-
-		.img-close {
-			position: absolute;
-			top: 5px;
-			right: 10px;
 		}
 
 		/********************表情**********************/
@@ -527,7 +528,9 @@
 </div>
 
 <!--聊天消息容器-->
-<div class="room clearfix" id="room"></div>
+<div class="room clearfix" id="room">
+	<marquee scrollamount="3" class="bg-success">大家好！欢迎加入聊天室。如果你想要程序源码，可以加入我们①群：345480905</marquee>
+</div>
 
 <!--发送消息框-->
 <div class="input-group z-index">
@@ -590,12 +593,8 @@
 </div>
 
 <!--图片预览-->
-<div class="page hidden">
-	<div id='slider'>
-		<ul id="img-container"></ul>
-	</div>
-	<button type="button" onclick="imageHelper.closePreview()" class="close img-close" aria-label="Close"><span
-			aria-hidden="true">×</span></button>
+<div id="slider" class="hidden">
+	<ul id="img-container"></ul>
 </div>
 <div id="backdrop"></div>
 
@@ -663,7 +662,7 @@
 	(href.substr(pos) == '/') || (href = href.substr(0, pos));//排除index.html这种URL
 	var port = (("localhost" == window.location.host) || ("127.0.0.1" == window.location.host)) ? '81' : '443';
 	var url = 'ws://' + window.location.host + ':' + port;
-	var match_url = /((https?|ftp|file):\/\/[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|])/; //匹配URL
+	var match_url = '((https?|ftp|file):\/\/[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|])'; //匹配URL
 	var ws = new WebSocket(url);
 
 	const COMMON = 0;//公共消息
@@ -769,64 +768,68 @@
 	ws.onmessage = function (message) {
 		var mess = dataHelper.decode(message.data);
 
-		switch (mess.type) {
-			case WELCOME://欢迎消息
-				messageHelper.welcome(mess);
-				break;
-			case QUIT://退出消息
-				messageHelper.quit(mess);
-				break;
-			case COMMON://公共消息
-				messageHelper.common(mess);
-				break;
-			case COMMON_IMAGE://公共消息
-			case COMMON_EMOTION:
-				messageHelper.commonImage(mess);
-				break;
-			case SELF://myself @other
-				messageHelper.self(mess);
-				break;
-			case SELF_IMAGE://myself @other
-			case SELF_EMOTION:
-				messageHelper.selfImage(mess);
-				break;
-			case OTHER://other @me
-				messageHelper.other(mess);
-				break;
-			case OTHER_IMAGE://other @me
-			case OTHER_EMOTION:
-				messageHelper.otherImage(mess);
-				break;
-			case ONLINE://在线用户列表
-				messageHelper.online(mess);
-				break;
-			case REGISTER://需要注册
-				messageHelper.register();
-				break;
-			case INCORRECT://登录出错
-				messageHelper.incorrect(mess);
-				break;
-			case LOGIN://已经登录
-				messageHelper.login(mess);
-				break;
-			case ERROR://出错
-				messageHelper.error(mess);
-				break;
-			case WARNING://警告
-			case REMOVE://移除
-			case FORBIDDEN://禁用
-				messageHelper.warning(mess);
-				break;
-			case SYSTEM://系统信息
-			case DOWNLINE://下线
-				messageHelper.system(mess);
-				break;
-			case AVATAR_SUCCESS:
-				messageHelper.avatar_success(mess);
-				break;
-			case AVATAR_FAIL:
-				messageHelper.avatar_fail(mess);
-				break;
+		try {
+			switch (mess.type) {
+				case WELCOME://欢迎消息
+					messageHelper.welcome(mess);
+					break;
+				case QUIT://退出消息
+					messageHelper.quit(mess);
+					break;
+				case COMMON://公共消息
+					messageHelper.common(mess);
+					break;
+				case COMMON_IMAGE://公共消息
+				case COMMON_EMOTION:
+					messageHelper.commonImage(mess);
+					break;
+				case SELF://myself @other
+					messageHelper.self(mess);
+					break;
+				case SELF_IMAGE://myself @other
+				case SELF_EMOTION:
+					messageHelper.selfImage(mess);
+					break;
+				case OTHER://other @me
+					messageHelper.other(mess);
+					break;
+				case OTHER_IMAGE://other @me
+				case OTHER_EMOTION:
+					messageHelper.otherImage(mess);
+					break;
+				case ONLINE://在线用户列表
+					messageHelper.online(mess);
+					break;
+				case REGISTER://需要注册
+					messageHelper.register();
+					break;
+				case INCORRECT://登录出错
+					messageHelper.incorrect(mess);
+					break;
+				case LOGIN://已经登录
+					messageHelper.login(mess);
+					break;
+				case ERROR://出错
+					messageHelper.error(mess);
+					break;
+				case WARNING://警告
+				case REMOVE://移除
+				case FORBIDDEN://禁用
+					messageHelper.warning(mess);
+					break;
+				case SYSTEM://系统信息
+				case DOWNLINE://下线
+					messageHelper.system(mess);
+					break;
+				case AVATAR_SUCCESS:
+					messageHelper.avatar_success(mess);
+					break;
+				case AVATAR_FAIL:
+					messageHelper.avatar_fail(mess);
+					break;
+			}
+		} catch (e) {
+			alert(e);
 		}
 	};
 
@@ -987,10 +990,10 @@
 			this.autoBottom(index);
 		},
 		openContacts: function () {
-			this.contactsContainer.removeClass("hidden animated slideOutLeft").addClass("animated slideInLeft");
+			this.contactsContainer.removeClass("hidden slideOutLeft").addClass("animated slideInLeft");
 		},
 		closeContacts: function () {
-			this.contactsContainer.removeClass("animated slideInLeft").addClass("animated slideOutLeft");
+			this.contactsContainer.removeClass("slideInLeft").addClass("animated slideOutLeft");
 		}
 	};
 
@@ -1054,7 +1057,7 @@
 						if (complete >= len) {
 							is_locked = false;
 							layer.close(index);
-							_this.toast("上传完毕，点击图片可以预览噢:)");
+							_this.toast("上传完毕，点击图片可以预览哦:-)");
 						}
 					},
 					fail: function(file) {
@@ -1210,11 +1213,12 @@
 			info = mess.sender.username;
 			if (user.user_id == mess.sender.user_id) {
 				search = ["%SENDER%", "%MESSAGE%", "%INFO%", match_url];
-				replace = [sender, mess.mess, info, "<a href='$1'>$1</a>"];
+				replace = [sender, mess.mess, info, "<a href='$1' target='_blank'>$1</a>"];
 				html += this.my_message.replaceMulti(search, replace);
+
 			} else {
 				search = ["%USER_ID%", "%USERNAME%", "%SENDER%", "%MESSAGE%", "%USER%", "%INFO%", match_url];
-				replace = [mess.sender.user_id, mess.sender.username, sender, mess.mess, JSON.stringify(mess.sender), info, "<a href='$1'>$1</a>"];
+				replace = [mess.sender.user_id, mess.sender.username, sender, mess.mess, JSON.stringify(mess.sender), info, "<a href='$1' target='_blank'>$1</a>"];
 				html += this.common_message.replaceMulti(search, replace);
 			}
 			this.room_container.append(html);
@@ -1246,7 +1250,7 @@
 			var html = this.getTimeMessage(mess);
 			var search = ["%USER_ID%", "%USERNAME%", "%RECEIVER%", "%MESSAGE%", "%SENDER%", "%USER%", match_url];
 			var sender = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
-			var replace = [mess.receiver.user_id, mess.receiver.username, mess.receiver.username, mess.mess, sender, JSON.stringify(mess.receiver), "<a href='$1'>$1</a>"];
+			var replace = [mess.receiver.user_id, mess.receiver.username, mess.receiver.username, mess.mess, sender, JSON.stringify(mess.receiver), "<a href='$1' target='_blank'>$1</a>"];
 			html += this.self_message.replaceMulti(search, replace);
 
 			this.autoBottom();
@@ -1272,7 +1276,7 @@
 			var html = this.getTimeMessage(mess);
 			var search = ["%USER_ID%", "%USERNAME%", "%SENDER%", "%MESSAGE%", "%USER%", match_url];
 			var sender = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
-			var replace = [mess.sender.user_id, mess.sender.username, sender, mess.mess, JSON.stringify(mess.sender), "<a href='$1'>$1</a>"];
+			var replace = [mess.sender.user_id, mess.sender.username, sender, mess.mess, JSON.stringify(mess.sender), "<a href='$1' target='_blank'>$1</a>"];
 			html += this.private_message.replaceMulti(search, replace);
 
 			this.sound && audio.play();
@@ -1463,12 +1467,22 @@
 			}));
 		},
 		sendImage: function (type, sender_id, receiver_id, mess) {
-			ws.send(new Blob([dataHelper.encode({
-				type: type,
-				sender_id: sender_id,
-				receiver_id: receiver_id,
-				mess: mess
-			})], {type:"application/json"}))
+			try {
+				ws.send(new Blob([dataHelper.encode({
+					type: type,
+					sender_id: sender_id,
+					receiver_id: receiver_id,
+					mess: mess
+				})], {type: "application/json"}));
+			} catch (e) {
+				//UC不能使用Blob，换明文试一次
+				ws.send(dataHelper.encode({
+					type: type,
+					sender_id: sender_id,
+					receiver_id: receiver_id,
+					mess: mess
+				}));
+			}
 		},
 
 		toast: function (content) {
@@ -1480,7 +1494,7 @@
 		},
 		
 		loading: function (content, time) {
-			if (typeof time=="undefind") time = false;
+			if (typeof time=="undefined") time = false;
 			return layer.open({
 				type: 2
 				,content: content
@@ -1497,6 +1511,7 @@
 			} else {
 				this.toast("私信声音：开");
 				this.sound = true;
+				audio.play();
 				i.removeClass("fa-bell-slash-o").addClass("fa-bell-o");
 			}
 		}
@@ -1517,13 +1532,13 @@
 			var _this = this;
 			$("#room").css("overflow", "hidden");
 			$("#backdrop").fadeIn();
-			$(".page").removeClass("hidden animated slideOutUp").addClass("animated slideInDown");
+			slider.removeClass("hidden bounceOutUp").addClass("animated bounceInDown");
 			container.html("");
 			var html =
-				'<li style="display:block"><div class="pinch-zoom"><img src="' + img.src + '" /><div class="description">' + img.alt + '</div></div></li>';
+				'<li style="display:block"><div class="pinch-zoom"><img src="' + img.src + '" /></div><div class="description">' + img.alt + '</div></li>';
 
 			$.each($("img.img-msg").not(img), function (i, n) {
-				html += '<li style="display:none"><div class="pinch-zoom"><img src="' + n.src + '" /><div class="description">' + n.alt + '</div></div></li>';
+				html += '<li style="display:none"><div class="pinch-zoom"><img src="' + n.src + '" /></div><div class="description">' + n.alt + '</div></li>';
 			});
 			container.html(html);
 			container.ready(function () {
@@ -1537,7 +1552,7 @@
 					new RTP.PinchZoom($(this), {});
 				});
 
-				slider.parent().click(function () {
+				slider.click(function () {
 					_this.closePreview();
 				});
 
@@ -1570,7 +1585,7 @@
 		//取消预览
 		closePreview: function () {
 			$("#room").css("overflow", "auto");
-			$(".page").removeClass("animated slideInDown").addClass("animated slideOutUp");
+			$("#slider").removeClass("bounceInDown").addClass("animated bounceOutUp");
 			$("#backdrop").fadeOut();
 		}
 	};
@@ -1580,10 +1595,10 @@
 		backdrop: $("#backdrop"),
 		open: function () {
 			this.backdrop.fadeIn();
-			this.container.removeClass("hidden animated slideOutUp").addClass("animated slideInDown");
+			this.container.removeClass("hidden slideOutUp").addClass("animated slideInDown");
 		},
 		close: function () {
-			this.container.removeClass("animated slideInDown").addClass("animated slideOutUp");
+			this.container.removeClass("slideInDown").addClass("animated slideOutUp");
 			this.backdrop.fadeOut();
 		},
 		init: function () {
@@ -1761,6 +1776,11 @@
 		}
 	};
 	emotionHelper.init();
+
+	//滚动条
+	window.setTimeout(function () {
+		$("marquee").remove();
+	}, 60000);
 </script>
 </body>
 </html>
