@@ -2,7 +2,7 @@
 define('APP_PATH', realpath('.'));
 function autoload($class)
 {
-	require APP_PATH . DIRECTORY_SEPARATOR . implode(DIRECTORY_SEPARATOR, explode('\\', $class)) . '.php';
+	require APP_PATH . DIRECTORY_SEPARATOR . str_replace('\\', DIRECTORY_SEPARATOR, $class) . '.php';
 }
 
 spl_autoload_register('autoload');
@@ -52,6 +52,12 @@ class Client implements IClient
 	const AVATAR_UPLOAD = 42;//上传头像
 	const AVATAR_SUCCESS = 43;//上传成功
 	const AVATAR_FAIL = -43;//上传失败
+	const HISTORY_COMMON_MESSAGE = 50; //历史公共消息
+	const HISTORY_PERSONAL_MESSAGE = 51; //历史个人消息
+	const COMMON_MUSIC = 60; //公共音乐
+	const SELF_MUSIC = 62; //本人音乐
+	const OTHER_MUSIC = 63; //他人音乐
+	const PERSONAL_MUSIC = 64; //私信音乐
 
 	public function __construct($address, $port)
 	{
@@ -78,13 +84,34 @@ class Client implements IClient
 			unset($message);
 			return;
 		}
+
 		unset($message);
 		array_walk_recursive($arr, function (&$item, $key) {
 			$item = addslashes(htmlspecialchars(trim($item)));
 		});
-		$headers = array('ip' => $this->serviceIp[$key], 'agent' => $this->serviceAgent[$key]);
+
+		$type = $arr['type'] + 0;
+		$user_id = 0;
+		$sender = array('user_id' => 0, 'username' => '');
+		if ($type != self::REGISTER) {
+			//除了注册，所有操作都需要进行验证
+			$user_id = $arr['sender_id'];
+			$sender = $this->auth($key, $user_id);
+			if (false == $sender)
+				return;
+		}
+
+		$receiver_id = 0;
+		$receiver = array('user_id' => 0, 'username' => '');
+		if (!empty($arr['receiver_id'])) {
+			$receiver_id = $arr['receiver_id'];
+			$receiver = $this->user->getUserById($receiver_id);
+		}
+
 		$mess = isset($arr['mess']) ? $arr['mess'] : '';
-		switch ($arr['type']) {
+
+		$timestamp = microtime(true);
+		switch ($type) {
 			case self::REGISTER: //注册
 				$username = $arr['username'];
 				$password = $arr['password'];
@@ -94,6 +121,8 @@ class Client implements IClient
 				}
 				$info = array('user_id', 'username', 'role_id', 'is_active', 'password');
 				$user = $this->user->getUserByName($username, $info);
+
+				$headers = array('ip' => $this->serviceIp[$key], 'agent' => $this->serviceAgent[$key]);
 				empty($user['user_id']) and $user = $this->user->register($username, $password, $headers);
 				if (empty($user['user_id'])) {
 					$this->warning($key, array(
@@ -111,221 +140,81 @@ class Client implements IClient
 				}
 				unset($user['password']);
 				$this->login($key, $user);
+
 				break;
 			case self::LOGIN:
-				$user_id = $arr['user_id'];
-				$user = $this->auth($key, $user_id);
-				if (false == $user)
-					break;
+				$headers = array('ip' => $this->serviceIp[$key], 'agent' => $this->serviceAgent[$key]);
 				$this->user->update($user_id, $headers);
-				$this->login($key, $user);
+				$this->login($key, $sender);
+
+				unset($headers, $this->serviceIp[$key], $this->serviceAgent[$key]);
 				break;
 			case self::COMMON: //公共消息
-				$user_id = $arr['sender_id'];
-				$sender = $this->auth($key, $user_id);
-				if (false == $sender)
-					break;
-
-				if (empty($arr['mess'])) {
-					$this->warning($key, array(
-						'type' => self::WARNING,
-						'mess' => '请不要发空消息！',
-					));
-					break;
-				}
-
-				//保留空格和换行
-				$mess = str_replace(' ', '&nbsp;', $mess);
-				$mess = nl2br($mess);
-
-				//TODO 消息记录到数据库
-				$mess = $this->encode(array(
-					'type' => self::COMMON,
-					'time' => date('H:i:s'),
-					'timestamp' => time(),
-					'sender' => $sender,
-					'mess' => $mess,
-				));
-				$this->server->sendAll($mess);
+				$this->sendCommonMessage($key, $type, $sender, $mess, $timestamp);
 				break;
 			case self::COMMON_IMAGE: //公共图片
-				$user_id = $arr['sender_id'];
-				$sender = $this->auth($key, $user_id);
-				if (false == $sender)
-					break;
-
-				//TODO 消息记录到数据库
-				$file = $this->base64ToFile($mess);//图片直接存为文件，节省编码时间
-				$mess = $this->encode(array(
-					'type' => self::COMMON_IMAGE,
-					'time' => date('H:i:s'),
-					'timestamp' => time(),
-					'sender' => $sender,
-					'mess' => $file,
-				));
-				$this->server->sendAll($mess);
+				$mess = $this->getUniqueFile($mess);//图片直接存为文件，节省编码时间
+				$this->sendCommonMessage($key, $type, $sender, $mess, $timestamp);
 				break;
 			case self::COMMON_EMOTION: //公共表情
-				$user_id = $arr['sender_id'];
-				$sender = $this->auth($key, $user_id);
-				if (false == $sender)
-					break;
-
-				//TODO 消息记录到数据库
 				$content = explode('_', $mess);
-				$path = "/images/emotion/{$content[0]}/{$content[1]}";
-				$mess = $this->encode(array(
-					'type' => self::COMMON_EMOTION,
-					'time' => date('H:i:s'),
-					'timestamp' => time(),
-					'sender' => $sender,
-					'mess' => $path,
-				));
-				$this->server->sendAll($mess);
+				$mess = "/images/emotion/{$content[0]}/{$content[1]}";
+				$this->sendCommonMessage($key, $type, $sender, $mess, $timestamp);
 				break;
 			case self::PERSONAL: //私信
-				$user_id = $arr['sender_id'];
-				$sender = $this->auth($key, $user_id);
-				if (false == $sender)
-					break;
-
-				if (empty($arr['receiver_id'])) {
-					$this->warning($key, array(
-						'type' => self::WARNING,
-						'message' => '请选择联系人发送'
-					));
-					break;
-				}
-				$mess = str_replace(' ', '&nbsp;', $mess);
-				$mess = nl2br($mess);
-
-				$receiver_id = trim($arr['receiver_id']);
-				$receiver = $this->user->getUserById($receiver_id);
-				$receiver = empty($receiver['user_id']) ? array('user_id' => 0, 'username' => '') : $receiver;
-				//TODO 消息记录到数据库
-				$arr = array(
-					'time' => date('H:i:s'),
-					'timestamp' => time(),
-					'sender' => $sender,
-					'receiver' => $receiver,
-					'mess' => $mess,
-				);
-				if (isset($this->userService[$receiver['user_id']])) {
-					$arr['type'] = self::OTHER;//转换成他人
-					$mess = $this->encode($arr);
-					$index = $this->userService[$receiver['user_id']];
-					$this->server->send($index, $mess);//给接收者发送消息
-
-					$arr['type'] = self::SELF;//转换成本人
-					$mess = $this->encode($arr);
-					$this->server->send($key, $mess);//给当前客户端发送消息
-				} else {
-					//用户已经离线
-					$arr['type'] = self::SELF;
-					$arr['mess'] = $receiver['username'] . ' 已经离线...';
-					$mess = $this->encode($arr);
-					$this->server->send($key, $mess);
-				}
+				$types = array($type, self::SELF, self::OTHER);
+				$this->sendPersonalMessage($key, $types, $sender, $receiver, $mess, $timestamp);
 				break;
 			case self::PERSONAL_IMAGE: //私信图片
-				$user_id = $arr['sender_id'];
-				$sender = $this->auth($key, $user_id);
-				if (false == $sender)
-					break;
-
-				if (empty($arr['receiver_id'])) {
-					$this->warning($key, array(
-						'type' => self::WARNING,
-						'message' => '请选择联系人发送',
-					));
-					break;
-				}
-
-				$receiver_id = trim($arr['receiver_id']);
-				$receiver = $this->user->getUserById($receiver_id);
-				$receiver = empty($receiver['user_id']) ? array('user_id' => 0, 'username' => '') : $receiver;
-				//TODO 消息记录到数据库
-				$arr = array(
-					'time' => date('H:i:s'),
-					'timestamp' => time(),
-					'sender' => $sender,
-					'receiver' => $receiver,
-				);
-				if (isset($this->userService[$receiver['user_id']])) {
-					$arr['mess'] = $this->base64ToFile($mess);
-					$arr['type'] = self::OTHER_IMAGE;//转换成他人
-					$mess = $this->encode($arr);
-					$index = $this->userService[$receiver['user_id']];
-					$this->server->send($index, $mess);//给接收者发送消息
-
-					$arr['type'] = self::SELF_IMAGE;//转换成本人
-					$mess = $this->encode($arr);
-					$this->server->send($key, $mess);//给当前客户端发送消息
-				} else {
-					//用户已经离线
-					$arr['type'] = self::SELF;
-					$arr['mess'] = $receiver['username'] . ' 已经离线...';
-					$mess = $this->encode($arr);
-					$this->server->send($key, $mess);
-				}
+				$types = array($type, self::SELF_IMAGE, self::OTHER_IMAGE);
+				$mess = $this->getUniqueFile($mess);
+				$this->sendPersonalMessage($key, $types, $sender, $receiver, $mess, $timestamp);
 				break;
 			case self::PERSONAL_EMOTION: //私信表情
-				$user_id = $arr['sender_id'];
-				$sender = $this->auth($key, $user_id);
-				if (false == $sender)
-					break;
-
-				if (empty($arr['receiver_id'])) {
-					$this->warning($key, array(
-						'type' => self::WARNING,
-						'message' => '请选择联系人发送',
-					));
-					break;
-				}
-
-				$receiver_id = trim($arr['receiver_id']);
-				$receiver = $this->user->getUserById($receiver_id);
-				$receiver = empty($receiver['user_id']) ? array('user_id' => 0, 'username' => '') : $receiver;
-				//TODO 消息记录到数据库
-				$arr = array(
-					'time' => date('H:i:s'),
-					'timestamp' => time(),
-					'sender' => $sender,
-					'receiver' => $receiver,
+				$types = array($type, self::SELF_EMOTION, self::OTHER_EMOTION);
+				$content = explode('_', $mess);
+				$mess = "/images/emotion/{$content[0]}/{$content[1]}";
+				$this->sendPersonalMessage($key, $types, $sender, $receiver, $mess, $timestamp);
+				break;
+			case self::COMMON_MUSIC:
+				$data = $mess['data'];
+				$name = $mess['name'];
+				$mess = $this->getUniqueFile($data, 'music');
+				$extra = array(
+					'name' => $name,
 				);
-				if (isset($this->userService[$receiver['user_id']])) {
-					$content = explode('_', $mess);
-					$arr['mess'] = "/images/emotion/{$content[0]}/{$content[1]}";
-					$arr['type'] = self::OTHER_EMOTION;//转换成他人
-					$mess = $this->encode($arr);
-					$index = $this->userService[$receiver['user_id']];
-					$this->server->send($index, $mess);//给接收者发送消息
+				$this->sendCommonMessage($key, $type, $sender, $mess, $timestamp, $extra);
+				break;
+			case self::PERSONAL_MUSIC:
+				$data = $mess['data'];
+				$name = $mess['name'];
+				$mess = $this->getUniqueFile($data, 'music');
 
-					$arr['type'] = self::SELF_EMOTION;//转换成本人
-					$mess = $this->encode($arr);
-					$this->server->send($key, $mess);//给当前客户端发送消息
-				} else {
-					//用户已经离线
-					$arr['type'] = self::SELF;
-					$arr['mess'] = $arr['receiver']['username'] . ' 已经离线...';
-					$mess = $this->encode($arr);
-					$this->server->send($key, $mess);
-				}
+				$types = array($type, self::SELF_MUSIC, self::OTHER_MUSIC);
+				$extra = array(
+					'name' => $name,
+				);
+				$this->sendPersonalMessage($key, $types, $sender, $receiver, $mess, $timestamp, $extra);
 				break;
 			case self::REMOVE: //移除，由管理员发起
-				$user_id = $arr['user_id'];
-				$admin_id = $arr['admin_id'];
-				$user = $this->user->getUserById($user_id);
-				$admin = $this->user->getUserById($admin_id);
-				if (empty($user['user_id']) || empty($admin['role_id'])) {
+				$receiver_id = $arr['receiver_id'];
+				$user = $this->user->getUserById($receiver_id);
+				if (empty($user['user_id']) || empty($sender['role_id'])) {
 					$this->warning($key, array(
 						'type' => self::WARNING,
 						'mess' => '移除失败！用户不存在或者非法操作',
 					));
 					break;
 				}
+				if ($sender['role_id'] <= $user['role_id']) {
+					$this->warning($key, array(
+						'type' => self::WARNING,
+						'mess' => '移除失败！您没有该权限',
+					));
+					break;
+				}
 				$info = array('is_active' => 0);
-				$res = $this->user->update($user_id, $info);
+				$res = $this->user->update($receiver_id, $info);
 				if (false == $res) {
 					$this->warning($key, array(
 						'type' => self::WARNING,
@@ -334,21 +223,21 @@ class Client implements IClient
 					break;
 				}
 
-				$key = $this->userService[$user_id];//用户的服务索引
+				$key = $this->userService[$receiver_id];//用户的服务索引
 				$mess = $this->encode(array(
 					'type' => self::REMOVE,
-					'user_id' => $user_id,
+					'user_id' => $receiver_id,
 					'mess' => '你已被移除聊天室',
 				));
 				$this->server->send($key, $mess);//发给禁用的用户
 				$this->server->disConnect($key);//断开连接
 
-				$this->tearDown($user_id, $key);//注销用户服务
+				$this->tearDown($receiver_id, $key);//注销用户服务
 
 				//系统通知
 				$mess = $this->encode(array(
 					'type' => self::SYSTEM,
-					'user_id' => $user_id,
+					'user_id' => $receiver_id,
 					'mess' => str_replace('%USERNAME%', $user['username'], $this->remove),
 				));
 				$this->server->sendAll($mess);
@@ -356,14 +245,12 @@ class Client implements IClient
 				$this->flushUsers();//刷新在线用户列表
 				break;
 			case self::AVATAR_UPLOAD:
-				$user_id = $arr['sender_id'];
 				//删除原来图片
-				$user = $this->user->getUserById($user_id);
-				if (!empty($user['avatar'])) {
-					unlink(__DIR__ . '/' . $user['avatar']);
+				if (!empty($sender['avatar'])) {
+					unlink(__DIR__ . '/' . $sender['avatar']);
 				}
 
-				$info['avatar'] = $path = $this->base64ToFile($mess, 'avatar');
+				$info['avatar'] = $path = $this->getUniqueFile($mess, 'avatar');
 				$res = $this->user->update($user_id, $info);
 				if (false == $res) {
 					$mess = $this->encode(array(
@@ -381,6 +268,26 @@ class Client implements IClient
 				));
 				$this->server->send($key, $mess);
 				break;
+			case self::HISTORY_COMMON_MESSAGE:
+				empty($arr['query_time']) or $timestamp = $arr['query_time'];
+				$mess = $this->user->getPrevCommonMessage($timestamp);
+				$mess = $this->encode(array(
+					'type' => $type,
+					'mess' => $mess,
+				));
+				$this->server->send($key, $mess);
+				break;
+			case self::HISTORY_PERSONAL_MESSAGE:
+				empty($arr['query_time']) or $timestamp = $arr['query_time'];
+				$users = array($arr['sender_id'], $arr['receiver_id']);
+				$mess = $this->user->getPrevPersonalMessage($users, $timestamp);
+				$mess = $this->encode(array(
+					'type' => $type,
+					'mess' => $mess,
+					'receiver_id' => $arr['receiver_id'], //标识是哪个联系人的，防止多次请求混淆
+				));
+				$this->server->send($key, $mess);
+				break;
 			default:
 				$this->warning($key, array(
 					'type' => self::ERROR,
@@ -388,7 +295,74 @@ class Client implements IClient
 				));
 		}
 
-		unset($arr, $mess);//销毁临时变量
+		unset($arr, $mess, $sender);//销毁临时变量
+	}
+
+	public function sendCommonMessage($key, $type, $sender, &$mess, $timestamp, $extra = array())
+	{
+		if (empty($mess)) {
+			$this->warning($key, array(
+				'type' => self::WARNING,
+				'mess' => '请不要发空消息！',
+			));
+			return;
+		}
+
+		$mess = $this->encode(array_merge(array(
+			'type' => $type,
+			'time' => date('H:i:s'),
+			'timestamp' => $timestamp,
+			'sender' => $sender,
+			'mess' => $mess,
+		), $extra));
+		$this->user->addCommonMessage($timestamp, $mess);
+		$this->server->sendAll($mess);
+		unset($mess);
+	}
+
+	public function sendPersonalMessage($key, $types, $sender, $receiver, &$mess, $timestamp, $extra = array())
+	{
+		$user_id = $sender['user_id'];
+		$receiver_id = $receiver['user_id'];
+		$arr = array(
+			'type' => $types[0],
+			'time' => date('H:i:s'),
+			'timestamp' => $timestamp,
+			'sender' => $sender,
+			'receiver' => $receiver,
+			'mess' => $mess,
+		);
+		$arr = array_merge($arr, $extra);
+		$this->user->addPersonalMessage(array($user_id, $receiver_id), $timestamp, $this->encode($arr));
+
+		if (isset($this->userService[$receiver_id])) {
+			$arr['type'] = $types[1];//转换成本人
+			$mess = $this->encode($arr);
+			$this->server->send($key, $mess);//给当前客户端发送消息
+
+			$arr['type'] = $types[2];//转换成他人
+			$mess = $this->encode($arr);
+			$index = $this->userService[$receiver_id];
+			$this->server->send($index, $mess);//给接收者发送消息
+		} else {
+			//用户已经离线
+			$arr['type'] = self::SELF;
+			$arr['mess'] = $receiver['username'] . ' 已经离线...';
+			$mess = $this->encode($arr);
+			$this->server->send($key, $mess);
+		}
+		unset($arr, $mess);
+	}
+
+	public function getUniqueFile(&$base64, $flag = 'message')
+	{
+		$md5 = md5($base64);
+		$path = $this->user->getFileByMd5($md5);
+		if (!empty($path))
+			return $path;
+		$path = $this->base64ToFile($base64, $flag);
+		$this->user->addFile($md5, $path);
+		return $path;
 	}
 
 	public function onError($key, $err)

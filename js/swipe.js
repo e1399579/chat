@@ -11,8 +11,6 @@ window.Swipe = function(element, options) {
     // return immediately if element doesn't exist
     if (!element) return null;
 
-    var _this = this;
-
     // retreive options
     this.options = options || {};
     this.index = this.options.startSlide || 0;
