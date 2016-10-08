@@ -5,514 +5,17 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 	<meta http-equiv="x-ua-compatible" content="ie=edge">
 	<meta name="apple-mobile-web-app-capable" content="yes"/>
+	<title>WebSocket聊天室</title>
+	<link rel="shortcut icon" type="image/x-icon" href="./images/favicon.ico" media="screen"/>
 	<!--<link rel="stylesheet" href="http://cdn.bootcss.com/bootstrap/4.0.0-alpha/css/bootstrap.min.css">
 	<link rel="stylesheet" href="http://cdn.bootcss.com/font-awesome/4.6.3/css/font-awesome.min.css">-->
 	<link rel="stylesheet" href="./css/bootstrap.min.css">
 	<link rel="stylesheet" href="./css/font-awesome.min.css">
 	<link rel="stylesheet" href="./css/animate.min.css">
-	<title>WebSocket聊天室</title>
-	<link rel="shortcut icon" type="image/x-icon" href="./images/favicon.ico" media="screen"/>
-	<style type="text/css">
-		body {
-			font-family: 微软雅黑, Tahoma, Arial, Helvetica, sans-serif;
-			overflow: hidden;
-		}
-		#room {
-			border-radius: 0;
-			box-shadow: none;
-			margin-left: 0;
-			margin-right: 0;
-			overflow-y: auto;
-			overflow-x: hidden;
-			width: 100%;
-			font-size: 16px !important;
-			background: #F3F3F3;
-			word-break: break-word;
-			word-wrap: break-word;
-		}
-
-		.text-font {
-			font-size: 12px;
-		}
-
-		.text-sm {
-			font-size: 14px;
-		}
-
-		.text-color {
-			color: #434646;
-		}
-
-		#mess {
-			height: 38px;
-			max-height: 228px !important;
-			overflow: auto;
-		}
-
-		.head, .head img {
-			width: 50px;
-			height: 50px;
-		}
-
-		.head {
-			font-size: 12px;
-			overflow: hidden;
-		}
-
-		.table-chat {
-			width: 100%;
-			margin: 10px 0;
-		}
-
-		.td-head {
-			width: 50px;
-			vertical-align: top;
-		}
-
-		.td-blank {
-			width: 35px;
-		}
-
-		.td-triangle {
-			width: 10px;
-			vertical-align: top;
-		}
-
-		.bubble-left {
-			float: left;
-			background-color: #FFF;
-			border-radius: 10px;
-			padding: 10px;
-			line-height: 20px;
-		}
-
-		.bubble-right {
-			float: right;
-			background-color: #AAD2FF;
-			border-radius: 10px;
-			padding: 10px;
-			line-height: 20px;
-		}
-
-		.left-triangle, .left-triangle-common {
-			height: 0;
-			width: 0;
-			border: 6px solid;
-			border-color: transparent #FFF transparent transparent;
-			margin-top: 19px;
-		}
-
-		.right-triangle, .right-triangle-common {
-			height: 0;
-			width: 0;
-			border: 6px solid;
-			border-color: transparent transparent transparent #AAD2FF;
-			margin-top: 19px;
-		}
-
-		.left-triangle-common, .right-triangle-common {
-			margin-top: 34px;
-		}
-
-		.right-triangle-common {
-			border-top: 0;
-			border-bottom: 10px solid transparent;
-			border-left: 10px solid #AAD2FF;
-		}
-
-		.left-triangle-common {
-			border-top: 0;
-			border-bottom: 10px solid transparent;
-			border-right: 10px solid #FFF;
-		}
-
-		/*********************touch**************************/
-
-		#slider {
-			position: fixed;
-			top: 0;
-			left: 0;
-			width: 100%;
-			height: 100%;
-			z-index: 14;
-			text-align: center;
-		}
-
-		#img-container {
-			position: fixed;
-			top: 0;
-			left: 0;
-			height: 100%;
-			width: 100%;
-			display: table !important;
-		}
-
-		#img-container li {
-			display: table-cell !important;
-			vertical-align: middle !important;
-		}
-
-		#img-container li .description {
-			background: black;
-			color: white;
-		}
-
-		div.pinch-zoom {
-			position: relative;
-		}
-
-		div.pinch-zoom a {
-			color: white;
-			position: absolute;
-			bottom: 10px;
-			right: 10px;
-			text-decoration: none;
-			background: #333;
-			padding: 3px;
-			font-size: 11px;
-		}
-
-		ul, ol {
-			margin: 0;
-			padding: 0;
-		}
-
-		div.pinch-zoom,
-		div.pinch-zoom img {
-			width: 100%;
-			-webkit-user-drag: none;
-			z-index: 15;
-		}
-
-		#backdrop {
-			position: fixed;
-			top: 0;
-			right: 0;
-			bottom: 0;
-			left: 0;
-			z-index: 13;
-			background-color: #000;
-			display: none;
-			opacity: 0.5;
-		}
-
-		/********************表情**********************/
-
-		.emotion {
-			border: 1px solid gray;
-			width: 100%;
-			height: 222px;
-		}
-
-		.emotion ul{
-			height: 200px !important;
-		}
-
-		.emotion li {
-			width: 100%;
-
-		}
-
-		.emotion-table td {
-			width: 25%;
-		}
-
-		.emotion-table {
-			width: 100%;
-			text-align: center;
-		}
-
-		.emotion-table .ywz td {
-			padding: 0;
-		}
-
-		.emotion-table .ywz td img, .emotion-table .ymj td img {
-			max-width: 100%;
-			cursor: pointer;
-			height: 100px !important;
-		}
-
-		.emotion ol {
-			width: 100%;
-			height: 20px;
-			text-align: center;
-			line-height: 20px;
-		}
-
-		.emotion ol li {
-			list-style: none;
-			display: inline-block;
-			width: 8px;
-			height: 8px;
-			border-radius: 8px;
-			background: #ddd;
-			margin: 0 3px;
-			cursor: pointer;
-		}
-
-		.emotion ol li.active {
-			background: #64b5e8;
-		}
-
-		/*********************多窗口*******************/
-
-		.chat-min {
-			font-size: 16px;
-			color: #333;
-		}
-		.chat-min img,.chat-min .head {
-			width: 40px;
-			height: 40px;
-			border-radius: 100%;
-			display: inline-block;
-			vertical-align: middle;
-			line-height: 40px;
-		}
-		.chat-min span {
-			padding-left: 10px;
-		}
-
-		.chat-max {
-			position: absolute !important;
-			top: 0;
-			bottom: 80px;
-			left: 0;
-			right: 0;
-			border: none;
-			background: #F3F3F3 !important;
-		}
-		.chat-max h3 {
-			width: 100%;
-			position: absolute;
-			border-radius: 0 !important;
-		}
-		.chat-max .layui-m-layercont {
-			overflow-y: auto;
-			overflow-x: hidden;
-			position: absolute;
-			width: 100%;
-			top: 60px;
-			bottom: 0;
-		}
-
-		.z-index {
-			z-index: 2;
-		}
-		.hidden {
-			display: none;
-		}
-
-		#contacts {
-			position: absolute;
-			top:0;
-			bottom:0;
-			width: 80%;
-			overflow-x: hidden;
-			overflow-y: auto;
-			background: white;
-			opacity: 1 !important;
-		}
-
-		#online {
-			position: absolute;
-			top: 61px;
-			bottom: 1px;
-			width: 100%;
-			overflow-y: auto;
-		}
-
-		/*****************动画***************/
-		@-webkit-keyframes layui-m-anim-hide {
-			100% {
-				opacity: 0;
-				-webkit-transform: scale(.5);
-				transform: scale(.5)
-			}
-			0% {
-				opacity: 1;
-				-webkit-transform: scale(1);
-				transform: scale(1)
-			}
-		}
-
-		@keyframes layui-m-anim-hide {
-			100% {
-				opacity: 0;
-				-webkit-transform: scale(.5);
-				transform: scale(.5)
-			}
-			0% {
-				opacity: 1;
-				-webkit-transform: scale(1);
-				transform: scale(1)
-			}
-		}
-
-		.layui-m-anim-hide {
-			animation-name: layui-m-anim-hide;
-			-webkit-animation-name: layui-m-anim-hide
-		}
-
-		@-webkit-keyframes layui-m-anim-down {
-			100% {
-				opacity: 0;
-				-webkit-transform: translateY(100%);
-				transform: translateY(100%)
-			}
-			0% {
-				opacity: 1;
-				-webkit-transform: translateY(0);
-				transform: translateY(0)
-			}
-		}
-
-		@keyframes layui-m-anim-down {
-			100% {
-				opacity: 0;
-				-webkit-transform: translateY(100%);
-				transform: translateY(100%)
-			}
-			0% {
-				opacity: 1;
-				-webkit-transform: translateY(0);
-				transform: translateY(0)
-			}
-		}
-
-		.layui-m-anim-down {
-			-webkit-animation-name: layui-m-anim-down;
-			animation-name: layui-m-anim-down
-		}
-
-		/******************头像上传*******************/
-
-		.headImg-popup {
-			position: absolute;
-			top: 0;
-			left: 0;
-			right: 0;
-		}
-
-		.headImg-popup button {
-			width: 48%;
-			/*height: 4rem;*/
-		}
-		.headImg-popup button:nth-of-type(1) {
-			margin-right: 2%;
-			position: relative;
-			overflow: hidden;
-		}
-		.headImg-popup button:nth-of-type(1):before{
-			content: "";
-			width: 25px;
-			height: 930px;
-			background-image: -webkit-linear-gradient(left, rgba(255, 255, 255, 0) 0, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0) 100%);
-			background-image: -moz-linear-gradient(left, rgba(255, 255, 255, 0) 0, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0) 100%);
-			background-image: -ms-linear-gradient(left, rgba(255, 255, 255, 0) 0, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0) 100%);
-			background-image: -o-linear-gradient(left, rgba(255, 255, 255, 0) 0, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0) 100%);
-			background-image: linear-gradient(left, rgba(255, 255, 255, 0) 0, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0) 100%);
-			position: absolute;
-			top: -20px;
-			left: -580px;
-			transform:skewX(-45deg);
-		}
-		.success-linear:before{
-			animation:success-linear 1.5s linear forwards;
-		}
-		@-moz-keyframes success-linear { to { left: 600px; } }
-		@-webkit-keyframes success-linear { to { left: 600px; } }
-		@keyframes success-linear { to { left: 600px; } }
-		.headImg-popup .upload-image-box {
-			height: 200px;
-			border: 1px solid #eee;
-			background-color: #f3f3f3;
-			overflow: hidden;
-			position: relative;
-		}
-		.headImg-popup .upload-image-box .move-image {
-			height: 200px;
-			cursor: move;
-			/*position: absolute;
-			top: 0;
-			left: 0;*/
-			vertical-align: middle;
-		}
-		.headImg-popup .upload-image-box img {
-			-webkit-user-select: none;
-			-moz-user-select: none;
-			-ms-user-select: none;
-			user-select: none;
-		}
-
-		.headImg-popup .upload-image-box .clip-image {
-			width: 164px;
-			height: 164px;
-			border: 2px solid #eee;
-			position: absolute;
-			left: 0;
-			top: 0;
-			right: 0;
-			bottom: 0;
-			margin: auto;
-			pointer-events: none;
-			-moz-box-shadow: 0 0 2px #eee;
-			-webkit-box-shadow: 0 0 2px #eee;
-			box-shadow: 0 0 2px #eee;
-			border-radius: 50%;
-		}
-		.headImg-popup .range-title i {
-			margin-right: .5rem;
-		}
-
-		.inp {
-			border: 1px solid #ddd;
-			padding: 0.5rem 0.8rem;
-			font-size: inherit;
-			display: inline-block;
-			vertical-align: middle;
-			background-color: #fff;
-			border-radius: 0.3rem;
-			-moz-appearance: none;
-			-webkit-appearance: none;
-			outline: none;
-		}
-		.mt {
-			margin-top: 5px;
-		}
-
-		.inp-block {
-			display: block;
-			width: 100%;
-		}
-
-		.showImage{
-			font-size: 0;
-			text-align: center;
-			margin-top: 10px;
-		}
-		.showImage img {
-			border-radius: 50%;
-		}
-		input[type="range"]{
-			background-color: #F3F4F6;
-			border-color: #F3F4F6;
-		}
-		input[type="range"]::-webkit-slider-thumb {
-			-webkit-appearance: none;
-			cursor: move;
-			top: 1px;
-			width: 2rem;
-			height: 2rem;
-			padding: 0 !important;
-			background-color: #F74461;
-			border-radius: 100%;
-			box-shadow: 0 0 1px rgba(255, 255, 255, .5);
-		}
-	</style>
+	<link rel="stylesheet" href="./css/index.css?v=0.1">
 </head>
 <body>
 
-<audio class="hidden" id="audio" controls="controls" preload="auto" src="./media/notification.ogg"></audio>
 <!--联系人-->
 <div id="contacts" class="modal-content hidden">
 	<div class="modal-header">
@@ -529,15 +32,15 @@
 
 <!--聊天消息容器-->
 <div class="room clearfix" id="room">
-	<marquee scrollamount="3" class="bg-success">大家好！欢迎加入聊天室。如果你想要程序源码，可以加入我们①群：345480905</marquee>
+
 </div>
 
 <!--发送消息框-->
-<div class="input-group z-index">
+<div class="input-group z-index-normal">
     <textarea id="mess" class="form-control" autofocus rows="1" placeholder="说点什么吧..."
-              onkeydown="messageHelper.sendMess(event, $('#mess'))" maxlength="1000"></textarea>
+              onkeydown="messageHelper.sendMess(event)"></textarea>
     <span class="input-group-btn">
-        <button type="button" id="submit" class="btn btn-success-outline" onclick="messageHelper.send($('#mess'))">发送</button>
+        <button type="button" id="submit" class="btn btn-success-outline" onclick="messageHelper.send()">发送</button>
     </span>
 </div>
 
@@ -559,6 +62,13 @@
 	<button type="button" class="btn btn-success-outline" onclick="messageHelper.controlBell(this)">
 		<i class="fa fa-bell-o" aria-hidden="true"></i>
 	</button>
+	<button type="button" id="upload-music" class="btn btn-success-outline">
+		<i class="fa fa-music" aria-hidden="true"></i>
+	</button>
+	<input type="file" class="hidden" accept="audio/*" />
+	<button type="button" class="btn btn-success-outline" onclick="messageHelper.about()">
+		<i class="fa fa-info" aria-hidden="true"></i>
+	</button>
 </div>
 
 <!--注册/登录弹框-->
@@ -574,7 +84,7 @@
 					<h5 class="modal-title">请登录/注册：</h5>
 				</div>
 				<div class="modal-body">
-					<input type="text" id="username" class="form-control form-group" placeholder="起个名吧，亲:)" maxlength="30"/>
+					<input type="text" id="username" class="form-control form-group" placeholder="起个名吧，亲:)" maxlength="30" autocomplete />
 					<input type="password" id="password" class="form-control form-group" placeholder="密码：默认123456"
 					       maxlength="16"/>
 				</div>
@@ -599,7 +109,7 @@
 <div id="backdrop"></div>
 
 <!--表情-->
-<div class="emotion z-index hidden" id="emotion">
+<div class="emotion z-index-normal hidden" id="emotion">
 	<ul></ul>
 	<ol></ol>
 </div>
@@ -627,6 +137,10 @@
 	</section>
 </div>
 
+<div class="chat-box hidden">
+
+</div>
+
 
 <!--<script type="text/javascript" src="http://cdn.bootcss.com/jquery/2.2.1/jquery.min.js"></script>
 <script type="text/javascript" src="http://cdn.bootcss.com/bootstrap/4.0.0-alpha/js/bootstrap.min.js"></script>-->
@@ -634,10 +148,10 @@
 <script type="text/javascript" src="./js/bootstrap.min.js"></script>
 <script type="text/javascript" src="./js/layer_mobile/layer.js"></script>
 <script type="text/javascript" src="./js/pinchzoom.min.js"></script>
-<script type="text/javascript" src="./js/swipe.js"></script>
-<script type="text/javascript" src="./js/paste.js"></script>
+<script type="text/javascript" src="./js/swipe.js?v=0.1"></script>
+<script type="text/javascript" src="./js/paste.js?v=0.1"></script>
 <script type="text/javascript" src="./js/exif.js"></script>
-<script type="text/javascript" src="./js/LjkUpload.js"></script>
+<script type="text/javascript" src="./js/LjkUpload.js?v=0.1"></script>
 <script type="text/javascript" src="./js/html5ImgCompress/html5ImgCompress.min.js"></script>
 <script type="text/javascript">
 	var H, W;
@@ -650,19 +164,24 @@
 	autoSize();
 	window.addEventListener("resize", autoSize);
 
-	var audio = $("#audio").get(0);
+	var audio = document.createElement("audio");
+	audio.src = "./media/notification.ogg";
+	audio.volume = 1;
+	var music = document.createElement("audio");
 	var receiver_id = 0; //接收者ID
 	var role_id = 0; //当前用户角色ID
 	var user = JSON.parse(getCookie('user')); //当前用户
-	const MAX_LENGTH = 1000; //最大聊天字数
+	var is_active = 1;
+	const MAX_LENGTH = 10000; //最大聊天字数
 	const MAX_IMAGE = 1024 * 1024 * 2; //最大上传图片尺寸
-	const MAX_UPLOAD = 5; //最多上传图片
-	var href = window.location.href; //当前的域名+路径
-	var pos = href.lastIndexOf('/');
-	(href.substr(pos) == '/') || (href = href.substr(0, pos));//排除index.html这种URL
+	const MAX_UPLOAD = 5; //每次最多上传图片
+	const COMPRESS_PERCENT = 0.3; //截图压缩比例
+	const MAX_MUSIC_SIZE = 1024 * 1024 * 8; //最大音乐尺寸
+	const MAX_LIMITS = 100; //断线最大重连次数
+	const MATCH_URL = '((https?|ftp|file):\/\/[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|])'; //匹配URL
+	var href = window.location.origin; //当前的域名
 	var port = (("localhost" == window.location.host) || ("127.0.0.1" == window.location.host)) ? '81' : '443';
 	var url = 'ws://' + window.location.host + ':' + port;
-	var match_url = '((https?|ftp|file):\/\/[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|])'; //匹配URL
 	var ws = new WebSocket(url);
 
 	const COMMON = 0;//公共消息
@@ -692,6 +211,12 @@
 	const AVATAR_UPLOAD = 42;//上传头像
 	const AVATAR_SUCCESS = 43;//上传成功
 	const AVATAR_FAIL = -43;//上传失败
+	const HISTORY_COMMON_MESSAGE = 50; //历史公共消息
+	const HISTORY_PERSONAL_MESSAGE = 51; //历史个人消息
+	const COMMON_MUSIC = 60; //公共音乐
+	const SELF_MUSIC = 62; //本人音乐
+	const OTHER_MUSIC = 63; //他人音乐
+	const PERSONAL_MUSIC = 64; //私信音乐
 
 	//取得cookie
 	function getCookie(name) {
@@ -732,105 +257,20 @@
 	}
 
 	ws.onopen = function () {
-		//握手成功
-		if ((typeof(user) == 'object') && user.hasOwnProperty('user_id') && user.user_id) {
-			var mess = {
-				type: LOGIN,
-				user_id: user.user_id
-			};
-			ws.send(dataHelper.encode(mess));
-		} else {
-			messageHelper.register();
-		}
+		messageHelper.onOpen();
 	};
 
 	ws.onclose = function (e) {
-		//连接关闭
-		$("#total").text(0);//清除在线人数
-		$("#online").text("");//清除在线列表
-		var d = new Date();
-		var date = 'Y-m-d H:i:s';
-		var search = ['Y', 'm', 'd', 'H', 'i', 's'];
-		var replace = [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()];
-		date = date.replaceMulti(search, replace);
-		$("#room").append('<div class="text-center text-muted">' + date + ' 服务器断开了连接...</div>');
+		messageHelper.onClose(e);
 	};
 
 	ws.onerror = function (e) {
-		$("#total").text(0);//清除在线人数
-		$("#online").text("");//清除在线列表
-		var reload = confirm("连接服务器失败，是否刷新页面重试？");
-		if (reload)
-			window.location.reload();
+		messageHelper.onError(e);
 	};
 
 	//TODO 配置文件，直接调用方法
 	ws.onmessage = function (message) {
-		var mess = dataHelper.decode(message.data);
-
-		try {
-			switch (mess.type) {
-				case WELCOME://欢迎消息
-					messageHelper.welcome(mess);
-					break;
-				case QUIT://退出消息
-					messageHelper.quit(mess);
-					break;
-				case COMMON://公共消息
-					messageHelper.common(mess);
-					break;
-				case COMMON_IMAGE://公共消息
-				case COMMON_EMOTION:
-					messageHelper.commonImage(mess);
-					break;
-				case SELF://myself @other
-					messageHelper.self(mess);
-					break;
-				case SELF_IMAGE://myself @other
-				case SELF_EMOTION:
-					messageHelper.selfImage(mess);
-					break;
-				case OTHER://other @me
-					messageHelper.other(mess);
-					break;
-				case OTHER_IMAGE://other @me
-				case OTHER_EMOTION:
-					messageHelper.otherImage(mess);
-					break;
-				case ONLINE://在线用户列表
-					messageHelper.online(mess);
-					break;
-				case REGISTER://需要注册
-					messageHelper.register();
-					break;
-				case INCORRECT://登录出错
-					messageHelper.incorrect(mess);
-					break;
-				case LOGIN://已经登录
-					messageHelper.login(mess);
-					break;
-				case ERROR://出错
-					messageHelper.error(mess);
-					break;
-				case WARNING://警告
-				case REMOVE://移除
-				case FORBIDDEN://禁用
-					messageHelper.warning(mess);
-					break;
-				case SYSTEM://系统信息
-				case DOWNLINE://下线
-					messageHelper.system(mess);
-					break;
-				case AVATAR_SUCCESS:
-					messageHelper.avatar_success(mess);
-					break;
-				case AVATAR_FAIL:
-					messageHelper.avatar_fail(mess);
-					break;
-			}
-		} catch (e) {
-			alert(e);
-		}
+		messageHelper.onMessage(message);
 	};
 
 	var dataHelper = {
@@ -861,108 +301,127 @@
 
 	//======================消息处理============================
 	var im = {
-		layer_index: {}, //保存用户窗口标识
 		layer_user: [], //保存用户窗口顺序
-		min_index: 2,
-		max_index: 3,
+		chatContainer: $(".chat-box"),
+		current_user_id: 0, //当前聊天的用户ID
+		chat_personal_html:
+		'<div id="%ID%" class="chat-personal animated %CLASS_NAME%">\
+			<span class="chat-back" onclick="im.hide(this);"><返回</span>\
+			<div class="chat-title">\
+				<span class="chat-status chat-status-online"></span>\
+				<span>%USERNAME%</span>\
+			</div>\
+			<div class="chat-content">%MESSAGE%</div>\
+		</div>',
 		contactsContainer: $("#contacts"),
-		//TODO 有无窗口都直接写数据，防止没有打开时错过消息
-		tip:function (user, html) {
-			var _this = this;
-			var user_id = user.user_id;
-			if (this.layer_index.hasOwnProperty(user_id)) {
-				var index = this.layer_index[user_id];
-				//如果有窗口，先写入数据，避免多条消息没打开错过
-				this.getLayer(index).append(html);
-				html = "";
-				var id = '#layui-m-layer' + index;
-				var is_closed = $(id).hasClass("hidden");
-				var is_top = $(id).css("z-index") > this.min_index;
-
-				//如果是当前窗口，直接打开，无需提示
-				if (!is_closed && is_top) {
-					this.open(user, html);
-					return;
-				}
+		getWindowId: function (user_id) {
+			return "user-" + user_id;
+		},
+		getWindow: function (user_id) {
+			return $("#" + this.getWindowId(user_id));
+		},
+		hasWindow: function (user_id) {
+			return this.getWindow(user_id).length > 0;
+		},
+		isTop: function (user_id) {
+			return user_id == this.current_user_id;
+		},
+		getWindowContent: function (user_id) {
+			return this.getWindow(user_id).children(".chat-content");
+		},
+		writeMessage: function (user_id, html) {
+			this.getWindowContent(user_id).append(html);
+		},
+		writeHistoryMessage: function (user_id, html) {
+			this.getWindowContent(user_id).prepend(html);
+		},
+		tip: function (user, html, timestamp) {
+			this.open(user, html, timestamp, true);
+			if (this.isTop(user.user_id)) {
+				//当前正在聊天，则不提示
+				return;
 			}
+
+			audio.play();
+
 			var src = user.avatar ? user.avatar : './images/chat.png';
 			layer.open({
-				style: 'background:#fff;cursor:pointer;',
+				style: 'background:#fff;cursor:pointer;bottom:-100px;',
 				content:'<div class="chat-min"><img src="'+src+'"><span>收到新消息</span></div>',
 				skin: 'msg',
-				//time: 10,
 				success: function(elem) {
 					elem.onclick = function () {
 						layer.close(this.getAttribute("index")); //点击时关闭弹框
-						messageHelper.setReceiver(user, html);
+						im.open(user, "", timestamp);
 					}
 				}
 			});
 		},
-		hide: function (btn) {
-			this.delLayer();
-			var len = this.layer_user.length;
-			if (0 == len) {
-				messageHelper.setReceiver(0);
-			} else {
-				messageHelper.setReceiver(this.layer_user[len - 1]);
+		open: function (user, html, timestamp, hidden) {
+			var user_id = user.user_id;
+			var username = user.username;
+			html = (typeof html == "undefined") ? "" : html;
+			hidden = typeof hidden != "undefined";
+
+			if (!hidden) {
+				this.current_user_id = user_id;
+				this.chatContainer.removeClass("hidden");
+				messageHelper.setReceiver(user);
 			}
 
-			var container = $(btn).parents('.chat-max').removeClass('layui-m-anim-up').addClass('layui-m-anim-down');
+			if (this.hasWindow(user_id)) {
+				this.writeMessage(user_id, html);
+				var user_window = this.getWindow(user_id);
+				if (!hidden) {
+					user_window.removeClass("hidden bounceOutRight z-index-normal").addClass("bounceInRight z-index-top");
+				}
+				//检测在线
+				if (messageHelper.isOnline(user_id)) {
+					user_window.find(".chat-status").removeClass("chat-status-offline").addClass("chat-status-online");
+				} else {
+					user_window.find(".chat-status").removeClass("chat-status-online").addClass("chat-status-offline");
+				}
+			} else {
+				//无窗口，创建
+				html = messageHelper.history_personal_btn + html; //历史消息按钮
+				timestamp = (typeof timestamp == "undefined") ? (new Date()).getTime() / 1000 : timestamp;
+				messageHelper.setHistoryTime(user_id, timestamp);
+
+				var window_id = this.getWindowId(user_id);
+				var class_name = hidden ? "hidden z-index-normal" : "bounceInRight z-index-top";
+				var search = ["%ID%", "%CLASS_NAME%", "%USERNAME%", "%MESSAGE%"];
+				var replace = [window_id, class_name, username, html];
+				html = this.chat_personal_html.replaceMulti(search, replace);
+				this.chatContainer.append(html);
+			}
+
+			this.addLayer(user);
+			$(".chat-personal").not("#" + this.getWindowId(user_id)).removeClass("z-index-top").addClass("z-index-normal");
+			this.autoBottom();
+		},
+		hide: function (btn) {
+			this.delLayer();
+			$(btn).parent(".chat-personal").removeClass("bounceInRight z-index-top").addClass("bounceOutRight");
+			var len = this.layer_user.length;
+			if (0 == len) {
+				this.current_user_id = 0;
+				this.hideAll();
+			} else {
+				var user = this.layer_user[len - 1];
+				this.current_user_id = user.user_id;
+				messageHelper.setReceiver(user);
+			}
 			window.setTimeout(function () {
-				$(btn).parents(".layui-m-layer").addClass("hidden");
+				$(btn).parent(".chat-personal").addClass("hidden z-index-normal");
 			}, 500);
-			return container;
 		},
 		hideAll: function () {
 			this.layer_user = [];
-			$(".layui-m-layer").addClass("hidden");
 			messageHelper.setReceiver(0);
-		},
-		open: function (user, html) {
-			var user_id = user.user_id;
-			var index, id;
-			if (!html) {
-				html = "";
-			}
-			if (this.layer_index.hasOwnProperty(user_id)) {
-				index = this.layer_index[user_id];
-				//有窗口，直接打开，写入数据
-				id = "#layui-m-layer" + index;
-				$(id).removeClass("hidden");
-				this.getLayer(index).append(html).parent().removeClass("layui-m-anim-down").addClass("layui-m-anim-up");
-			} else {
-				//无窗口，创建窗口并索引，写入数据
-				index = this.layer_index[user_id] = layer.open({
-					type: 1
-					,title: [
-						'<a href="javascript:;" class="pull-left" style="color: white;" onclick="im.hide(this);"><返回</a>'+user.username,
-						'background-color: #275CA2;color: white;font-family: 微软雅黑;'
-					]
-					,content: html
-					,anim: 'up'
-					,shade: false
-					,className: 'chat-max animated bounceInUp'
-					//,style: 'height:' + H + 'px'
-				});
-			}
-			this.addLayer(user);
-			this.getLayer(index).parents(".layui-m-layersection").css("vertical-align", "top");
-			id = "#layui-m-layer" + index;
-			$(".layui-m-layer").not(id).css("z-index", this.min_index);
-			$(id).css("z-index", this.max_index);
-			this.autoBottom(index);
-		},
-		getLayer: function(index) {
-			return $('#layui-m-layer' + index).find(".chat-max").children(".layui-m-layercont");
-		},
-		getTopIndex: function () {
-			var len = this.layer_user.length;
-			if (len > 0) {
-				var user = this.layer_user[len - 1];
-				return this.layer_index[user.user_id];
-			}
-			return false;
+			var container = this.chatContainer;
+			window.setTimeout(function () {
+				container.addClass("hidden");
+			}, 500);
 		},
 		addLayer: function (user) {
 			var index = false;
@@ -981,13 +440,11 @@
 		delLayer: function () {
 			this.layer_user.pop(); //将当前用户移出队列
 		},
-		autoBottom: function (index) {
-			var container = this.getLayer(index);
-			container.scrollTop(container[0].scrollHeight - container[0].offsetHeight);
-		},
-		autoBottom2: function () {
-			var index = this.getTopIndex();
-			this.autoBottom(index);
+		autoBottom: function () {
+			if (this.current_user_id) {
+				var container = this.getWindowContent(this.current_user_id);
+				container.scrollTop(container[0].scrollHeight - container[0].offsetHeight);
+			}
 		},
 		openContacts: function () {
 			this.contactsContainer.removeClass("hidden slideOutLeft").addClass("animated slideInLeft");
@@ -1003,11 +460,16 @@
 		this.submit_button = options.submit_button;
 		this.input_container = options.input_container;
 		this.upload_container = options.upload_container;
+		this.upload_music_container = options.upload_music_container;
+		this.input_container.attr("maxlength", MAX_LENGTH);
 		this.image_loading = 0; //图片上传动画
 		this.image_flag = true; //发送图片标志
 		var _this = this;
+
+		this.room_container.append(this.history_common_btn);
+
 		//粘贴图片
-		this.input_container.pastableTextarea(0.5).on("loadImage", function () {
+		this.input_container.pastableTextarea(COMPRESS_PERCENT).on("loadImage", function () {
 			_this.image_loading = _this.loading("正在分析，请稍候...");
 		}).on("pasteImage", function (e, data) {
 			_this.image_loading = _this.loading('正在上传，请稍候...');
@@ -1017,17 +479,19 @@
 			var type = receiver_id ? PERSONAL_IMAGE : COMMON_IMAGE;
 			var image = data.dataURL;
 			if (image.length > MAX_IMAGE) {
-				_this.toast('图片太大，目前只支持2M');
+				var size = MAX_IMAGE / 1024 / 1024;
+				_this.toast('图片太大，目前只支持'+size+'M');
 				return layer.close(_this.image_loading);
 			}
 			_this.image_flag = false;
-			messageHelper.sendImage(type, user.user_id, receiver_id, image);
+			messageHelper.sendMessageAsBlob(type, user.user_id, receiver_id, image);
 		}).on("pasteImageStart", function () {
 			_this.image_loading = _this.loading("处理中...");
 		});
 
 		//压缩图片
 		var is_locked = false;
+		var image_regexp = /(?:jpe?g|png|gif)/i;
 		function compressAndSend(files) {
 			if (is_locked) {
 				return _this.toast("正在上传中，请稍候再试");
@@ -1042,37 +506,61 @@
 			var type = receiver_id ? PERSONAL_IMAGE : COMMON_IMAGE;
 			var index = _this.loading("正在处理，总共"+len+"张图片", len*2);
 			var complete = 0;
+			function unlock() {
+				if (complete >= len) {
+					is_locked = false;
+					layer.close(index);
+				}
+			}
 			for (var i=0;i<len;i++) {
-				//压缩图片
-				new html5ImgCompress(files[i], {
-					before: function(file) {
-					},
-					done: function (file, base64) {
+				if (files[i].size < MAX_IMAGE / 2) {
+					var file = files[i];
+					var reader = new FileReader();
+					reader.onload = function (event) {
 						complete++;
-						if (base64.length > MAX_IMAGE) {
-							_this.toast(file.name+"太大");
+						if (!image_regexp.test(file.type.split("/").pop())) {
+							unlock();
+							_this.toast("请选择图片上传");
 						} else {
-							_this.sendImage(type, user.user_id, receiver_id, base64);
+							_this.sendMessageAsBlob(type, user.user_id, receiver_id, this.result);
+							if (complete >= len) {
+								unlock();
+								_this.toast("上传完毕，点击图片可以预览哦:-)");
+							}
 						}
-						if (complete >= len) {
-							is_locked = false;
-							layer.close(index);
-							_this.toast("上传完毕，点击图片可以预览哦:-)");
+					};
+					reader.readAsDataURL(file);
+				} else {
+					//压缩图片
+					new html5ImgCompress(files[i], {
+						before: function(file) {
+						},
+						done: function (file, base64) {
+							complete++;
+							if (base64.length > MAX_IMAGE) {
+								_this.toast(file.name+"太大");
+							} else {
+								_this.sendMessageAsBlob(type, user.user_id, receiver_id, base64);
+							}
+							if (complete >= len) {
+								unlock();
+								_this.toast("上传完毕，点击图片可以预览哦:-)");
+							}
+						},
+						fail: function(file) {
+							complete++;
+							unlock();
+							_this.toast("图片压缩失败");
+						},
+						complete: function(file) {
+						},
+						notSupport: function(file) {
+							complete++;
+							unlock();
+							_this.toast('当浏览器不支持，换Chrome试试吧;-)');
 						}
-					},
-					fail: function(file) {
-						complete++;
-						layer.close(index);
-						_this.toast("目前只支持上传图片");
-					},
-					complete: function(file) {
-					},
-					notSupport: function(file) {
-						complete++;
-						layer.close(index);
-						_this.toast('当浏览器不支持，换Chrome试试吧;-)');
-					}
-				});
+					});
+				}
 			}
 		}
 
@@ -1084,6 +572,45 @@
 		});
 		input.change(function () {
 			compressAndSend(this.files);
+		});
+
+		//上传音乐
+		var input_music = this.upload_music_container.next("[type=file]");
+		this.upload_music_container.click(function () {
+			input_music.trigger("click");
+		});
+		input_music.change(function () {
+			if (0 == this.files.length) {
+				_this.toast("请选择一首音乐");
+				return;
+			}
+			var index = _this.loading("正在处理，请稍候...", 3);
+			var reader = new FileReader();
+			var file = this.files[0];
+			reader.onload = function (event) {
+				layer.close(index);
+				var name = file.name;
+				var type = file.type;
+				var regexp = /(?:mp3|ogg|wav)/i;
+				if (!regexp.test(type.split('/').pop())) {
+					_this.toast("目前只支持mp3,ogg,wav格式");
+					return;
+				}
+				if (file.size > MAX_MUSIC_SIZE) {
+					var size = MAX_MUSIC_SIZE / 1024 / 1024;
+					_this.toast("文件大太，目前最大"+size+'M');
+					return;
+				}
+				index = _this.loading("上传中，请稍候...", 3);
+				type = (0 == receiver_id) ? COMMON_MUSIC : PERSONAL_MUSIC;
+				_this.sendMessageAsBlob(type, user.user_id, receiver_id, {
+					name: name,
+					data: this.result
+				});
+				layer.close(index);
+				_this.toast("上传音乐完毕");
+			};
+			reader.readAsDataURL(file);
 		});
 
 		//拖放上传
@@ -1108,20 +635,34 @@
 	};
 
 	MessageHelper.prototype = {
-		sound: true, //声音
+		retry_times: 0, //断线重试次数
 
 		prev_time: 0,//上次消息时间 (new Date()).getTime()
 
-		show_time_during: 60,//显示聊天时间的间隔时长
+		show_time_during: 300,//显示聊天时间的间隔时长
+
+		query_time: {}, //查询时间
+
+		history_time: {}, //历史时间
 
 		time_message: '<div class="text-center">%TIME%</div>',//时间信息
+
+		is_first: true, //是否第一次进入
+
+		search: [" ", "\n", "\r\n", "\t", "\\\\'", '\\\\\\\\', MATCH_URL], //空格、换行、制表符...转换标签，保持原貌（适用于颜文字、代码等）
+
+		replace: ["&nbsp;", "<br />", "<br />", "&nbsp;&nbsp;&nbsp;&nbsp;", "'", "\\", "<a href='$1' target='_blank'>$1</a>"],
+
+		history_common_btn: '<div class="text-center"><a href="javascript:;" onclick="messageHelper.getHistoryCommonMessage(this, event)">查看历史消息</a></div>',
+
+		history_personal_btn: '<div class="text-center"><a href="javascript:;" onclick="messageHelper.getHistoryPersonalMessage(this, event)">查看历史消息</a></div>',
 
 		common_message:
 		'<table class="table-chat">\
 			<tr>\
 				<td class="td-head">\
 					<div class="head text-center text-muted img-circle">\
-						<a href=\'javascript:messageHelper.setReceiver(%USER%);\'>%SENDER%</a>\
+						<a href=\'javascript:im.open(%USER%);\' title="点击头像私聊">%AVATAR%</a>\
 					</div>\
 				</td>\
 				<td class="td-triangle"><div class="left-triangle-common"></div></td>\
@@ -1136,7 +677,7 @@
 				<td class="td-blank"></td>\
 				<td><div class="text-right text-sm">%INFO%:</div><div class="bubble-right text-left text-color">%MESSAGE%</div></td>\
 				<td class="td-triangle"><div class="right-triangle-common"></div></td>\
-				<td class="td-head"><div class="head text-center text-muted img-circle">%SENDER%</div></td>\
+				<td class="td-head"><div class="head text-center text-muted img-circle">%AVATAR%</div></td>\
 			</tr>\
 		</table>',//我发出的 me@all
 
@@ -1146,7 +687,7 @@
 				<td class="td-blank"></td>\
 				<td><div class="bubble-right text-left">%MESSAGE%</div></td>\
 				<td class="td-triangle"><div class="right-triangle"></div></td>\
-				<td class="td-head"><div class="head text-center text-muted img-circle">%SENDER%</div></td>\
+				<td class="td-head"><div class="head text-center text-muted img-circle">%AVATAR%</div></td>\
 			</tr>\
 		</table>',//我发出的 me@other
 
@@ -1155,7 +696,7 @@
 			<tr>\
 				<td class="td-head">\
 					<div class="head text-center text-muted img-circle">\
-						<a href=\'javascript:messageHelper.setReceiver(%USER%);\'>%SENDER%</a>\
+						<a href=\'javascript:im.open(%USER%);\' title="点击头像私聊">%AVATAR%</a>\
 					</div>\
 				</td>\
 				<td class="td-triangle"><div class="left-triangle"></div></td>\
@@ -1170,7 +711,7 @@
 
 		welcome_message:
 		'<div class="text-center text-info">\
-			欢迎<a href=\'javascript:messageHelper.setReceiver(%USER%);\'>%USERNAME%</a>进入聊天室\
+			欢迎<a href=\'javascript:im.open(%USER%);\'>%USERNAME%</a>进入聊天室\
 		</div>',
 
 		quit_message:
@@ -1178,17 +719,35 @@
 			用户%USERNAME%退出聊天室\
 		</div>',
 
-		tip: '<div class="text-center text-info">友情提示：如需发送截图，请用chrome浏览器;-)</div>',
+		tip: '<div class="text-center text-info">欢迎进入聊天室。文明上网，礼貌发言</div>',
 
-		common_image: '<img class="img-responsive img-msg" src="%URL%" onload="messageHelper.autoBottom()" onclick="imageHelper.preview(this)" alt="%SENDER%" />',
+		common_image: '<img class="img-responsive img-msg" src="%URL%" onload="messageHelper.autoBottom()" onclick="imageHelper.preview(this)" alt="%SENDER%" title="点击图片预览" />',
 
-		private_image: '<img class="img-responsive img-msg" src="%URL%" onload="im.autoBottom2()" onclick="imageHelper.preview(this)" alt="%SENDER%" />',
+		history_common_image: '<img class="img-responsive img-msg" src="%URL%" onload="" onclick="imageHelper.preview(this)" alt="%SENDER%" title="点击图片预览" />',
+
+		private_image: '<img class="img-responsive img-msg" src="%URL%" onload="im.autoBottom()" onclick="imageHelper.preview(this)" alt="%SENDER%" title="点击图片预览" />',
+
+		history_private_image: '<img class="img-responsive img-msg" src="%URL%" onload="" onclick="imageHelper.preview(this)" alt="%SENDER%" title="点击图片预览" />',
+
+		music_message:
+		'<i class="fa fa-music fa-3x music-color"></i>\
+		<div class="music-info" onclick="messageHelper.playMusic(this, event);" data-url="%MUSIC_URL%" title="点击播放/暂停">\
+			<progress class="progress music-color music-progress" value="0" max="100" data-time="0">0%</progress>\
+			<span class="text-left music-name">%MUSIC_NAME%</span><span class="text-right music-during"></span>\
+		</div>',
 
 		welcome: function (mess) {
 			var html = this.getTimeMessage(mess);
 			if (user.user_id == mess.user.user_id) {
-				html += this.tip;
-				this.toast(user.username + "，欢迎回来");
+				if (this.is_first) {
+					html += this.tip;
+					this.toast(user.username + "，欢迎回来");
+					this.is_first = false;
+					this.history_time[0] = this.query_time[0] = mess.timestamp; //查询时间点
+				} else {
+					html = "";
+					this.toast("已成功连接！");
+				}
 			} else {
 				var search = ["%USER_ID%", "%USERNAME%", "%USER%"];
 				var replace = [mess.user.user_id, mess.user.username, JSON.stringify(mess.user)];
@@ -1207,112 +766,378 @@
 			this.autoBottom();
 		},
 
-		common: function (mess) {
-			var html = this.getTimeMessage(mess), search, sender, info, replace;
-			sender = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
+		getCommonHtml: function (mess, html) {
+			var search, avatar, info, replace;
+			avatar = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
 			info = mess.sender.username;
+			mess.mess = mess.mess.replaceMulti(this.search, this.replace);
 			if (user.user_id == mess.sender.user_id) {
-				search = ["%SENDER%", "%MESSAGE%", "%INFO%", match_url];
-				replace = [sender, mess.mess, info, "<a href='$1' target='_blank'>$1</a>"];
+				search = ["%INFO%", "%MESSAGE%", "%AVATAR%"];
+				replace = [info, mess.mess, avatar];
 				html += this.my_message.replaceMulti(search, replace);
-
 			} else {
-				search = ["%USER_ID%", "%USERNAME%", "%SENDER%", "%MESSAGE%", "%USER%", "%INFO%", match_url];
-				replace = [mess.sender.user_id, mess.sender.username, sender, mess.mess, JSON.stringify(mess.sender), info, "<a href='$1' target='_blank'>$1</a>"];
+				search = ["%USER%", "%AVATAR%", "%INFO%", "%MESSAGE%"];
+				replace = [JSON.stringify(mess.sender), avatar, info, mess.mess];
 				html += this.common_message.replaceMulti(search, replace);
 			}
+			return html;
+		},
+		
+		common: function (mess) {
+			var html = this.getTimeMessage(mess);
+			html = this.getCommonHtml(mess, html);
 			this.room_container.append(html);
 			this.autoBottom();
 		},
 
-		commonImage: function (mess) {
-			var html = this.getTimeMessage(mess);
+		getCommonImageHtml: function (mess, html, image_html) {
 			var search = ["%URL%", "%SENDER%"];
 			var replace = [href + mess.mess, mess.sender.username];
-			var image = this.common_image.replaceMulti(search, replace);
-			sender = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
+			var image = image_html.replaceMulti(search, replace);
+			var avatar = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
 			var info = mess.sender.username;
 			if (user.user_id == mess.sender.user_id) {
-				search = ["%SENDER%", "%MESSAGE%", "%INFO%"];
-				replace = [sender, image, info];
+				search = ["%INFO%", "%MESSAGE%", "%AVATAR%"];
+				replace = [info, image, avatar];
 				html += this.my_message.replaceMulti(search, replace);
 				this.image_flag = true;
 				this.image_loading && layer.close(this.image_loading);
 			} else {
-				search = ["%USER_ID%", "%USERNAME%", "%SENDER%", "%MESSAGE%", "%USER%", "%INFO%"];
-				replace = [mess.sender.user_id, mess.sender.username, sender, image, JSON.stringify(mess.sender), info];
+				search = ["%USER%", "%AVATAR%", "%INFO%", "%MESSAGE%"];
+				replace = [JSON.stringify(mess.sender), avatar, info, image];
 				html += this.common_message.replaceMulti(search, replace);
 			}
+			return html;
+		},
+
+		commonImage: function (mess) {
+			var html = this.getTimeMessage(mess);
+			html = this.getCommonImageHtml(mess, html, this.common_image);
 			this.room_container.append(html);
+		},
+
+		getSelfHtml: function (mess, html) {
+			mess.mess = mess.mess.replaceMulti(this.search, this.replace);
+			var avatar = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
+			var search = ["%MESSAGE%", "%AVATAR%"];
+			var replace = [mess.mess, avatar];
+			html += this.self_message.replaceMulti(search, replace);
+			return html;
 		},
 
 		self: function (mess) {
 			var html = this.getTimeMessage(mess);
-			var search = ["%USER_ID%", "%USERNAME%", "%RECEIVER%", "%MESSAGE%", "%SENDER%", "%USER%", match_url];
-			var sender = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
-			var replace = [mess.receiver.user_id, mess.receiver.username, mess.receiver.username, mess.mess, sender, JSON.stringify(mess.receiver), "<a href='$1' target='_blank'>$1</a>"];
-			html += this.self_message.replaceMulti(search, replace);
+			html = this.getSelfHtml(mess, html);
 
-			this.autoBottom();
-			im.open(mess.receiver, html);
+			im.writeMessage(mess.receiver.user_id, html);
+			im.autoBottom();
+		},
+
+		getSelfImageHtml: function(mess, html, image_html) {
+			var search = ["%URL%", "%SENDER%"];
+			var replace = [href + mess.mess, mess.sender.username];
+			var image = image_html.replaceMulti(search, replace);
+			var avatar = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
+
+			search = ["%MESSAGE%", "%AVATAR%"];
+			replace = [image, avatar];
+			html += this.self_message.replaceMulti(search, replace);
+			return html;
 		},
 
 		selfImage: function (mess) {
 			var html = this.getTimeMessage(mess);
-			var search = ["%URL%", "%SENDER%"];
-			var replace = [href + mess.mess, mess.sender.username];
-			var image = this.private_image.replaceMulti(search, replace);
-			var sender = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
-			search = ["%USER_ID%", "%USERNAME%", "%RECEIVER%", "%MESSAGE%", "%SENDER%", "%USER%"];
-			replace = [mess.receiver.user_id, mess.receiver.username, mess.receiver.username, image, sender, JSON.stringify(mess.receiver)];
-			html += this.self_message.replaceMulti(search, replace);
+			html = this.getSelfImageHtml(mess, html, this.private_image);
 
 			this.image_flag = true;
 			this.image_loading && layer.close(this.image_loading);
-			im.open(mess.receiver, html);
+			im.writeMessage(mess.receiver.user_id, html);
+			im.autoBottom();
+		},
+
+		getOtherHtml: function (mess, html) {
+			mess.mess = mess.mess.replaceMulti(this.search, this.replace);
+			var avatar = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
+			var search = ["%USER%", "%AVATAR%", "%MESSAGE%"];
+			var replace = [JSON.stringify(mess.sender), avatar, mess.mess];
+			html += this.private_message.replaceMulti(search, replace);
+			return html;
 		},
 
 		other: function (mess) {
 			var html = this.getTimeMessage(mess);
-			var search = ["%USER_ID%", "%USERNAME%", "%SENDER%", "%MESSAGE%", "%USER%", match_url];
-			var sender = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
-			var replace = [mess.sender.user_id, mess.sender.username, sender, mess.mess, JSON.stringify(mess.sender), "<a href='$1' target='_blank'>$1</a>"];
-			html += this.private_message.replaceMulti(search, replace);
+			html = this.getOtherHtml(mess, html);
 
-			this.sound && audio.play();
-			this.autoBottom();
-			im.tip(mess.sender, html);
+			im.tip(mess.sender, html, mess.timestamp);
+		},
+
+		getOtherImageHtml: function(mess, html, image_html) {
+			var search = ["%URL%", "%SENDER%"];
+			var replace = [href + mess.mess, mess.sender.username];
+			var image = image_html.replaceMulti(search, replace);
+			var avatar = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
+			search = ["%USER%", "%AVATAR%", "%MESSAGE%"];
+			replace = [JSON.stringify(mess.sender), avatar, image];
+			html += this.private_message.replaceMulti(search, replace);
+			return html;
 		},
 
 		otherImage: function (mess) {
 			var html = this.getTimeMessage(mess);
-			var search = ["%URL%", "%SENDER%"];
-			var replace = [href + mess.mess, mess.sender.username];
-			var image = this.private_image.replaceMulti(search, replace);
-			var sender = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
-			search = ["%USER_ID%", "%USERNAME%", "%SENDER%", "%MESSAGE%", "%USER%"];
-			replace = [mess.sender.user_id, mess.sender.username, sender, image, JSON.stringify(mess.sender)];
-			html += this.private_message.replaceMulti(search, replace);
+			html = this.getOtherImageHtml(mess, html, this.private_image);
 
-			this.sound && audio.play();
-			im.tip(mess.sender, html);
+			im.tip(mess.sender, html, mess.timestamp);
 		},
+
+		//获取历史消息
+		getHistoryCommonMessage: function (btn, e) {
+			e.stopPropagation();
+			btn.parentNode.removeChild(btn); //暂时删除按钮，接收到数据后，再显示按钮，防止操作频繁
+			var query_time = this.query_time[0] - 0.0001; //精确到4位，和服务器保持一致
+			ws.send(dataHelper.encode({
+				"type": HISTORY_COMMON_MESSAGE,
+				"sender_id": user.user_id,
+				"query_time": query_time
+			}));
+		},
+
+		setQueryTime: function (receiver_id) {
+			var date = new Date();
+			date.setTime(this.query_time[receiver_id] * 1000);
+			var curr_date = date.toDateString(); //当前日期
+			var time = date.getHours()+date.getMinutes()+date.getSeconds();
+			var second = (0 == time) ? 86400 : 0; //如果不是整点，则查截止到今天的，否则是前一天的
+			this.query_time[receiver_id] = Date.parse(curr_date) / 1000 - second;
+
+			date.setTime((this.query_time[receiver_id]-1) * 1000);
+			var query_date = date.toLocaleDateString();
+			this.toast("继续点击查" + query_date + "消息");
+		},
+
+		setHistoryTime: function (receiver_id, timestamp) {
+			this.history_time[receiver_id] = this.query_time[receiver_id] = timestamp;
+		},
+
+		//历史消息处理
+		history_common_message: function (mess) {
+			var data = mess.mess, len = data.length;
+			var html = this.history_common_btn;
+			if (0 == len) {
+				this.setQueryTime(0);
+
+				this.room_container.prepend(html);
+				return;
+			}
+
+			for (var i=0;i<len;i++) {
+				var dataI = dataHelper.decode(data[i]);
+				var time_message = this.getHistoryTimeMessage(0, dataI);
+				switch (dataI.type) {
+					case COMMON:
+						html += this.getCommonHtml(dataI, time_message);
+						break;
+					case COMMON_IMAGE:
+					case COMMON_EMOTION:
+						html += this.getCommonImageHtml(dataI, time_message, this.history_common_image);
+						break;
+					case COMMON_MUSIC:
+						html += this.getCommonMusicHtml(dataI, time_message);
+						break;
+				}
+			}
+			this.room_container.prepend(html);
+			this.setHistoryTime(0, dataHelper.decode(data[0]).timestamp); //重置为第一个时间戳
+		},
+
+		getHistoryPersonalMessage: function (btn, e) {
+			e.stopPropagation();
+			btn.parentNode.removeChild(btn);
+			var query_time = this.query_time[receiver_id] - 0.0001;
+			ws.send(dataHelper.encode({
+				"type": HISTORY_PERSONAL_MESSAGE,
+				"sender_id": user.user_id,
+				"query_time": query_time,
+				"receiver_id": receiver_id
+			}));
+		},
+
+		history_personal_message: function (mess) {
+			var data = mess.mess,len=data.length;
+			var html = this.history_personal_btn;
+			var receiver_id = mess.receiver_id;
+			if (0 == len) {
+				this.setQueryTime(receiver_id);
+
+				im.writeHistoryMessage(receiver_id, html);
+				return;
+			}
+
+			for (var i=0;i<len;i++) {
+				var dataI = dataHelper.decode(data[i]), time_message;
+				switch (dataI.type) {
+					case PERSONAL:
+						if (dataI.sender.user_id == user.user_id) {
+							time_message = this.getHistoryTimeMessage(dataI.receiver.user_id, dataI);
+							html += this.getSelfHtml(dataI, time_message);
+						} else {
+							time_message = this.getHistoryTimeMessage(dataI.sender.user_id, dataI);
+							html += this.getOtherHtml(dataI, time_message);
+						}
+						break;
+					case PERSONAL_IMAGE:
+					case PERSONAL_EMOTION:
+						if (dataI.sender.user_id == user.user_id) {
+							time_message = this.getHistoryTimeMessage(dataI.receiver.user_id, dataI);
+							html += this.getSelfImageHtml(dataI, time_message, this.history_private_image);
+						} else {
+							time_message = this.getHistoryTimeMessage(dataI.sender.user_id, dataI);
+							html += this.getOtherImageHtml(dataI, time_message, this.history_private_image);
+						}
+						break;
+					case PERSONAL_MUSIC:
+						if (dataI.sender.user_id == user.user_id) {
+							time_message = this.getHistoryTimeMessage(dataI.receiver.user_id, dataI);
+							html += this.getSelfMusicHtml(dataI, time_message);
+						} else {
+							time_message = this.getHistoryTimeMessage(dataI.sender.user_id, dataI);
+							html += this.getOtherMusicHtml(dataI, time_message);
+						}
+						break;
+				}
+			}
+			im.writeHistoryMessage(receiver_id, html);
+
+			this.setHistoryTime(receiver_id, dataHelper.decode(data[0]).timestamp); //重置为第一个时间戳
+		},
+
+		getCommonMusicHtml: function (mess, html) {
+			var search, avatar, info, message, replace;
+			avatar = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
+			info = mess.sender.username;
+
+			search = ["%MUSIC_URL%", "%MUSIC_NAME%"];
+			replace = [mess.mess, mess.name];
+			message = this.music_message.replaceMulti(search, replace);
+
+			if (user.user_id == mess.sender.user_id) {
+				search = ["%INFO%", "%MESSAGE%", "%AVATAR%"];
+				replace = [info, message, avatar];
+				html += this.my_message.replaceMulti(search, replace);
+			} else {
+				search = ["%USER%", "%AVATAR%", "%INFO%", "%MESSAGE%"];
+				replace = [JSON.stringify(mess.sender), avatar, info, message];
+				html += this.common_message.replaceMulti(search, replace);
+			}
+			return html;
+		},
+
+		common_music: function (mess) {
+			var html = this.getTimeMessage(mess);
+			html = this.getCommonMusicHtml(mess, html);
+			this.room_container.append(html);
+			this.autoBottom();
+		},
+
+		getSelfMusicHtml: function (mess, html) {
+			var search, avatar, message, replace;
+			avatar = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
+			search = ["%MUSIC_URL%", "%MUSIC_NAME%"];
+			replace = [mess.mess, mess.name];
+			message = this.music_message.replaceMulti(search, replace);
+
+			search = ["%MESSAGE%", "%AVATAR%"];
+			replace = [message, avatar];
+			html += this.self_message.replaceMulti(search, replace);
+			return html;
+		},
+
+		self_music: function (mess) {
+			var html = this.getTimeMessage(mess);
+			html = this.getSelfMusicHtml(mess, html);
+
+			im.writeMessage(mess.receiver.user_id, html);
+		},
+
+		getOtherMusicHtml: function (mess, html) {
+			var search, avatar, message, replace;
+			avatar = mess.sender.avatar ? '<img src="'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
+			search = ["%MUSIC_URL%", "%MUSIC_NAME%"];
+			replace = [mess.mess, mess.name];
+			message = this.music_message.replaceMulti(search, replace);
+
+			search = ["%USER%", "%AVATAR%", "%MESSAGE%"];
+			replace = [JSON.stringify(mess.sender), avatar, message];
+			html += this.private_message.replaceMulti(search, replace);
+			return html;
+		},
+
+		other_music: function (mess) {
+			var html = this.getTimeMessage(mess);
+			html = this.getOtherMusicHtml(mess, html);
+
+			im.tip(mess.sender, html, mess.timestamp);
+		},
+
+		music_timer: 0,
+
+		getDuring: function(second) {
+			var minute = Math.floor(second / 60);
+			var sec = Math.ceil(second - minute * 60);
+			minute = minute > 9 ? minute : '0' + minute;
+			sec = sec > 9 ? sec : '0' + sec;
+			return minute + ":" + sec;
+		},
+
+		playMusic: function (btn, e) {
+			e.stopPropagation(); //阻止冒泡事件
+			var url = href + $(btn).attr("data-url");
+			var progress = $(btn).children("progress");
+			var music_during = $(btn).children(".music-during");
+			if (music.src != url) {
+				clearInterval(this.music_timer);
+				music.pause();
+				music.src = url;
+			}
+
+			if (music.paused) {
+				music.currentTime = progress.attr("data-time"); //保留播放进度
+				music.play();
+				var _this = this;
+				this.music_timer = window.setInterval(function () {
+					var percent = (music.currentTime/ music.duration * 100);
+					progress.val(percent);
+					progress.attr("data-time", music.currentTime);
+					//计算时长
+					music_during.text(_this.getDuring(music.currentTime) + "/" + _this.getDuring(music.duration));
+					if (percent >= 100) {
+						progress.attr("data-time", 0); //清零，下次重新播放
+						clearInterval(_this.music_timer);
+					}
+				}, 200);
+			} else {
+				music.pause();
+				clearInterval(this.music_timer);
+			}
+		},
+
+		online_users: {}, //在线用户
 
 		online: function (mess) {
 			this.online_container.html("");
+			this.online_users = {};
 			var total = 0, list;
 			var users = mess.users;
 			var html = '<div class="form-control btn-success-outline text-center" onclick="im.hideAll();im.closeContacts();">所有人</div>';
 			if (1 == role_id) {
 				list =
 					'<div class="input-group">\
-						<div class="form-control btn-success-outline text-center" onclick=\'messageHelper.setReceiver(%USER%);im.closeContacts();\'>%USERNAME%</div>\
+						<div class="form-control btn-success-outline text-center" onclick=\'im.open(%USER%);im.closeContacts();\'>%USERNAME%</div>\
 						<span class="input-group-btn">\
 							<button type="button" class="btn btn-danger-outline" onclick="messageHelper.forbid(\'%USER_ID%\', \'%ADMIN_ID%\')">拉黑</button>\
 						</span>\
 					</div>';
 			} else {
-				list = '<div class="form-control btn-success-outline text-center" onclick=\'messageHelper.setReceiver(%USER%);im.closeContacts();\'>%USERNAME%</div>';
+				list = '<div class="form-control btn-success-outline text-center" onclick=\'im.open(%USER%);im.closeContacts();\'>%USERNAME%</div>';
 			}
 			var search = ["%USER_ID%", "%USERNAME%", "%ADMIN_ID%", "%USER%"];
 			for (var i in users) {
@@ -1320,9 +1145,14 @@
 				if (user.user_id == users[i].user_id) continue;
 				var replace = [users[i].user_id, users[i].username, user.user_id, JSON.stringify(users[i])];
 				html += list.replaceMulti(search, replace);
+				this.online_users[users[i].user_id] = users[i].username;
 			}
 			$("#total").text(total);
 			this.online_container.append(html);
+		},
+
+		isOnline: function (user_id) {
+			return this.online_users.hasOwnProperty(user_id);
 		},
 
 		register: function (mess) {
@@ -1343,12 +1173,11 @@
 			}
 			username = username.substr(0, 30);
 			!password && (password = '123456');
-			var mess = {
+			ws.send(dataHelper.encode({
 				type: REGISTER,
 				username: username,
 				password: password
-			};
-			ws.send(dataHelper.encode(mess));
+			}));
 		},
 
 		incorrect: function (mess) {
@@ -1364,9 +1193,10 @@
 			$("#register").modal("hide");// 弹框退出
 			user = mess.user;
 			role_id = user.role_id;
+			is_active = user.is_active;
 			setCookie("user", JSON.stringify(user));//刷新cookie
 			this.autoBottom();
-			$("#mess").focus();
+			this.input_container.focus();
 		},
 
 		error: function (mess) {
@@ -1401,9 +1231,21 @@
 
 		getTimeMessage: function (mess) {
 			var html = "";
-			if ((mess.timestamp - this.prev_time) > this.show_time_during) {
+			if (Math.abs(mess.timestamp - this.prev_time) > this.show_time_during) {
 				html = this.time_message.replace(/%TIME%/g, mess.time);
 				this.prev_time = mess.timestamp;
+			}
+			return html;
+		},
+
+		getHistoryTimeMessage: function (user_id, mess) {
+			var html = "";
+			if (Math.abs(this.history_time[user_id] - mess.timestamp) > this.show_time_during) {
+				var date = new Date();
+				date.setTime(mess.timestamp * 1000);
+				var curr_date = date.toLocaleDateString();
+				html = this.time_message.replace(/%TIME%/g, curr_date + " " + mess.time);
+				this.history_time[user_id] = mess.timestamp;
 			}
 			return html;
 		},
@@ -1413,29 +1255,12 @@
 			this.room_container.scrollTop(this.room_container.get(0).scrollHeight - this.room_container.get(0).offsetHeight);
 		},
 
-		//发送消息
-		send: function (input) {
-			var mess = input.val();
-			if ("" == mess) {
-				input.focus();
-				return;
-			}
-			if (mess.length > MAX_LENGTH)
-				mess = mess.substr(0, MAX_LENGTH);
-			var type = receiver_id ? PERSONAL : COMMON;
-			this.sendMessage(type, user.user_id, receiver_id, mess);
-			input.val("");
-			input.focus();
-		},
-
-		//按键ctrl+enter
-		sendMess: function sendMess(event, input) {
-			if (event.ctrlKey && event.keyCode == 13)
-				this.send(input);
+		autoTop: function () {
+			this.room_container.scrollTop(0);
 		},
 
 		//设置接收人
-		setReceiver: function (user, html) {
+		setReceiver: function (user) {
 			var text;
 			if (0 == user) {
 				receiver_id = 0;
@@ -1443,19 +1268,34 @@
 			} else {
 				receiver_id = user.user_id;
 				text = "@" + user.username;
-				im.open(user, html);
 			}
 			this.submit_button.text(text);
 			this.input_container.focus(); //输入焦点
 		},
 
+		//发送消息
+		send: function () {
+			var mess = this.input_container.val();
+			if ("" == mess) {
+				this.input_container.focus();
+				return;
+			}
+			if (mess.length > MAX_LENGTH)
+				mess = mess.substr(0, MAX_LENGTH);
+			var type = receiver_id ? PERSONAL : COMMON;
+			this.sendMessage(type, user.user_id, receiver_id, mess);
+			this.input_container.val("");
+			this.input_container.focus();
+		},
+
+		//按键ctrl+enter
+		sendMess: function (event) {
+			if (event.ctrlKey && event.keyCode == 13)
+				this.send();
+		},
+
 		forbid: function (user_id, admin_id) {
-			var obj = {
-				type: REMOVE,
-				user_id: user_id,
-				admin_id: admin_id
-			};
-			ws.send(dataHelper.encode(obj));
+			this.sendMessage(REMOVE, admin_id, user_id, "");
 		},
 
 		sendMessage: function (type, sender_id, receiver_id, mess) {
@@ -1466,7 +1306,8 @@
 				mess: mess
 			}));
 		},
-		sendImage: function (type, sender_id, receiver_id, mess) {
+
+		sendMessageAsBlob: function (type, sender_id, receiver_id, mess) {
 			try {
 				ws.send(new Blob([dataHelper.encode({
 					type: type,
@@ -1476,12 +1317,7 @@
 				})], {type: "application/json"}));
 			} catch (e) {
 				//UC不能使用Blob，换明文试一次
-				ws.send(dataHelper.encode({
-					type: type,
-					sender_id: sender_id,
-					receiver_id: receiver_id,
-					mess: mess
-				}));
+				this.sendMessage(type, sender_id, receiver_id, mess);
 			}
 		},
 
@@ -1493,26 +1329,191 @@
 			});
 		},
 		
-		loading: function (content, time) {
+		loading: function (content, time, shadeClose) {
 			if (typeof time=="undefined") time = false;
+			if (typeof shadeClose=="undefined") shadeClose = true;
 			return layer.open({
 				type: 2
 				,content: content
 				,time: time
+				,shadeClose: shadeClose
 			});
 		},
 
 		controlBell: function (btn) {
 			var i = $(btn).children("i");
 			if (i.hasClass("fa-bell-o")) {
-				this.toast("私信声音：关");
-				this.sound = false;
+				this.toast("声音：关");
+				audio.volume = 0;
+				music.volume = 0;
 				i.removeClass("fa-bell-o").addClass("fa-bell-slash-o");
 			} else {
-				this.toast("私信声音：开");
-				this.sound = true;
+				this.toast("声音：开");
+				audio.volume = 1;
+				music.volume = 1;
 				audio.play();
 				i.removeClass("fa-bell-slash-o").addClass("fa-bell-o");
+			}
+		},
+
+		about: function () {
+			layer.open({
+				content: "QQ群：345480905",
+				btn: "联知道了"
+			})
+		},
+
+		onOpen: function () {
+			//握手成功
+			if ((typeof(user) == 'object') && user.hasOwnProperty('user_id') && user.user_id) {
+				ws.send(dataHelper.encode({
+					type: LOGIN,
+					sender_id: user.user_id
+				}));
+			} else {
+				this.register();
+			}
+		},
+
+		onClose: function (e) {
+			//连接关闭
+			$("#total").text(0);//清除在线人数
+			$("#online").text("");//清除在线列表
+			var d = new Date();
+			var date = 'Y-m-d H:i:s';
+			var search = ['Y', 'm', 'd', 'H', 'i', 's'];
+			var replace = [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()];
+			date = date.replaceMulti(search, replace);
+			if (!is_active) {
+				return;
+			}
+			var index = this.loading(date + ' 已断线，重试中...', false, false);
+			var _this = this;
+			var timer = window.setInterval(function () {
+				try {
+					//断线重连
+					if (_this.retry_times >= MAX_LIMITS) {
+						window.clearInterval(timer);
+						layer.close(index);
+						//alert(ws.readyState);
+						_this.toast("无法连接到服务器，请稍候再试");
+						return;
+					}
+					if (ws.readyState == WebSocket.OPEN) {
+						window.clearInterval(timer);
+						ws.onclose = function (e) {
+							_this.onClose(e);
+						};
+
+						ws.onerror = function (e) {
+							_this.onError(e);
+						};
+
+						ws.onmessage = function (message) {
+							_this.onMessage(message);
+						};
+						_this.onOpen();
+						layer.close(index);
+						_this.retry_times = 0;
+						return;
+					}
+					ws = new WebSocket(url);
+					_this.retry_times++;
+				} catch (e) {}
+			}, 2000);
+		},
+
+		onError: function (e) {
+			$("#total").text(0);//清除在线人数
+			$("#online").text("");//清除在线列表
+			this.toast('连接服务器失败');
+		},
+
+		onMessage: function (message) {
+			var mess = dataHelper.decode(message.data);
+			try {
+				switch (mess.type) {
+					case WELCOME://欢迎消息
+						this.welcome(mess);
+						break;
+					case QUIT://退出消息
+						this.quit(mess);
+						break;
+					case COMMON://公共消息
+						this.common(mess);
+						break;
+					case COMMON_IMAGE://公共消息
+					case COMMON_EMOTION:
+						this.commonImage(mess);
+						break;
+					case SELF://myself @other
+						this.self(mess);
+						break;
+					case SELF_IMAGE://myself @other
+					case SELF_EMOTION:
+						this.selfImage(mess);
+						break;
+					case OTHER://other @me
+						this.other(mess);
+						break;
+					case OTHER_IMAGE://other @me
+					case OTHER_EMOTION:
+						this.otherImage(mess);
+						break;
+					case ONLINE://在线用户列表
+						this.online(mess);
+						break;
+					case REGISTER://需要注册
+						this.register();
+						break;
+					case INCORRECT://登录出错
+						this.incorrect(mess);
+						break;
+					case LOGIN://已经登录
+						this.login(mess);
+						break;
+					case ERROR://出错
+						this.error(mess);
+						break;
+					case REMOVE://移除
+					case FORBIDDEN://禁用
+						is_active = 0;
+						this.warning(mess);
+						break;
+					case WARNING://警告
+						this.warning(mess);
+						break;
+					case SYSTEM://系统信息
+						this.system(mess);
+						break;
+					case DOWNLINE://下线
+						is_active = 0;
+						this.system(mess);
+						break;
+					case AVATAR_SUCCESS:
+						this.avatar_success(mess);
+						break;
+					case AVATAR_FAIL:
+						this.avatar_fail(mess);
+						break;
+					case HISTORY_COMMON_MESSAGE:
+						this.history_common_message(mess);
+						break;
+					case HISTORY_PERSONAL_MESSAGE:
+						this.history_personal_message(mess);
+						break;
+					case COMMON_MUSIC:
+						this.common_music(mess);
+						break;
+					case SELF_MUSIC:
+						this.self_music(mess);
+						break;
+					case OTHER_MUSIC:
+						this.other_music(mess);
+						break;
+				}
+			} catch (e) {
+				alert(e);
 			}
 		}
 	};
@@ -1521,7 +1522,8 @@
 		online_container: $("#online"),
 		submit_button: $("#submit"),
 		input_container: $("#mess"),
-		upload_container: $("#upload-image")
+		upload_container: $("#upload-image"),
+		upload_music_container: $("#upload-music")
 	});
 
 	var imageHelper = {
@@ -1534,37 +1536,53 @@
 			$("#backdrop").fadeIn();
 			slider.removeClass("hidden bounceOutUp").addClass("animated bounceInDown");
 			container.html("");
-			var html =
-				'<li style="display:block"><div class="pinch-zoom"><img src="' + img.src + '" /></div><div class="description">' + img.alt + '</div></li>';
-
-			$.each($("img.img-msg").not(img), function (i, n) {
-				html += '<li style="display:none"><div class="pinch-zoom"><img src="' + n.src + '" /></div><div class="description">' + n.alt + '</div></li>';
+			var html = "";
+			var index = 0;
+			var images = $(img).parents(".table-chat").parent().find("img.img-msg");
+			var total = images.length;
+			$.each(images, function (i, n) {
+				if (n == img) {
+					index = i;
+				}
+				var sequence = i + 1;
+				html +=
+					'<li>\
+						<div class="pinch-zoom">\
+							<img src="' + n.src + '" onclick="event.stopPropagation();" />\
+						</div>\
+						<div class="description">' + n.alt + " (" + sequence + "/" + total + ")" + '</div>\
+					</li>';
 			});
-			container.html(html);
+			images = ""; //释放内存
+			container.append(html);
 			container.ready(function () {
 				//手指滑动
 				var swipe = new Swipe(slider.get(0), {
-					speed: 400
+					speed: 400,
+					startSlide: index
 				});
 
 				//手指缩放
 				$('div.pinch-zoom').each(function () {
-					new RTP.PinchZoom($(this), {});
+					new RTP.PinchZoom($(this), {
+						tapZoomFactor:2,
+						zoomOutFactor:1.3,
+						animationDuration:300,
+						animationInterval:5,
+						maxZoom:4,
+						minZoom:.5,
+						lockDragAxis:false,
+						use2d:true
+					});
 				});
 
 				slider.click(function () {
 					_this.closePreview();
 				});
 
-				var max = container.children().length - 1;
-				var start = 0;
-				//点击图片换下一个，和手指双击冲突
-				/*container.children().click(function() {
-					var index = $(this).index()+1;
-					if(index > max)
-						index = 0;
-				    swipe.slide(index, 400);
-				});*/
+
+				var max = total - 1;
+				var start = swipe.getPos();
 
 				//滑动滚轮切换
 				container.get(0).onmousewheel = function (e) {
@@ -1656,7 +1674,7 @@
 					var html = '<img src="'+src+'" />';
 					$(".showImage").html(html);
 
-					messageHelper.sendImage(AVATAR_UPLOAD, user.user_id, 0, src);
+					messageHelper.sendMessageAsBlob(AVATAR_UPLOAD, user.user_id, 0, src);
 					ljkUpload.delete(index);
 				}
 			});
@@ -1673,6 +1691,8 @@
 		container: $("#emotion"),
 		dots: [],
 		emotion_height: 0,
+		bottom: 80,
+		speed: 100,
 		config: [
 			{name:"ywz", suffix: '.gif', cols:4, rows:2, len:24, start:1},
 			{name:"ymj", suffix: '.gif', cols:4, rows:2, len:24, start:0}
@@ -1732,43 +1752,56 @@
 			});
 
 			//表情点击发送消息
-			this.container.find("img").click(function () {
+			this.container.find("img").click(function (event) {
+				event.stopPropagation();
 				var type = receiver_id ? PERSONAL_EMOTION : COMMON_EMOTION;
 				messageHelper.sendMessage(type, user.user_id, receiver_id, $(this).prop("title"));
 			});
 
-			//点击空白折叠，TODO room内其它点击阻止冒泡event.stopPropagation();
-			$("#room").click(function () {
+			//点击空白折叠
+			function hide(event) {
+				event.stopPropagation();
 				_this.close();
 				im.closeContacts();
+			}
+			$("#room").bind("click", function (e) {
+				hide(e);
+			});
+			$(".chat-box").bind("click", function (e) {
+				hide(e);
 			});
 		},
 		open: function () {
 			if (H > this.emotion_height) {
 				this.toggle();
 			} else {
-				window.setTimeout("emotionHelper.toggle()", 200);
+				window.setTimeout("emotionHelper.toggle()", 200); //手机打开键盘时，窗口大小会变化
 			}
 		},
 		close: function () {
 			var _this = this;
 			$("#room").animate({
 				height: H
-			}, 200, "linear", function () {
+			}, this.speed, "linear", function () {
 				_this.container.addClass("hidden");
-				$(".chat-max").css("bottom", "80px");
 			});
+			$(".chat-box").animate({
+				bottom: _this.bottom
+			}, this.speed);
 		},
 		toggle: function () {
 			var available_height = H - this.emotion_height;
+			var _this = this;
 			if (this.container.hasClass("hidden")) {
 				//展开
 				this.container.removeClass("hidden");
 
 				$("#room").animate({
 					height: available_height
-				}, 200);
-				$(".chat-max").css("bottom", this.emotion_height + 80 + "px");
+				}, this.speed);
+				$(".chat-box").animate({
+					bottom: _this.emotion_height + _this.bottom
+				}, this.speed);
 			} else {
 				//折叠
 				this.close();
@@ -1776,11 +1809,6 @@
 		}
 	};
 	emotionHelper.init();
-
-	//滚动条
-	window.setTimeout(function () {
-		$("marquee").remove();
-	}, 60000);
 </script>
 </body>
 </html>

@@ -4,7 +4,8 @@ namespace server;
 class User
 {
 	public $redis;
-	public $userSet = 'user';//在线用户ID集合
+	public $userSet = 'user';//用户ID集合
+	public $fileStore = 'file:md5'; //文件库:md5 => path
 
 	public function __construct()
 	{
@@ -94,7 +95,7 @@ class User
 	 */
 	public function logout($user_id)
 	{
-		return $this->redis->sRem($this->userSet, $user_id);
+		//return $this->redis->sRem($this->userSet, $user_id);
 	}
 
 	/**
@@ -107,5 +108,61 @@ class User
 	{
 		$hKey = 'user_id:' . $user_id;
 		return $this->redis->hMset($hKey, $info);
+	}
+
+	public function getCommonMessageKey($timestamp)
+	{
+		return 'message:common:' . date('Y-m-d', $timestamp);
+	}
+
+	public function addCommonMessage($timestamp, $message)
+	{
+		$key = $this->getCommonMessageKey($timestamp);
+		return $this->redis->zAdd($key, $timestamp, $message);
+	}
+
+	public function getPersonalMessageKey($users, $timestamp)
+	{
+		sort($users);
+		return 'message:users:[' . implode(',', $users) . ']:' . date('Y-m-d', $timestamp);
+	}
+
+	public function addPersonalMessage(array $users, $timestamp, $message)
+	{
+		$key = $this->getPersonalMessageKey($users, $timestamp);
+		return $this->redis->zAdd($key, $timestamp, $message);
+	}
+
+	public function getPrevMessage($key, $timestamp, $size = 10)
+	{
+		//0-score之间的数量
+		$end = $this->redis->zCount($key, 0, $timestamp) - 1;
+		if ($end < 0)
+			return array();
+		$start = $end - $size + 1; //包含start，所有要少一个下标
+		$start = max(0, $start);
+		return $this->redis->zRange($key, $start, $end);
+	}
+
+	public function getPrevCommonMessage($timestamp, $size = 10)
+	{
+		$key = $this->getCommonMessageKey($timestamp);
+		return $this->getPrevMessage($key, $timestamp, $size);
+	}
+
+	public function getPrevPersonalMessage(array $users, $timestamp, $size = 10)
+	{
+		$key = $this->getPersonalMessageKey($users, $timestamp);
+		return $this->getPrevMessage($key, $timestamp, $size);
+	}
+
+	public function addFile($md5, $path)
+	{
+		return $this->redis->hSet($this->fileStore, $md5, $path);
+	}
+
+	public function getFileByMd5($md5)
+	{
+		return $this->redis->hGet($this->fileStore, $md5);
 	}
 }

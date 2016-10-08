@@ -17,6 +17,7 @@ class WsServer
 	protected $max_log_length = 1024; //消息记录在日志的最大长度
 	protected $invalid_sockets = array(); //无效的socket:key => error
 	protected $headers = array(); //请求头
+	protected $max_read_length = 512 * 1024 * 1024; //最大读取长度:byte
 	protected $debug = false;
 
 	public function __construct($address, $port)
@@ -157,7 +158,7 @@ class WsServer
 
 				$this->notify('onMessage', array($key, $msg));
 
-				unset($buff, $buffer, $msg);//图片数据很大，清空临时数据，释放内存
+				unset($msg);//图片数据很大，清空临时数据，释放内存
 			}
 
 			//出错的统一通知
@@ -179,6 +180,7 @@ class WsServer
 	 */
 	public function send($index, &$msg)
 	{
+		if (!isset($this->sockets[$index])) return;
 		isset($msg[$this->max_log_length]) or $this->log('>' . $msg);
 		$socket = $this->sockets[$index];
 		$msg = $this->frame($msg);
@@ -419,73 +421,95 @@ class WsServer
 		//echo 'IN:', PHP_EOL;
 
 		do {
-			$buff = $buffer = '';
-			$len = 0 + socket_recv($socket, $buffer, 15, 0);
+			$buffer = '';
+			$len = 0 + socket_recv($socket, $buffer, 2, 0);
 			if ($is_first) {
 				if (!isset($buffer[0])) {
 					$params['is_closed'] = true;
 					break;
 				}
+
 				//0x09 ping帧--1001
 				if (chr('10001001') == $buffer[0]) {
 					$params['is_ping'] = true;
 					break;
 				}
-				//浏览器关闭时，发送关闭连接控制帧10001000，opcode为0x8(后四位1000)，十进制136，十六进制\x88，八进制\210
+
+				//浏览器关闭时，发送关闭连接控制帧[一帧，opcode 0x8=1000] 10001000 = 十进制136 = 十六进制\x88 = 八进制\210
 				if ("\210" == $buffer[0]) {
 					$params['is_closed'] = true;
 					break;
 				}
 			}
-
-			if (!isset($buffer[2])) {
-				//最少传输2字节，没有实际数据
+			if ($len < 2) {
 				$params['is_exception'] = true;
 				break;
 			}
-			$buff .= $buffer;
+
 			$is_first = false;
+
+			//一帧的结构：
+			//FIN:1bit RSV:3bit opcode:4bit MASK:1bit Payload len:7bit Extended payload length:... Masking-key:4bit Payload Data:...
 			$FIN = ord($buffer[0]) & 128;//例：00000001 & 10000000 = 00000000 = 0 连续帧，10000001 & 10000000 = 10000000 = 128 一帧
 
 //			echo 'BUFFER[0]:', sprintf('%08b', ord($buffer[0])), PHP_EOL;
 //			echo 'FIN:', $FIN, PHP_EOL;
 
 			//0x0附加数据帧 0x1文本数据帧 0x2二进制数据帧 0x3-7无定义，保留 0x8连接关闭 0x9ping 0xApong 0xB-F无定义，保留
-			$OPCODE = ord($buffer[0]) & 15; //... & 1111
+			$opcode = ord($buffer[0]) & 15; //... & 1111
 
-//			echo 'OPCODE:', sprintf('%08b', $OPCODE), PHP_EOL;
+//			echo 'OPCODE:', sprintf('%08b', $opcode), ',', $opcode, PHP_EOL;
+
+//			$MASK = ord($buffer[1]) & 128; // & 10000000
+//			echo 'MASK:', sprintf('%08b', $MASK), ',' , $MASK, PHP_EOL;
 
 			$payload_len = ord($buffer[1]) & 127; // & 01111111
 
 //			echo 'BUFFER[1]:', sprintf('%08b', ord($buffer[1])), PHP_EOL;
 //			echo 'PAYLOAD:', $payload_len, PHP_EOL;
 
-			//FIN:1bit RSV:3bit OPCODE:4bit MASK:1bit
-			//Payload_length:7bit/7+16bit(2 bytes)/7+64bit(8 bytes)
-			//Payload_length<=125 PayloadData=Payload_length
-			//Payload_length==126 PayloadData<=2^16 65536
-			//Payload_length==127 PayloadData<=2^64
-			if ($payload_len == 126) {
-				$masks = substr($buffer, 4, 4);
-				$payload_length_data = substr($buffer, 2, 2);
-				$unpack = unpack('n', $payload_length_data); //16bit 字节序
-				$length = current($unpack);
-				$start = 8;
-				$receive = $length + $start - $len;
-			} else if ($payload_len == 127) {
-				$masks = substr($buffer, 10, 4);
-				$payload_length_data = substr($buffer, 2, 8);
-				$unpack = unpack('J', $payload_length_data); //64bit 字节序
-				$length = current($unpack);
-				$start = 14;
-				$receive = $length + $start - $len;
-			} else {
-				$masks = substr($buffer, 2, 4);
-				$payload_length_data = '';
-				$unpack = array();
-				$length = $payload_len;
-				$start = 6;
-				$receive = $length + $start - $len;
+			//数据长度：
+			//Payload length:7bit/7+16bit(2 bytes)/7+64bit(8 bytes)
+			//Payload len(7bit)<=125 Payload Data Length=Payload len(7bit)<=125
+			//Payload len(7bit)==126 Payload Data Length=Extend payload length(16bit)<=2^16 65536
+			//Payload len(7bit)==127 Payload Data Length=Extend payload length(64bit)<=2^64
+			switch ($payload_len) {
+				case 126: //<=2^16 65536
+					$read_length = 6;
+					$len = 0 + socket_recv($socket, $buffer, $read_length, 0);
+					if ($len < $read_length) {
+						$params['is_exception'] = true;
+						break 2;
+					}
+					$payload_length_data = substr($buffer, 0, 2);
+					$unpack = unpack('n', $payload_length_data); //16bit 字节序
+					$length = current($unpack);
+					$masks = substr($buffer, 2, 4);
+					break;
+				case 127: //<=2^64
+					$read_length = 12;
+					$len = 0 + socket_recv($socket, $buffer, $read_length, 0);
+					if ($len < $read_length) {
+						$params['is_exception'] = true;
+						break 2;
+					}
+					$payload_length_data = substr($buffer, 0, 8);
+					$unpack = unpack('J', $payload_length_data); //64bit 字节序
+					$length = current($unpack);
+					$masks = substr($buffer, 8, 4);
+					break;
+				default: //<=125
+					$read_length = 4;
+					$len = 0 + socket_recv($socket, $buffer, $read_length, 0);
+					if ($len < $read_length) {
+						$params['is_exception'] = true;
+						break 2;
+					}
+					$payload_length_data = '';
+					$unpack = array();
+					$length = $payload_len;
+					$masks = substr($buffer, 0, 4);
+					break;
 			}
 
 //			echo 'PAYLOAD_LENGTH_DATA:', $payload_length_data, PHP_EOL;
@@ -493,32 +517,21 @@ class WsServer
 //				echo sprintf('%08b', ord($payload_length_data[$i])), PHP_EOL;
 //			}
 //			echo 'LENGTH:', $length, PHP_EOL;
-//			echo 'START:', $start, PHP_EOL;
-//			echo 'LEN:', $len, ' REAL_LEN:', strlen($buffer), PHP_EOL;
-//			echo 'RECEIVE:', $receive, PHP_EOL;
 //			var_dump($unpack);
 
-			if (($receive <= 0) || (strlen($masks) < 4)) {
-				$params['is_exception'] = true;
-				break;
-			}
-
-			$len = socket_recv($socket, $buffer, $receive, MSG_WAITALL);
-			if ($len < $receive) {
+			$len = socket_recv($socket, $data, $length, MSG_WAITALL); //这里用阻塞模式，接收指定长度的数据
+			if ($len < $length) {
 				//实际接收小于计算的，则出现异常
 				$params['is_exception'] = true;
 				break;
 			}
 
-			$buff .= $buffer;
-			$data = substr($buff, $start, $length);
-
 			//根据掩码解析数据，处理每个字节，比较费时
 			for ($index = 0, $n = strlen($data); $index < $n; ++$index) {
 				$decoded .= $data[$index] ^ $masks[$index % 4];
 			}
-			unset($buff, $buffer, $data); //销毁临时变量(可能很大)，释放内存
-		} while ((0 == $FIN) && ($len > 0)); //连续帧
+			unset($buffer, $data); //销毁临时变量(可能很大)，释放内存
+		} while (0 == $FIN); //连续帧
 		//echo 'END.', PHP_EOL, PHP_EOL;
 		return $decoded;
 	}
