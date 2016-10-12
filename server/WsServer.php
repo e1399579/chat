@@ -17,11 +17,12 @@ class WsServer
 	protected $max_log_length = 1024; //消息记录在日志的最大长度
 	protected $invalid_sockets = array(); //无效的socket:key => error
 	protected $headers = array(); //请求头
-	protected $max_read_length = 512 * 1024 * 1024; //最大读取长度:byte
+	protected $memory_limit; //最大内存限制:byte
 	protected $debug = false;
 
 	public function __construct($address, $port)
 	{
+		$this->memory_limit = intval(ini_get('memory_limit')) * 1024 * 1024;
 		$this->storage = new \SplObjectStorage();
 		//产生一个socket
 		$this->master = socket_create(AF_INET, SOCK_STREAM, SOL_TCP)
@@ -168,7 +169,6 @@ class WsServer
 			}
 
 			$this->invalid_sockets = array(); //释放内存
-			unset($read);
 		} while (true);
 	}
 
@@ -471,28 +471,21 @@ class WsServer
 			//数据长度：
 			//Payload length:7bit/7+16bit(2 bytes)/7+64bit(8 bytes)
 			//Payload len(7bit)<=125 Payload Data Length=Payload len(7bit)<=125
-			//Payload len(7bit)==126 Payload Data Length=Extend payload length(16bit)<=2^16 65536
-			//Payload len(7bit)==127 Payload Data Length=Extend payload length(64bit)<=2^64
+			//Payload len(7bit)==126 Payload Data Length=Extend payload length(16bit)<2^16 65535
+			//Payload len(7bit)==127 Payload Data Length=Extend payload length(64bit)<2^64 PHP_INT_MAX(64位系统)
+			//网络字节序--大端序 big endian byte order
 			switch ($payload_len) {
-				case 126: //<=2^16 65536
+				case 126: //<2^16 65536
 					$read_length = 6;
 					$len = 0 + socket_recv($socket, $buffer, $read_length, 0);
-					if ($len < $read_length) {
-						$params['is_exception'] = true;
-						break 2;
-					}
 					$payload_length_data = substr($buffer, 0, 2);
 					$unpack = unpack('n', $payload_length_data); //16bit 字节序
 					$length = current($unpack);
 					$masks = substr($buffer, 2, 4);
 					break;
-				case 127: //<=2^64
+				case 127: //<2^64
 					$read_length = 12;
 					$len = 0 + socket_recv($socket, $buffer, $read_length, 0);
-					if ($len < $read_length) {
-						$params['is_exception'] = true;
-						break 2;
-					}
 					$payload_length_data = substr($buffer, 0, 8);
 					$unpack = unpack('J', $payload_length_data); //64bit 字节序
 					$length = current($unpack);
@@ -501,15 +494,17 @@ class WsServer
 				default: //<=125
 					$read_length = 4;
 					$len = 0 + socket_recv($socket, $buffer, $read_length, 0);
-					if ($len < $read_length) {
-						$params['is_exception'] = true;
-						break 2;
-					}
 					$payload_length_data = '';
 					$unpack = array();
 					$length = $payload_len;
 					$masks = substr($buffer, 0, 4);
 					break;
+			}
+
+			if (($len < $read_length) || ($length > $this->memory_limit) || ($length < 0)) {
+				//异常情况：1.接收的长度小于计算的 2.计算的长度大于最大内存限制的 3.数据错误导致unpack计算的长度为负
+				$params['is_exception'] = true;
+				break;
 			}
 
 //			echo 'PAYLOAD_LENGTH_DATA:', $payload_length_data, PHP_EOL;
@@ -577,17 +572,11 @@ class WsServer
 		$protocol = chr('10000001');
 		$len = strlen($str);
 		if ($len <= 125)
-			return $protocol . chr($len) . $str;//8+7位
-		else if ($len <= 65535)//最大2^16字节
-			return $protocol . chr(126) . pack('n', $len) . $str;//8+7+16位
-		else//最大2^64字节
-			return $protocol . chr(127) . pack('J', $len) . $str;//8+7+64位
-		/*$b1 = 0x80 | (0x1 & 0x0f);
-		$length = strlen($str);
-		if ($length <= 125) $header = pack('CC', $b1, $length);
-		elseif ($length > 125 && $length < 65536) $header = pack('CCn', $b1, 126, $length);
-		else $header = pack('CCNN', $b1, 127, $length);
-		return $header . $str;*/
+			return $protocol . chr($len) . $str; //8+7位
+		else if ($len <= 65535) //最大2^16-1字节
+			return $protocol . chr(126) . pack('n', $len) . $str; //8+7+16位
+		else //最大2^64-1字节
+			return $protocol . chr(127) . pack('J', $len) . $str; //8+7+64位
 	}
 
 	/**
