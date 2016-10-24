@@ -58,6 +58,21 @@ class Client implements IClient
 	const SELF_MUSIC = 62; //本人音乐
 	const OTHER_MUSIC = 63; //他人音乐
 	const PERSONAL_MUSIC = 64; //私信音乐
+	const PERSONAL_VIDEO_REQUEST = 70; //私信视频请求
+	const PERSONAL_VIDEO_OFFLINE = -70; //离线
+	const PERSONAL_VIDEO_ALLOW = 71; //请求通过
+	const PERSONAL_VIDEO_DENY = -71; //请求拒绝
+	const PERSONAL_VIDEO_OPEN = 72; //打开摄像头
+	const PERSONAL_VIDEO_CLOSE = -72; //关闭摄像头
+	const PERSONAL_VIDEO_END = 79; //传输结束
+
+	const PERSONAL_VIDEO_OFFER_DESC = 80;
+	const PERSONAL_VIDEO_ANSWER_DESC = 81;
+	const PERSONAL_VIDEO_CANDIDATE = 82;
+
+	const COMMON_VIDEO_REQUEST = 90;
+	const COMMON_VIDEO_NOTIFY = 91;
+	const PERSONAL_VIDEO_NOTIFY = 92;
 
 	public function __construct($address, $port)
 	{
@@ -86,11 +101,13 @@ class Client implements IClient
 		}
 
 		unset($message);
-		array_walk_recursive($arr, function (&$item, $key) {
-			$item = addslashes(htmlspecialchars(trim($item)));
-		});
-
 		$type = $arr['type'] + 0;
+
+		if (!in_array($type, array(self::PERSONAL_VIDEO_OFFER_DESC, self::PERSONAL_VIDEO_ANSWER_DESC, self::PERSONAL_VIDEO_CANDIDATE)))
+			array_walk_recursive($arr, function (&$item, $key) {
+				$item = addslashes(htmlspecialchars(trim($item)));
+			});
+
 		$user_id = 0;
 		$sender = array('user_id' => 0, 'username' => '');
 		if ($type != self::REGISTER) {
@@ -195,6 +212,31 @@ class Client implements IClient
 					'name' => $name,
 				);
 				$this->sendPersonalMessage($key, $types, $sender, $receiver, $mess, $timestamp, $extra);
+				break;
+			case self::PERSONAL_VIDEO_REQUEST:
+			case self::PERSONAL_VIDEO_ALLOW:
+				$mess = '';
+				$this->sendPersonalVideoMessage($key, $type, $sender, $receiver, $mess, $timestamp);
+				break;
+			case self::PERSONAL_VIDEO_DENY:
+				$mess = '拒绝了视频请求';
+				$this->sendPersonalVideoMessage($key, $type, $sender, $receiver, $mess, $timestamp);
+				break;
+			case self::PERSONAL_VIDEO_OPEN:
+			case self::PERSONAL_VIDEO_CLOSE:
+			case self::PERSONAL_VIDEO_OFFER_DESC:
+			case self::PERSONAL_VIDEO_ANSWER_DESC:
+			case self::PERSONAL_VIDEO_CANDIDATE:
+			case self::COMMON_VIDEO_NOTIFY:
+			case self::PERSONAL_VIDEO_NOTIFY:
+				$this->sendPersonalVideoMessage($key, $type, $sender, $receiver, $mess, $timestamp);
+				break;
+			case self::PERSONAL_VIDEO_END:
+				$mess = '视频聊天结束';
+				$this->sendPersonalVideoMessage($key, $type, $sender, $receiver, $mess, $timestamp);
+				break;
+			case self::COMMON_VIDEO_REQUEST:
+				$this->sendCommonVideoMessage($key, $type, $sender, $mess, $timestamp);
 				break;
 			case self::REMOVE: //移除，由管理员发起
 				$receiver_id = $arr['receiver_id'];
@@ -347,11 +389,47 @@ class Client implements IClient
 		} else {
 			//用户已经离线
 			$arr['type'] = self::SELF;
-			$arr['mess'] = $receiver['username'] . ' 已经离线...';
+			$arr['mess'] = '已经离线...';
 			$mess = $this->encode($arr);
 			$this->server->send($key, $mess);
 		}
 		unset($arr, $mess);
+	}
+
+	public function sendCommonVideoMessage($key, $type, $sender, &$mess, $timestamp, $extra = array())
+	{
+		$mess = $this->encode(array_merge(array(
+			'type' => $type,
+			'time' => date('H:i:s'),
+			'timestamp' => $timestamp,
+			'sender' => $sender,
+			'mess' => $mess,
+		), $extra));
+		$this->server->sendAll($mess);
+		unset($mess);
+	}
+
+	public function sendPersonalVideoMessage($key, $type, $sender, $receiver, &$mess, $timestamp, $extra = array()) {
+		$user_id = $sender['user_id'];
+		$receiver_id = $receiver['user_id'];
+		$arr = array(
+			'type' => $type,
+			'time' => date('H:i:s'),
+			'timestamp' => $timestamp,
+			'sender' => $sender,
+			'receiver' => $receiver,
+			'mess' => $mess,
+		);
+		if (isset($this->userService[$receiver_id])) {
+			$index = $this->userService[$receiver_id];
+			$mess = $this->encode($arr);
+			$this->server->send($index, $mess);
+		} else {
+			$arr['type'] = self::PERSONAL_VIDEO_OFFLINE;
+			$arr['mess'] = $receiver['username'] . '已经离线...';
+			$mess = $this->encode($arr);
+			$this->server->send($key, $mess);
+		}
 	}
 
 	public function getUniqueFile(&$base64, $flag = 'message')
@@ -601,7 +679,8 @@ class Client implements IClient
 }
 
 try {
-	$client = new Client('127.0.0.1', 81);
+	$port = PHP_OS == 'WINNT' ? 8080 : 81;
+	$client = new Client('127.0.0.1', $port);
 	$client->start();
 } catch (\Exception $e) {
 	die($e);
