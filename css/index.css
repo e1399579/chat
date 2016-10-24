@@ -20,6 +20,10 @@ body {
     line-height: 40px;
 }
 
+.menu button {
+    padding: 0.2rem 0.75rem;
+}
+
 .text-font {
     font-size: 12px;
 }
@@ -535,4 +539,39 @@ input[type="range"]::-webkit-slider-thumb {
     background-color: #F74461;
     border-radius: 100%;
     box-shadow: 0 0 1px rgba(255, 255, 255, .5);
+}
+
+.video-box {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 16;
+    font-size: 0;
+    overflow-y: auto;
+}
+
+.video-multi {
+    background: #222;
+    font-size: 0;
+    display: inline-block;
+    width: 50%;
+    height: 25%;
+}
+
+.video-double {
+    background: #222;
+    font-size: 0;
+    display: inline-block;
+    width: 100%;
+}
+
+.video-close {
+    position: fixed;
+    right: 0;
+    top: 0;
+    z-index: 17;
+    font-size: 2rem;
+    padding: 0 6px !important;
 }
