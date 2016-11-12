@@ -12,7 +12,7 @@
 	<link rel="stylesheet" href="./css/bootstrap.min.css">
 	<link rel="stylesheet" href="./css/font-awesome.min.css">
 	<link rel="stylesheet" href="./css/animate.min.css">
-	<link rel="stylesheet" href="./css/index.css?v=0.24">
+	<link rel="stylesheet" href="./css/index.css?v=0.26">
 </head>
 <body>
 
@@ -81,9 +81,6 @@
 		<div class="modal-content">
 			<form method="post" action="">
 				<div class="modal-header">
-					<button type="button" class="close" data-dismiss="modal" aria-label="Close" onclick="messageHelper.reg('', '123456')">
-						<span aria-hidden="true">&times;</span>
-					</button>
 					<h5 class="modal-title">请登录/注册：</h5>
 				</div>
 				<div class="modal-body">
@@ -91,13 +88,10 @@
 					<input type="password" id="password" class="form-control form-group" placeholder="密码：默认123456"
 					       maxlength="16"/>
 				</div>
-				<div class="modal-footer">
+				<div class="modal-footer text-center">
 					<span class="text-danger text-center text-sm" id="error"></span>
 					<button type="submit" class="btn btn-success-outline"
-					        onclick="messageHelper.reg($('#username').val(), $('#password').val());return false;">确定
-					</button>
-					<button type="button" class="btn btn-danger-outline" onclick="messageHelper.reg('', '123456')" data-dismiss="modal">
-						取消
+					        onclick="messageHelper.reg($('#username').val(), $('#password').val());return false;">提交
 					</button>
 				</div>
 			</form>
@@ -162,6 +156,6 @@
 <script type="text/javascript" src="./js/LjkUpload.js?v=0.1"></script>
 <script type="text/javascript" src="./js/html5ImgCompress/html5ImgCompress.min.js"></script>
 <script type="text/javascript" src="./js/adapter.js"></script>
-<script type="text/javascript" src="./js/index.js?v=1.11"></script>
+<script type="text/javascript" src="./js/index.js?v=1.15"></script>
 </body>
 </html>

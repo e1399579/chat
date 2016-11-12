@@ -679,7 +679,8 @@ class Client implements IClient
 }
 
 try {
-	$port = PHP_OS == 'WINNT' ? 8080 : 81;
+	//php Client.php 81
+	$port = isset($argv[1]) ? $argv[1] + 0 : 81; //默认81(nginx)，如果是apache，则直接监听访问端口
 	$client = new Client('127.0.0.1', $port);
 	$client->start();
 } catch (\Exception $e) {

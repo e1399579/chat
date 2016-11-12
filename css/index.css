@@ -550,21 +550,30 @@ input[type="range"]::-webkit-slider-thumb {
     z-index: 16;
     font-size: 0;
     overflow-y: auto;
+    background: #222;
 }
 
 .video-multi {
-    background: #222;
-    font-size: 0;
     display: inline-block;
     width: 50%;
     height: 25%;
+    background: #222;
 }
 
-.video-double {
-    background: #222;
-    font-size: 0;
+.video-double-max {
     display: inline-block;
+    position: fixed;
+    top: 0;
+    left: 0;
     width: 100%;
+}
+
+.video-double-min {
+    display: inline-block;
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 38.2%;
 }
 
 .video-close {
@@ -572,6 +581,6 @@ input[type="range"]::-webkit-slider-thumb {
     right: 0;
     top: 0;
     z-index: 17;
-    font-size: 2rem;
+    font-size: 3rem;
     padding: 0 6px !important;
 }

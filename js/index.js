@@ -113,12 +113,6 @@ String.prototype.replaceMulti = function (search, replace) {
     return str;
 };
 
-//随机生成汉字
-function generateHanzi() {
-    eval("var word=" + '"\\u' + (Math.round(Math.random() * 20901) + 19968).toString(16) + '";');
-    return word;
-}
-
 ws.onopen = function () {
     messageHelper.onOpen();
 };
@@ -1029,10 +1023,8 @@ MessageHelper.prototype = {
 
     reg: function (username, password) {
         if (!username) {
-            username = "";
-            for (var i = 0; i < 4; i++) {
-                username += generateHanzi();
-            }
+            this.toast("请输入用户名");
+            return;
         }
         username = username.substr(0, 30);
         !password && (password = '123456');
@@ -1044,7 +1036,7 @@ MessageHelper.prototype = {
     },
 
     incorrect: function (mess) {
-        $("#error").text(mess.mess);
+        this.toast(mess.mess)
         $("#password").val("");//清空密码
         window.setTimeout(function () {
             $("#error").text("");
@@ -1724,7 +1716,7 @@ var videoHelper = {
     is_connected: false,
     startTime: 0,
     count: 1,
-    volume: 0.3,
+    volume: 0.1,
     is_multi : false,
     max_video: 4,
     user_stream: {},
@@ -1738,15 +1730,12 @@ var videoHelper = {
         this.local_video.volume = this.volume;
         $(this.video_box).append(this.local_video);
     },
-    getClassName: function () {
-        return this.is_multi ? "video-multi" : "video-double";
-    },
     createVideo: function (user_id) {
         var video = document.createElement("video");
         video.controls = true;
         video.autoplay = true;
         video.volume = this.volume;
-        video.className = this.getClassName();
+        video.className = this.is_multi ? "video-multi" : "video-double-max";
         $(this.video_box).prepend(video);
         this.count++;
         this.user_video[user_id] = video;
@@ -1771,7 +1760,7 @@ var videoHelper = {
             this.is_multi = false;
             if (messageHelper.online_users.hasOwnProperty(receiver_id)) {
                 var username = messageHelper.online_users[receiver_id];
-                content = "将与" + username + "进行视频聊天，是否继续？";
+                content = "将邀请" + username + "视频聊天，是否继续？";
                 type = PERSONAL_VIDEO_REQUEST;
             } else {
                 messageHelper.toast("对方已经离线...");
@@ -1779,7 +1768,7 @@ var videoHelper = {
             }
         } else {
             this.is_multi = true;
-            content = "将进行多人视频，是否继续？";
+            content = "将邀请多人视频聊天，是否继续？";
             type = COMMON_VIDEO_REQUEST;
         }
         layer.open({
@@ -1798,7 +1787,7 @@ var videoHelper = {
         var _this = this;
         if (mess.sender.user_id == user.user_id)
             return;
-        var content = is_multi ?  username + "邀请您加入多人视频，是否允许？" : username + "请求和您视频聊天，是否允许？";
+        var content = is_multi ?  username + "邀请您多人视频聊天，是否允许？" : username + "请求和您视频聊天，是否允许？";
         this.is_multi = is_multi;
         layer.open({
             title: ["提示", "background:#eee"],
@@ -1853,7 +1842,7 @@ var videoHelper = {
         this.close(mess.sender.user_id);
     },
     open: function () {
-        this.local_video.className = this.getClassName();
+        this.local_video.className = this.is_multi ? "video-multi" : "video-double-min";
         this.backdrop.fadeIn();
         this.video_box.removeClass("hidden").show();
     },
@@ -1862,9 +1851,7 @@ var videoHelper = {
         if (this.user_video.hasOwnProperty(user_id)) {
             this.user_video[user_id].remove();
             this.peerConnection[user_id].close();
-            this.user_stream[user_id].getTracks().forEach(function(track) {
-                track.stop();
-            });
+            this.unsetMedia(this.user_stream[user_id]);
             delete this.user_video[user_id];
             delete this.peerConnection[user_id];
             delete this.user_stream[user_id];
@@ -1885,16 +1872,12 @@ var videoHelper = {
     },
     stop: function () {
         if (this.local_stream) {
-            this.local_stream.getTracks().forEach(function(track) {
-                track.stop();
-            });
+            this.unsetMedia(this.local_stream);
         }
 
         for (var i in this.user_stream) {
             if (this.user_stream[i]) {
-                this.user_stream[i].getTracks().forEach(function(track) {
-                    track.stop();
-                });
+                this.unsetMedia(this.user_stream[i]);
             }
         }
         for (var j in this.user_video) {
@@ -1914,6 +1897,11 @@ var videoHelper = {
         this.peerConnection = {};
         this.local_video.src = "";
         this.local_stream = null;
+    },
+    unsetMedia: function (stream) {
+        stream.getTracks().forEach(function(track) {
+            track.stop();
+        });
     },
     notify_end: function () {
         for (var i in this.user_video) {
@@ -1960,7 +1948,12 @@ var videoHelper = {
 
         peerConnection.oniceconnectionstatechange = function (e) {
             trace('peerConnection ICE state: ' + this.iceConnectionState);
-            console.log('peerConnection ICE state change event: ', e);
+            console.log('peerConnection ICE state change event: ', e, this);
+
+            //异常退出，则销毁视频
+            if (this.iceConnectionState == "disconnected" || this.iceConnectionState == "failed") {
+                _this.close(receiver_id);
+            }
         };
         
         peerConnection.onaddstream = function (e) {
@@ -1973,7 +1966,6 @@ var videoHelper = {
             peerConnection.addStream(this.local_stream);
             if (isCaller)
                 this.caller(receiver_id);
-            _this.user_stream[receiver_id] = this.local_stream;
             return;
         }
 
