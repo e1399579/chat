@@ -1850,7 +1850,7 @@ var videoHelper = {
         this.count--;
         if (this.user_video.hasOwnProperty(user_id)) {
             this.user_video[user_id].remove();
-            this.peerConnection[user_id].close();
+            this.peerConnection[user_id] && this.peerConnection[user_id].close();
             this.unsetMedia(this.user_stream[user_id]);
             delete this.user_video[user_id];
             delete this.peerConnection[user_id];
@@ -1871,14 +1871,10 @@ var videoHelper = {
         this.stop();
     },
     stop: function () {
-        if (this.local_stream) {
-            this.unsetMedia(this.local_stream);
-        }
+        this.unsetMedia(this.local_stream);
 
         for (var i in this.user_stream) {
-            if (this.user_stream[i]) {
-                this.unsetMedia(this.user_stream[i]);
-            }
+            this.unsetMedia(this.user_stream[i]);
         }
         for (var j in this.user_video) {
             $(this.user_video[j]).remove();
@@ -1899,6 +1895,8 @@ var videoHelper = {
         this.local_stream = null;
     },
     unsetMedia: function (stream) {
+        if (!stream)
+            return;
         stream.getTracks().forEach(function(track) {
             track.stop();
         });
@@ -1930,76 +1928,84 @@ var videoHelper = {
     },
     peerConnection: {},
     connect: function (isCaller, receiver_id) {
-        var _this = this, videoTracks, audioTracks;
-        var video = this.createVideo(receiver_id);
-        console.log('connect');
+        try {
+            var _this = this, videoTracks, audioTracks;
+            var video = this.createVideo(receiver_id);
+            console.log('connect');
 
-        //创建连接
-        var peerConnection = new RTCPeerConnection(this.servers);
-        this.peerConnection[receiver_id] = peerConnection;
-        trace('Created local peer connection object peerConnection');
+            //创建连接
+            var peerConnection = new RTCPeerConnection(this.servers);
+            this.peerConnection[receiver_id] = peerConnection;
+            trace('Created local peer connection object peerConnection');
 
-        peerConnection.onicecandidate = function (e) {
-            if (e.candidate) {
-                trace('peerConnection candidate: '+e.candidate.candidate);
-                messageHelper.sendMessage(PERSONAL_VIDEO_CANDIDATE, user.user_id, receiver_id, e.candidate);
+            peerConnection.onicecandidate = function (e) {
+                if (e.candidate) {
+                    trace('peerConnection candidate: ' + e.candidate.candidate);
+                    messageHelper.sendMessage(PERSONAL_VIDEO_CANDIDATE, user.user_id, receiver_id, e.candidate);
+                }
+            };
+
+            peerConnection.oniceconnectionstatechange = function (e) {
+                trace('peerConnection ICE state: ' + this.iceConnectionState);
+                console.log('peerConnection ICE state change event: ', e, this);
+
+                //异常退出，则销毁视频
+                if (this.iceConnectionState == "disconnected" || this.iceConnectionState == "failed") {
+                    _this.close(receiver_id);
+                }
+            };
+
+            peerConnection.onaddstream = function (e) {
+                trace('received remote stream');
+                video.srcObject = e.stream;
+                _this.user_stream[receiver_id] = e.stream;
+            };
+
+            if (this.is_open) {
+                peerConnection.addStream(this.local_stream);
+                if (isCaller)
+                    this.caller(receiver_id);
+                return;
             }
-        };
 
-        peerConnection.oniceconnectionstatechange = function (e) {
-            trace('peerConnection ICE state: ' + this.iceConnectionState);
-            console.log('peerConnection ICE state change event: ', e, this);
+            //获取本地媒体
+            trace('Requesting local stream');
+            navigator.mediaDevices.getUserMedia(_this.constraints)
+                .then(function (stream) {
+                    _this.local_stream = stream;
+                    _this.is_open = true;
+                    messageHelper.sendMessage(PERSONAL_VIDEO_OPEN, user.user_id, receiver_id, "");
+                    peerConnection.addStream(stream);
+                    trace('Added local stream to peerConnection');
 
-            //异常退出，则销毁视频
-            if (this.iceConnectionState == "disconnected" || this.iceConnectionState == "failed") {
-                _this.close(receiver_id);
-            }
-        };
-        
-        peerConnection.onaddstream = function (e) {
-            trace('received remote stream');
-            video.srcObject = e.stream;
-            _this.user_stream[receiver_id] = e.stream;
-        };
+                    if (isCaller) {
+                        _this.caller(receiver_id);
+                    }
 
-        if (this.is_open) {
-            peerConnection.addStream(this.local_stream);
-            if (isCaller)
-                this.caller(receiver_id);
-            return;
+                    videoTracks = stream.getVideoTracks();
+                    audioTracks = stream.getAudioTracks();
+                    if (videoTracks.length > 0) {
+                        trace('Using video device: ' + videoTracks[0].label);
+                    }
+                    if (audioTracks.length > 0) {
+                        trace('Using audio device: ' + audioTracks[0].label);
+                    }
+
+                    trace('Received local stream');
+                    _this.local_video.srcObject = stream;
+                    _this.user_stream[receiver_id] = stream;
+                })
+                .catch(function (e) {
+                    _this.failed(receiver_id, "调用视频失败：" + e.toLocaleString());
+                });
+        } catch (e) {
+            this.failed(receiver_id, "创建连接失败：" + e.toLocaleString());
         }
-
-        //获取本地媒体
-        trace('Requesting local stream');
-        navigator.mediaDevices.getUserMedia(_this.constraints)
-            .then(function (stream) {
-                _this.local_stream = stream;
-                _this.is_open = true;
-                messageHelper.sendMessage(PERSONAL_VIDEO_OPEN, user.user_id, receiver_id, "");
-                peerConnection.addStream(stream);
-                trace('Added local stream to peerConnection');
-
-                if (isCaller) {
-                    _this.caller(receiver_id);
-                }
-
-                videoTracks = stream.getVideoTracks();
-                audioTracks = stream.getAudioTracks();
-                if (videoTracks.length > 0) {
-                    trace('Using video device: ' + videoTracks[0].label);
-                }
-                if (audioTracks.length > 0) {
-                    trace('Using audio device: ' + audioTracks[0].label);
-                }
-
-                trace('Received local stream');
-                _this.local_video.srcObject = stream;
-                _this.user_stream[receiver_id] = stream;
-            })
-            .catch(function (e) {
-                messageHelper.sendMessage(PERSONAL_VIDEO_CLOSE, user.user_id, receiver_id, "");
-                messageHelper.toast("调用视频失败：" + e.toLocaleString());
-            });
+    },
+    failed: function (receiver_id, message) {
+        messageHelper.sendMessage(PERSONAL_VIDEO_CLOSE, user.user_id, receiver_id, "");
+        messageHelper.toast(message);
+        this.close(receiver_id);
     },
     offerOptions: {
         offerToReceiveAudio: 1,
@@ -2063,34 +2069,40 @@ var videoHelper = {
         });
     },
     offer_desc: function (mess) {
-        this.desc(mess);
         var _this = this;
-        var peerConnection = this.peerConnection[mess.sender.user_id];
-        //创建answer
-        trace('peerConnection createAnswer start');
-        trace("iceConnectionState:"+peerConnection.iceConnectionState+",iceGatheringState:"+peerConnection.iceGatheringState+",signalingState:"+peerConnection.signalingState);
+        var receiver_id = mess.sender.user_id;
+        var peerConnection = this.peerConnection[receiver_id];
+        try {
+            this.desc(mess);
 
-        peerConnection.createAnswer().then(
-            function (desc) {
-                trace('Answer from peerConnection:\n' + desc.sdp);
-                trace('createAnswer setLocalDescription start');
-                trace("iceConnectionState:"+peerConnection.iceConnectionState+",iceGatheringState:"+peerConnection.iceGatheringState+",signalingState:"+peerConnection.signalingState);
+            //创建answer
+            trace('peerConnection createAnswer start');
+            trace("iceConnectionState:" + peerConnection.iceConnectionState + ",iceGatheringState:" + peerConnection.iceGatheringState + ",signalingState:" + peerConnection.signalingState);
 
-                //设置本地描述
-                peerConnection.setLocalDescription(desc).then(function () {
-                    trace('createAnswer setLocalDescription complete');
-                    //回传SDP
-                    messageHelper.sendMessage(PERSONAL_VIDEO_ANSWER_DESC, user.user_id, mess.sender.user_id, desc);
-                    this.is_connected = true;
-                    _this.startTime = _this.getTimestamp();
-                }, function (error) {
-                    trace('createAnswer setLocalDescription failed: ' + error.toString());
-                });
-            },
-            function (error) {
-                trace('createAnswer create session description failed: ' + error.toString());
-            }
-        );
+            peerConnection.createAnswer().then(
+                function (desc) {
+                    trace('Answer from peerConnection:\n' + desc.sdp);
+                    trace('createAnswer setLocalDescription start');
+                    trace("iceConnectionState:" + peerConnection.iceConnectionState + ",iceGatheringState:" + peerConnection.iceGatheringState + ",signalingState:" + peerConnection.signalingState);
+
+                    //设置本地描述
+                    peerConnection.setLocalDescription(desc).then(function () {
+                        trace('createAnswer setLocalDescription complete');
+                        //回传SDP
+                        messageHelper.sendMessage(PERSONAL_VIDEO_ANSWER_DESC, user.user_id, receiver_id, desc);
+                        this.is_connected = true;
+                        _this.startTime = _this.getTimestamp();
+                    }, function (error) {
+                        trace('createAnswer setLocalDescription failed: ' + error.toString());
+                    });
+                },
+                function (error) {
+                    trace('createAnswer create session description failed: ' + error.toString());
+                }
+            );
+        } catch (e) {
+            this.failed(receiver_id, "建立连接失败！" + e.toLocaleString());
+        }
     },
     answer_desc: function (mess) {
         this.desc(mess);
