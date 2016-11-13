@@ -1716,18 +1716,36 @@ var videoHelper = {
     is_connected: false,
     startTime: 0,
     count: 1,
-    volume: 0.1,
+    volume: 0.3, //音量[0-1]
     is_multi : false,
     max_video: 4,
     user_stream: {},
     user_video: {},
     is_open: false, //是否打开了媒体，多人聊天时不用重复打开
+    constraints: {
+        audio: {echoCancellation: true, autoGainControl: true, volume: 0.3},
+        video: {
+            width: {min: 640, ideal: 1280, max: 1920},
+            height: {min: 480, ideal: 720, max: 1080}
+        }
+    },
+    servers: {
+        iceServers: [
+            {urls: "turn:ridersam@123.206.83.227", credential: 1399579, username: ""},
+            {urls: "stun:stun1.l.google.com:19302"},
+            {urls: "stun:stun2.l.google.com:19302"},
+            {urls: "stun:stun3.l.google.com:19302"},
+            {urls: "stun:stun4.l.google.com:19302"},
+            {urls: "stun:stun.ekiga.net"}
+        ]
+    },
+    peerConnection: {},
     init: function () {
         this.local_video = document.createElement("video");
         this.local_video.controls = true;
         this.local_video.autoplay = true;
         this.local_video.muted = true;
-        this.local_video.volume = this.volume;
+        this.local_video.volume = 0; //本地视频播放静音，防止回声
         $(this.video_box).append(this.local_video);
     },
     createVideo: function (user_id) {
@@ -1751,6 +1769,7 @@ var videoHelper = {
                 layer.close(index);
                 _this.notify_end();
                 _this.closeAll();
+                _this.endTip();
             }
         });
     },
@@ -1816,8 +1835,11 @@ var videoHelper = {
     accept: function (mess) {
         var receiver_id = mess.sender.user_id;
         this.open();
-        this.connect(false, receiver_id);
-        messageHelper.sendMessage(PERSONAL_VIDEO_ALLOW, user.user_id, receiver_id, '');
+        var completeCallBack = function () {
+            messageHelper.sendMessage(PERSONAL_VIDEO_ALLOW, user.user_id, receiver_id, '');
+        };
+        this.connect(false, receiver_id, completeCallBack);
+
         if (!this.is_multi)
             im.open(mess.sender, "", mess.timestamp);
     },
@@ -1833,18 +1855,16 @@ var videoHelper = {
     },
     end: function (mess) {
         layer.closeAll();
-
-        if (this.is_connected) {
-            messageHelper.other(mess);
-            var during = ((this.getTimestamp() - this.startTime) / 60).toFixed(1);
-            messageHelper.toast("视频聊天结束，总共" + during + "分钟");
-        }
         this.close(mess.sender.user_id);
     },
     open: function () {
         this.local_video.className = this.is_multi ? "video-multi" : "video-double-min";
         this.backdrop.fadeIn();
         this.video_box.removeClass("hidden").show();
+    },
+    endTip: function () {
+        var during = ((this.getTimestamp() - this.startTime) / 60).toFixed(1);
+        messageHelper.toast("视频聊天结束，总共" + during + "分钟");
     },
     close: function (user_id) {
         this.count--;
@@ -1858,6 +1878,7 @@ var videoHelper = {
         }
         if (this.count <= 1) {
             this.closeAll();
+            this.endTip();
         }
     },
     closeAll: function () {
@@ -1909,34 +1930,17 @@ var videoHelper = {
     getTimestamp: function () {
         return (new Date()).getTime() / 1000;
     },
-    constraints: {
-        audio: {echoCancellation: true, autoGainControl: true, volume: 0.5},
-        video: {
-            width: {min: 640, ideal: 1280, max: 1920},
-            height: {min: 480, ideal: 720, max: 1080}
-        }
-    },
-    servers: {
-        iceServers: [
-            {urls: "turn:ridersam@123.206.83.227", credential: 1399579, username: ""},
-            {urls: "stun:stun1.l.google.com:19302"},
-            {urls: "stun:stun2.l.google.com:19302"},
-            {urls: "stun:stun3.l.google.com:19302"},
-            {urls: "stun:stun4.l.google.com:19302"},
-            {urls: "stun:stun.ekiga.net"}
-        ]
-    },
-    peerConnection: {},
-    connect: function (isCaller, receiver_id) {
+    connect: function (isCaller, receiver_id, completeCallBack) {
         try {
-            var _this = this, videoTracks, audioTracks;
-            var video = this.createVideo(receiver_id);
             console.log('connect');
 
             //创建连接
             var peerConnection = new RTCPeerConnection(this.servers);
             this.peerConnection[receiver_id] = peerConnection;
             trace('Created local peer connection object peerConnection');
+
+            var _this = this, videoTracks, audioTracks;
+            var username = messageHelper.online_users.hasOwnProperty(receiver_id) ? messageHelper.online_users[receiver_id] : "对方";
 
             peerConnection.onicecandidate = function (e) {
                 if (e.candidate) {
@@ -1950,13 +1954,15 @@ var videoHelper = {
                 console.log('peerConnection ICE state change event: ', e, this);
 
                 //异常退出，则销毁视频
-                if (this.iceConnectionState == "disconnected" || this.iceConnectionState == "failed") {
+                if (this.iceConnectionState == "failed") {
                     _this.close(receiver_id);
+                    messageHelper.toast(username + "异常退出");
                 }
             };
 
             peerConnection.onaddstream = function (e) {
                 trace('received remote stream');
+                var video = _this.createVideo(receiver_id);
                 video.srcObject = e.stream;
                 _this.user_stream[receiver_id] = e.stream;
             };
@@ -1965,6 +1971,9 @@ var videoHelper = {
                 peerConnection.addStream(this.local_stream);
                 if (isCaller)
                     this.caller(receiver_id);
+                if (typeof completeCallBack == "function") {
+                    completeCallBack();
+                }
                 return;
             }
 
@@ -1994,6 +2003,10 @@ var videoHelper = {
                     trace('Received local stream');
                     _this.local_video.srcObject = stream;
                     _this.user_stream[receiver_id] = stream;
+
+                    if (typeof completeCallBack == "function") {
+                        completeCallBack();
+                    }
                 })
                 .catch(function (e) {
                     _this.failed(receiver_id, "调用视频失败：" + e.toLocaleString());
@@ -2043,8 +2056,11 @@ var videoHelper = {
         var peerConnection = this.peerConnection[mess.sender.user_id];
 
         trace('video_candidate:', candidate);
-        if (!peerConnection)
+        if (!peerConnection) {
+            messageHelper.toast("添加节点失败：未找到对应连接");
             return;
+        }
+
         trace("iceConnectionState:"+peerConnection.iceConnectionState+",iceGatheringState:"+peerConnection.iceGatheringState+",signalingState:"+peerConnection.signalingState);
         peerConnection.addIceCandidate(
             new RTCIceCandidate(candidate)
@@ -2110,7 +2126,7 @@ var videoHelper = {
         this.startTime = this.getTimestamp();
     },
     notify_other: function (receiver_id) {
-        if (this.count <= 2)
+        if (this.count <= 1)
             return;
         for (var i in this.user_video) {
             if (i == receiver_id)
