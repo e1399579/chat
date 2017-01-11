@@ -514,12 +514,13 @@ class WsServer
 //			echo 'LENGTH:', $length, PHP_EOL;
 //			var_dump($unpack);
 
-			$len = socket_recv($socket, $data, $length, MSG_WAITALL); //这里用阻塞模式，接收指定长度的数据
-			if ($len < $length) {
-				//实际接收小于计算的，则出现异常
-				$params['is_exception'] = true;
-				break;
-			}
+			$data = '';
+            do {
+                $len = socket_recv($socket, $buf, $length, MSG_WAITALL); //这里用阻塞模式，接收指定长度的数据
+                $data .= $buf;
+                $length -= $len;
+                $buf = '';
+            } while($length > 0);
 
 			//根据掩码解析数据，处理每个字节，比较费时
 			for ($index = 0, $n = strlen($data); $index < $n; ++$index) {
