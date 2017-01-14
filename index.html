@@ -12,7 +12,7 @@
 	<link rel="stylesheet" href="./css/bootstrap.min.css">
 	<link rel="stylesheet" href="./css/font-awesome.min.css">
 	<link rel="stylesheet" href="./css/animate.min.css">
-	<link rel="stylesheet" href="./css/index.css?v=0.26">
+	<link rel="stylesheet" href="./css/index.css?v=0.27">
 </head>
 <body>
 
@@ -21,7 +21,7 @@
 	<div class="modal-header">
 		<button type="button" class="close" onclick="im.closeContacts();">&times;</button>
 		<h5 class="modal-title">
-			在线 <span class="text-danger" id="total">1</span>
+			在线 <span class="text-danger total">0</span>
 			<span class="text-info text-font"> 点击联系人@TA</span>
 		</h5>
 	</div>
@@ -30,6 +30,7 @@
 	</div>
 </div>
 
+<div class="text-center bg-success room-title">大厅(<span class="total">0</span>)</div>
 <!--聊天消息容器-->
 <div class="room clearfix" id="room">
 
@@ -107,8 +108,174 @@
 
 <!--表情-->
 <div class="emotion z-index-normal hidden" id="emotion">
-	<ul></ul>
-	<ol></ol>
+	<!--<ul></ul>
+	<ol></ol>-->
+	<ul>
+		<li>
+			<table class="emotion-table">
+				<tbody>
+				<tr class="ywz">
+					<td><img src="./images/emotion/ywz/1.gif" alt="1"
+							 title="ywz_1.gif"></td>
+					<td><img src="./images/emotion/ywz/2.gif" alt="2"
+							 title="ywz_2.gif"></td>
+					<td><img src="./images/emotion/ywz/3.gif" alt="3"
+							 title="ywz_3.gif"></td>
+					<td><img src="./images/emotion/ywz/4.gif" alt="4"
+							 title="ywz_4.gif"></td>
+				</tr>
+				<tr class="ywz">
+					<td><img src="./images/emotion/ywz/5.gif" alt="5"
+							 title="ywz_5.gif"></td>
+					<td><img src="./images/emotion/ywz/6.gif" alt="6"
+							 title="ywz_6.gif"></td>
+					<td><img src="./images/emotion/ywz/7.gif" alt="7"
+							 title="ywz_7.gif"></td>
+					<td><img src="./images/emotion/ywz/8.gif" alt="8"
+							 title="ywz_8.gif"></td>
+				</tr>
+				</tbody>
+			</table>
+		</li>
+		<li style="width: 541px; display: table-cell; vertical-align: middle;">
+			<table class="emotion-table">
+				<tbody>
+				<tr class="ywz">
+					<td><img src="./images/emotion/ywz/9.gif" alt="9"
+							 title="ywz_9.gif"></td>
+					<td><img src="./images/emotion/ywz/10.gif" alt="10"
+							 title="ywz_10.gif"></td>
+					<td><img src="./images/emotion/ywz/11.gif" alt="11"
+							 title="ywz_11.gif"></td>
+					<td><img src="./images/emotion/ywz/12.gif" alt="12"
+							 title="ywz_12.gif"></td>
+				</tr>
+				<tr class="ywz">
+					<td><img src="./images/emotion/ywz/13.gif" alt="13"
+							 title="ywz_13.gif"></td>
+					<td><img src="./images/emotion/ywz/14.gif" alt="14"
+							 title="ywz_14.gif"></td>
+					<td><img src="./images/emotion/ywz/15.gif" alt="15"
+							 title="ywz_15.gif"></td>
+					<td><img src="./images/emotion/ywz/16.gif" alt="16"
+							 title="ywz_16.gif"></td>
+				</tr>
+				</tbody>
+			</table>
+		</li>
+		<li style="width: 541px; display: table-cell; vertical-align: middle;">
+			<table class="emotion-table">
+				<tbody>
+				<tr class="ywz">
+					<td><img src="./images/emotion/ywz/17.gif" alt="17"
+							 title="ywz_17.gif"></td>
+					<td><img src="./images/emotion/ywz/18.gif" alt="18"
+							 title="ywz_18.gif"></td>
+					<td><img src="./images/emotion/ywz/19.gif" alt="19"
+							 title="ywz_19.gif"></td>
+					<td><img src="./images/emotion/ywz/20.gif" alt="20"
+							 title="ywz_20.gif"></td>
+				</tr>
+				<tr class="ywz">
+					<td><img src="./images/emotion/ywz/21.gif" alt="21"
+							 title="ywz_21.gif"></td>
+					<td><img src="./images/emotion/ywz/22.gif" alt="22"
+							 title="ywz_22.gif"></td>
+					<td><img src="./images/emotion/ywz/23.gif" alt="23"
+							 title="ywz_23.gif"></td>
+					<td><img src="./images/emotion/ywz/24.gif" alt="24"
+							 title="ywz_24.gif"></td>
+				</tr>
+				</tbody>
+			</table>
+		</li>
+		<li style="width: 541px; display: table-cell; vertical-align: middle;">
+			<table class="emotion-table">
+				<tbody>
+				<tr class="ymj">
+					<td><img src="./images/emotion/ymj/0.gif" alt="0"
+							 title="ymj_0.gif"></td>
+					<td><img src="./images/emotion/ymj/1.gif" alt="1"
+							 title="ymj_1.gif"></td>
+					<td><img src="./images/emotion/ymj/2.gif" alt="2"
+							 title="ymj_2.gif"></td>
+					<td><img src="./images/emotion/ymj/3.gif" alt="3"
+							 title="ymj_3.gif"></td>
+				</tr>
+				<tr class="ymj">
+					<td><img src="./images/emotion/ymj/4.gif" alt="4"
+							 title="ymj_4.gif"></td>
+					<td><img src="./images/emotion/ymj/5.gif" alt="5"
+							 title="ymj_5.gif"></td>
+					<td><img src="./images/emotion/ymj/6.gif" alt="6"
+							 title="ymj_6.gif"></td>
+					<td><img src="./images/emotion/ymj/7.gif" alt="7"
+							 title="ymj_7.gif"></td>
+				</tr>
+				</tbody>
+			</table>
+		</li>
+		<li style="width: 541px; display: table-cell; vertical-align: middle;">
+			<table class="emotion-table">
+				<tbody>
+				<tr class="ymj">
+					<td><img src="./images/emotion/ymj/8.gif" alt="8"
+							 title="ymj_8.gif"></td>
+					<td><img src="./images/emotion/ymj/9.gif" alt="9"
+							 title="ymj_9.gif"></td>
+					<td><img src="./images/emotion/ymj/10.gif" alt="10"
+							 title="ymj_10.gif"></td>
+					<td><img src="./images/emotion/ymj/11.gif" alt="11"
+							 title="ymj_11.gif"></td>
+				</tr>
+				<tr class="ymj">
+					<td><img src="./images/emotion/ymj/12.gif" alt="12"
+							 title="ymj_12.gif"></td>
+					<td><img src="./images/emotion/ymj/13.gif" alt="13"
+							 title="ymj_13.gif"></td>
+					<td><img src="./images/emotion/ymj/14.gif" alt="14"
+							 title="ymj_14.gif"></td>
+					<td><img src="./images/emotion/ymj/15.gif" alt="15"
+							 title="ymj_15.gif"></td>
+				</tr>
+				</tbody>
+			</table>
+		</li>
+		<li style="width: 541px; display: table-cell; vertical-align: middle;">
+			<table class="emotion-table">
+				<tbody>
+				<tr class="ymj">
+					<td><img src="./images/emotion/ymj/16.gif" alt="16"
+							 title="ymj_16.gif"></td>
+					<td><img src="./images/emotion/ymj/17.gif" alt="17"
+							 title="ymj_17.gif"></td>
+					<td><img src="./images/emotion/ymj/18.gif" alt="18"
+							 title="ymj_18.gif"></td>
+					<td><img src="./images/emotion/ymj/19.gif" alt="19"
+							 title="ymj_19.gif"></td>
+				</tr>
+				<tr class="ymj">
+					<td><img src="./images/emotion/ymj/20.gif" alt="20"
+							 title="ymj_20.gif"></td>
+					<td><img src="./images/emotion/ymj/21.gif" alt="21"
+							 title="ymj_21.gif"></td>
+					<td><img src="./images/emotion/ymj/22.gif" alt="22"
+							 title="ymj_22.gif"></td>
+					<td><img src="./images/emotion/ymj/23.gif" alt="23"
+							 title="ymj_23.gif"></td>
+				</tr>
+				</tbody>
+			</table>
+		</li>
+	</ul>
+	<ol>
+		<li class="active"></li>
+		<li></li>
+		<li></li>
+		<li></li>
+		<li></li>
+		<li></li>
+	</ol>
 </div>
 
 <!--头像上传-->
@@ -156,6 +323,6 @@
 <script type="text/javascript" src="./js/LjkUpload.js?v=0.1"></script>
 <script type="text/javascript" src="./js/html5ImgCompress/html5ImgCompress.min.js"></script>
 <script type="text/javascript" src="./js/adapter.js"></script>
-<script type="text/javascript" src="./js/index.js?v=1.21"></script>
+<script type="text/javascript" src="./js/index.js?v=1.23"></script>
 </body>
 </html>

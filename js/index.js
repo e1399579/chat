@@ -1,9 +1,9 @@
 var H, W;
 function autoSize() {
-    H = Math.min(window.innerHeight, window.screen.height) - 80;
+    H = Math.min(window.innerHeight, window.screen.height) - 140;
     W = Math.min(window.innerWidth, window.screen.width);
     $("body").width(W);
-    $("#room").height(H);
+    $("#room").width(W - 20).height(H - 20);
 }
 autoSize();
 window.addEventListener("resize", autoSize);
@@ -18,10 +18,10 @@ var user = JSON.parse(getCookie('user')); //当前用户
 var is_active = 1;
 const DEBUG = false;
 const MAX_LENGTH = 10000; //最大聊天字数
-const MAX_IMAGE = 1024 * 1024 * 2; //最大上传图片尺寸
+const MAX_IMAGE = 1024 * 1024 * 4; //最大上传图片尺寸
 const MAX_UPLOAD = 5; //每次最多上传图片
 const COMPRESS_PERCENT = 0.3; //截图压缩比例
-const MAX_MUSIC_SIZE = 1024 * 1024 * 8; //最大音乐尺寸
+const MAX_MUSIC_SIZE = 1024 * 1024 * 16; //最大音乐尺寸
 const MAX_LIMITS = 100; //断线最大重连次数
 const MATCH_URL = '((https?|ftp|file):\/\/[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|])'; //匹配URL
 var href = window.location.href; //当前的域名
@@ -138,9 +138,6 @@ var dataHelper = {
      * @returns {string}
      */
     encode: function (obj) {
-        /*if (this.is_msgpack)
-         return msgpack.pack(obj, true);
-         else*/
         return JSON.stringify(obj);
     },
     /**
@@ -149,9 +146,6 @@ var dataHelper = {
      * @returns {object}
      */
     decode: function (str) {
-        /*if (this.is_msgpack)
-         return msgpack.unpack(str);
-         else*/
         return JSON.parse(str);
     }
 };
@@ -304,10 +298,12 @@ var im = {
         }
     },
     openContacts: function () {
-        this.contactsContainer.removeClass("hidden slideOutLeft").addClass("animated slideInLeft");
+        this.contactsContainer.removeClass("hidden bounceOut").addClass("animated bounceIn");
+        //this.contactsContainer.removeClass("hidden slideOutLeft").addClass("animated slideInLeft");
     },
     closeContacts: function () {
-        this.contactsContainer.removeClass("slideInLeft").addClass("animated slideOutLeft");
+        this.contactsContainer.addClass("animated bounceOut").removeClass("bounceIn");
+        //this.contactsContainer.removeClass("slideInLeft").addClass("animated slideOutLeft");
     }
 };
 
@@ -502,7 +498,7 @@ MessageHelper.prototype = {
 
     history_time: {}, //历史时间
 
-    time_message: '<div class="text-center">%TIME%</div>',//时间信息
+    time_message: '<div class="text-center chat-system"><span>%TIME%</span></div>',//时间信息
 
     is_first: true, //是否第一次进入
 
@@ -1004,7 +1000,7 @@ MessageHelper.prototype = {
             html += list.replaceMulti(search, replace);
             this.online_users[users[i].user_id] = users[i].username;
         }
-        $("#total").text(total);
+        $(".total").text(total);
         this.online_container.append(html);
     },
 
@@ -1230,7 +1226,7 @@ MessageHelper.prototype = {
 
     onClose: function (e) {
         //连接关闭
-        $("#total").text(0);//清除在线人数
+        $(".total").text(0);//清除在线人数
         $("#online").text("");//清除在线列表
         var d = new Date();
         var date = 'Y-m-d H:i:s';
@@ -1277,7 +1273,7 @@ MessageHelper.prototype = {
     },
 
     onError: function (e) {
-        $("#total").text(0);//清除在线人数
+        $(".total").text(0);//清除在线人数
         $("#online").text("");//清除在线列表
         this.toast('连接服务器失败');
     },
@@ -1468,9 +1464,7 @@ var imageHelper = {
                 });
             });
 
-            slider.click(function () {
-                _this.closePreview();
-            });
+            slider.click(_this.closePreview);
 
 
             var max = total - 1;
@@ -1590,6 +1584,40 @@ var emotionHelper = {
         {name:"ymj", suffix: '.gif', cols:4, rows:2, len:24, start:0}
     ],
     init: function () {
+        //this.build();
+
+        this.dots = this.container.children("ol").children("li");
+        this.emotion_height = this.container.height();
+
+        //导航滑动、样式
+        var _this = this;
+        var swipe = new Swipe(document.getElementById('emotion'), {
+            speed: 200,
+            callback: function (e, pos, li) {
+                _this.dots.removeClass("active").eq(pos).addClass("active");
+            }
+        });
+        this.dots.click(function () {
+            swipe.slide($(this).index(), 500);
+        });
+
+        //表情点击发送消息
+        this.container.find("img").click(function (event) {
+            event.stopPropagation();
+            var type = receiver_id ? PERSONAL_EMOTION : COMMON_EMOTION;
+            messageHelper.sendMessage(type, user.user_id, receiver_id, $(this).prop("title"));
+        });
+
+        //点击空白折叠
+        function hide(event) {
+            event.stopPropagation();
+            _this.close();
+            im.closeContacts();
+        }
+        $("#room").bind("click", hide);
+        $(".chat-box").bind("click", hide);
+    },
+    build: function () {
         //表情元素
         for (var i in this.config) {
             var name = this.config[i].name;
@@ -1627,41 +1655,6 @@ var emotionHelper = {
         }
         this.position_html += '</li>';
         this.container.children("ol").html(this.position_html);
-
-        this.dots = this.container.children("ol").children("li");
-        this.emotion_height = this.container.height();
-
-        //导航滑动、样式
-        var _this = this;
-        var swipe = new Swipe(document.getElementById('emotion'), {
-            speed: 200,
-            callback: function (e, pos, li) {
-                _this.dots.removeClass("active").eq(pos).addClass("active");
-            }
-        });
-        this.dots.click(function () {
-            swipe.slide($(this).index(), 500);
-        });
-
-        //表情点击发送消息
-        this.container.find("img").click(function (event) {
-            event.stopPropagation();
-            var type = receiver_id ? PERSONAL_EMOTION : COMMON_EMOTION;
-            messageHelper.sendMessage(type, user.user_id, receiver_id, $(this).prop("title"));
-        });
-
-        //点击空白折叠
-        function hide(event) {
-            event.stopPropagation();
-            _this.close();
-            im.closeContacts();
-        }
-        $("#room").bind("click", function (e) {
-            hide(e);
-        });
-        $(".chat-box").bind("click", function (e) {
-            hide(e);
-        });
     },
     open: function () {
         if (H > this.emotion_height) {

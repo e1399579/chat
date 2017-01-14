@@ -7,17 +7,25 @@ body {
 #room {
     border-radius: 0;
     box-shadow: none;
-    margin-left: 0;
-    margin-right: 0;
+    margin: 0;
+    padding: 10px;
     overflow-y: auto;
     overflow-x: hidden;
     width: 100%;
     font-size: 16px !important;
-    background: #F3F3F3;
+    color: #333;
+    background: #EEE;
+}
+
+.room-title {
+    height: 60px;
+    line-height: 60px;
+    font-size: 18px;
 }
 
 .menu {
     line-height: 40px;
+    background: #EEE;
 }
 
 .menu button {
@@ -67,23 +75,25 @@ body {
 }
 
 .td-triangle {
-    width: 10px;
+    width: 15px;
     vertical-align: top;
 }
 
 .bubble-left {
     float: left;
     background-color: #FFF;
+    color: #333;
 }
 
 .bubble-right {
     float: right;
     background-color: #AAD2FF;
+    color: #333;
 }
 
 .bubble-left, .bubble-right {
     border-radius: 10px;
-    padding: 10px;
+    padding: 15px;
     line-height: 20px;
     min-width: 8px;
     min-height: 20px;
@@ -94,33 +104,29 @@ body {
 .left-triangle, .left-triangle-common {
     height: 0;
     width: 0;
-    border: 6px solid;
+    border-top: 0;
+    margin-left: 5px;
     border-color: transparent #FFF transparent transparent;
-    margin-top: 19px;
+    border-bottom: 10px solid transparent;
+    border-right: 10px solid #FFF;
 }
 
 .right-triangle, .right-triangle-common {
     height: 0;
     width: 0;
-    border: 6px solid;
-    border-color: transparent transparent transparent #AAD2FF;
-    margin-top: 19px;
-}
-
-.left-triangle-common, .right-triangle-common {
-    margin-top: 34px;
-}
-
-.right-triangle-common {
     border-top: 0;
+    margin-right: 5px;
+    border-color: transparent transparent transparent #AAD2FF;
     border-bottom: 10px solid transparent;
     border-left: 10px solid #AAD2FF;
 }
 
-.left-triangle-common {
-    border-top: 0;
-    border-bottom: 10px solid transparent;
-    border-right: 10px solid #FFF;
+.left-triangle-common, .right-triangle-common {
+    margin-top: 30px;
+}
+
+.left-triangle, .right-triangle {
+    margin-top: 9px;
 }
 
 .music-info {
@@ -310,7 +316,7 @@ div.pinch-zoom img {
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 80%;
+    width: 100%;
     overflow-x: hidden;
     overflow-y: auto;
     background: white;
@@ -392,6 +398,17 @@ div.pinch-zoom img {
     overflow-y: auto;
     overflow-x: hidden;
     background: #C2D2E3;
+    padding: 10px;
+}
+
+.chat-system span {
+    display: inline-block;
+    line-height: 30px;
+    padding: 0 15px;
+    border-radius: 3px;
+    background-color: #ddd;
+    color: #fff;
+    font-size: 14px;
 }
 
 /******************头像上传*******************/
