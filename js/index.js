@@ -17,6 +17,7 @@ var role_id = 0; //当前用户角色ID
 var user = JSON.parse(getCookie('user')); //当前用户
 var is_active = 1;
 const DEBUG = false;
+const COOKIE_EXPIRE_DAYS = 7; //cookie过期天数
 const MAX_LENGTH = 10000; //最大聊天字数
 const MAX_IMAGE = 1024 * 1024 * 4; //最大上传图片尺寸
 const MAX_UPLOAD = 5; //每次最多上传图片
@@ -98,9 +99,8 @@ function getCookie(name) {
 }
 
 function setCookie(name, value) {
-    var Days = 1;
     var exp = new Date();
-    exp.setTime(exp.getTime() + Days * 24 * 60 * 60 * 1000);
+    exp.setTime(exp.getTime() + COOKIE_EXPIRE_DAYS * 24 * 60 * 60 * 1000);
     document.cookie = name + "=" + escape(value) + ";expires=" + exp.toGMTString();
 }
 
@@ -583,8 +583,8 @@ MessageHelper.prototype = {
     history_private_image: '<img class="img-responsive img-msg" src="%URL%" onload="" onclick="imageHelper.preview(this)" alt="%SENDER%" title="点击图片预览" />',
 
     music_message:
-        '<i class="fa fa-music fa-3x music-color"></i>\
-        <div class="music-info" onclick="messageHelper.playMusic(this, event);" data-url="%MUSIC_URL%" title="点击播放/暂停">\
+        '<i class="fa fa-music fa-3x music-color table-cell"></i>\
+        <div class="music-info table-cell" onclick="messageHelper.playMusic(this, event);" data-url="%MUSIC_URL%" title="点击播放/暂停">\
             <progress class="progress music-color music-progress" value="0" max="100" data-time="0">0%</progress>\
             <span class="text-left music-name">%MUSIC_NAME%</span><span class="text-right music-during"></span>\
         </div>',
@@ -957,13 +957,19 @@ MessageHelper.prototype = {
             music.play();
             var _this = this;
             this.music_timer = window.setInterval(function () {
-                var percent = (music.currentTime/ music.duration * 100);
-                progress.val(percent);
-                progress.attr("data-time", music.currentTime);
-                //计算时长
-                music_during.text(_this.getDuring(music.currentTime) + "/" + _this.getDuring(music.duration));
-                if (percent >= 100) {
-                    progress.attr("data-time", 0); //清零，下次重新播放
+                try {
+                    var percent = (music.currentTime / music.duration * 100);
+                    progress.val(percent);
+                    progress.attr("data-time", music.currentTime);
+                    //计算时长
+                    music_during.text(_this.getDuring(music.currentTime) + "/" + _this.getDuring(music.duration));
+                    if (percent >= 100) {
+                        progress.attr("data-time", 0); //清零，下次重新播放
+                        clearInterval(_this.music_timer);
+                    }
+                } catch (e) {
+                    _this.toast("播放失败，请稍候再试...");
+                    console.log(e);
                     clearInterval(_this.music_timer);
                 }
             }, 200);
