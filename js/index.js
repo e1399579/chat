@@ -2439,6 +2439,7 @@ class UserObserver extends Observer {
                 this.addUser(mess.user);
                 break;
             case USER_DOWNLINE://下线
+                USER.is_active = 0;
                 UserObserver.downline(USER.user_id);
                 Util.toast(mess.mess);
                 break;
