@@ -1,304 +1,33 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-	<meta http-equiv="x-ua-compatible" content="ie=edge">
-	<meta name="apple-mobile-web-app-capable" content="yes"/>
-	<title>WebSocket聊天室</title>
-	<link rel="shortcut icon" type="image/x-icon" href="./images/favicon.ico" media="screen"/>
-	<!--<link rel="stylesheet" href="http://cdn.bootcss.com/bootstrap/4.0.0-alpha/css/bootstrap.min.css">
-	<link rel="stylesheet" href="http://cdn.bootcss.com/font-awesome/4.6.3/css/font-awesome.min.css">-->
-	<link rel="stylesheet" href="./css/bootstrap.min.css">
-	<link rel="stylesheet" href="./css/font-awesome.min.css">
-	<link rel="stylesheet" href="./css/animate.min.css">
-	<link rel="stylesheet" href="./css/index.css?v=0.29">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <title>WebSocket聊天室</title>
+    <link rel="shortcut icon" type="image/x-icon" href="./images/favicon.ico" media="screen"/>
+    <!--<link rel="stylesheet" href="http://cdn.bootcss.com/bootstrap/4.0.0-alpha/css/bootstrap.min.css">
+    <link rel="stylesheet" href="http://cdn.bootcss.com/font-awesome/4.6.3/css/font-awesome.min.css">-->
+    <link rel="stylesheet" href="./css/bootstrap.min.css">
+    <link rel="stylesheet" href="./css/font-awesome.min.css">
+    <link rel="stylesheet" href="./css/animate.min.css">
+    <link rel="stylesheet" href="./css/index.css?v=0.31">
 </head>
 <body>
 
 <!--联系人-->
 <div id="contacts" class="modal-content hidden">
-	<div class="modal-header">
-		<button type="button" class="close" onclick="im.closeContacts();">&times;</button>
-		<h5 class="modal-title">
-			在线 <span class="text-danger total">0</span>
-			<span class="text-info text-font"> 点击联系人@TA</span>
-		</h5>
-	</div>
-	<div id="online">
-		<!--用户容器-->
-	</div>
-</div>
-
-<div class="text-center bg-success room-title">大厅(<span class="total">0</span>)</div>
-<!--聊天消息容器-->
-<div class="room clearfix" id="room">
-
-</div>
-
-<!--发送消息框-->
-<div class="input-group z-index-normal">
-    <textarea id="mess" class="form-control" autofocus rows="1" placeholder="说点什么吧..."
-              onkeydown="messageHelper.sendMess(event)"></textarea>
-    <span class="input-group-btn">
-        <button type="button" id="submit" class="btn btn-success-outline" onclick="messageHelper.send()">发送</button>
-    </span>
-</div>
-
-<!--菜单-->
-<div class="menu">
-	<button type="button" class="btn btn-success-outline" onclick="im.openContacts();">
-		<i class="fa fa-user" aria-hidden="true"></i>
-	</button>
-	<button type="button" class="btn btn-success-outline" onclick="emotionHelper.open()">
-		<i class="fa fa-smile-o" aria-hidden="true"></i>
-	</button>
-	<button type="button" class="btn btn-success-outline" onclick="avatarHelper.open()">
-		<i class="fa fa-image" aria-hidden="true"></i>
-	</button>
-	<button type="button" id="upload-image" class="btn btn-success-outline">
-		<i class="fa fa-cloud-upload" aria-hidden="true"></i>
-	</button>
-	<input type="file" class="hidden" multiple accept="image/*" />
-	<button type="button" class="btn btn-success-outline" onclick="messageHelper.controlBell(this)">
-		<i class="fa fa-bell-o" aria-hidden="true"></i>
-	</button>
-	<button type="button" id="upload-music" class="btn btn-success-outline">
-		<i class="fa fa-music" aria-hidden="true"></i>
-	</button>
-	<input type="file" class="hidden" accept="audio/*" />
-	<button type="button" class="btn btn-success-outline" onclick="videoHelper.confirm()">
-		<i class="fa fa-video-camera" aria-hidden="true"></i>
-	</button>
-	<button type="button" class="btn btn-success-outline" onclick="messageHelper.about()">
-		<i class="fa fa-info" aria-hidden="true"></i>
-	</button>
-</div>
-
-<!--注册/登录弹框-->
-<div class="modal fade" id="register" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel"
-     aria-hidden="true">
-	<div class="modal-dialog modal-sm">
-		<div class="modal-content">
-			<form method="post" action="">
-				<div class="modal-header">
-					<h5 class="modal-title">请登录/注册：</h5>
-				</div>
-				<div class="modal-body">
-					<input type="text" id="username" class="form-control form-group" placeholder="起个名吧，亲:)" maxlength="30" autocomplete />
-					<input type="password" id="password" class="form-control form-group" placeholder="密码：默认123456"
-					       maxlength="16"/>
-				</div>
-				<div class="modal-footer text-center">
-					<span class="text-danger text-center text-sm" id="error"></span>
-					<button type="submit" class="btn btn-success-outline"
-					        onclick="messageHelper.reg($('#username').val(), $('#password').val());return false;">提交
-					</button>
-				</div>
-			</form>
-		</div>
-	</div>
-</div>
-
-<!--图片预览-->
-<div id="slider" class="hidden">
-	<ul id="img-container"></ul>
-</div>
-<div id="backdrop"></div>
-
-<!--表情-->
-<div class="emotion z-index-normal hidden" id="emotion">
-	<!--<ul></ul>
-	<ol></ol>-->
-	<ul>
-		<li>
-			<table class="emotion-table">
-				<tbody>
-				<tr class="ywz">
-					<td><img src="./images/emotion/ywz/1.gif" alt="1"
-							 title="ywz_1.gif"></td>
-					<td><img src="./images/emotion/ywz/2.gif" alt="2"
-							 title="ywz_2.gif"></td>
-					<td><img src="./images/emotion/ywz/3.gif" alt="3"
-							 title="ywz_3.gif"></td>
-					<td><img src="./images/emotion/ywz/4.gif" alt="4"
-							 title="ywz_4.gif"></td>
-				</tr>
-				<tr class="ywz">
-					<td><img src="./images/emotion/ywz/5.gif" alt="5"
-							 title="ywz_5.gif"></td>
-					<td><img src="./images/emotion/ywz/6.gif" alt="6"
-							 title="ywz_6.gif"></td>
-					<td><img src="./images/emotion/ywz/7.gif" alt="7"
-							 title="ywz_7.gif"></td>
-					<td><img src="./images/emotion/ywz/8.gif" alt="8"
-							 title="ywz_8.gif"></td>
-				</tr>
-				</tbody>
-			</table>
-		</li>
-		<li style="width: 541px; display: table-cell; vertical-align: middle;">
-			<table class="emotion-table">
-				<tbody>
-				<tr class="ywz">
-					<td><img src="./images/emotion/ywz/9.gif" alt="9"
-							 title="ywz_9.gif"></td>
-					<td><img src="./images/emotion/ywz/10.gif" alt="10"
-							 title="ywz_10.gif"></td>
-					<td><img src="./images/emotion/ywz/11.gif" alt="11"
-							 title="ywz_11.gif"></td>
-					<td><img src="./images/emotion/ywz/12.gif" alt="12"
-							 title="ywz_12.gif"></td>
-				</tr>
-				<tr class="ywz">
-					<td><img src="./images/emotion/ywz/13.gif" alt="13"
-							 title="ywz_13.gif"></td>
-					<td><img src="./images/emotion/ywz/14.gif" alt="14"
-							 title="ywz_14.gif"></td>
-					<td><img src="./images/emotion/ywz/15.gif" alt="15"
-							 title="ywz_15.gif"></td>
-					<td><img src="./images/emotion/ywz/16.gif" alt="16"
-							 title="ywz_16.gif"></td>
-				</tr>
-				</tbody>
-			</table>
-		</li>
-		<li style="width: 541px; display: table-cell; vertical-align: middle;">
-			<table class="emotion-table">
-				<tbody>
-				<tr class="ywz">
-					<td><img src="./images/emotion/ywz/17.gif" alt="17"
-							 title="ywz_17.gif"></td>
-					<td><img src="./images/emotion/ywz/18.gif" alt="18"
-							 title="ywz_18.gif"></td>
-					<td><img src="./images/emotion/ywz/19.gif" alt="19"
-							 title="ywz_19.gif"></td>
-					<td><img src="./images/emotion/ywz/20.gif" alt="20"
-							 title="ywz_20.gif"></td>
-				</tr>
-				<tr class="ywz">
-					<td><img src="./images/emotion/ywz/21.gif" alt="21"
-							 title="ywz_21.gif"></td>
-					<td><img src="./images/emotion/ywz/22.gif" alt="22"
-							 title="ywz_22.gif"></td>
-					<td><img src="./images/emotion/ywz/23.gif" alt="23"
-							 title="ywz_23.gif"></td>
-					<td><img src="./images/emotion/ywz/24.gif" alt="24"
-							 title="ywz_24.gif"></td>
-				</tr>
-				</tbody>
-			</table>
-		</li>
-		<li style="width: 541px; display: table-cell; vertical-align: middle;">
-			<table class="emotion-table">
-				<tbody>
-				<tr class="ymj">
-					<td><img src="./images/emotion/ymj/0.gif" alt="0"
-							 title="ymj_0.gif"></td>
-					<td><img src="./images/emotion/ymj/1.gif" alt="1"
-							 title="ymj_1.gif"></td>
-					<td><img src="./images/emotion/ymj/2.gif" alt="2"
-							 title="ymj_2.gif"></td>
-					<td><img src="./images/emotion/ymj/3.gif" alt="3"
-							 title="ymj_3.gif"></td>
-				</tr>
-				<tr class="ymj">
-					<td><img src="./images/emotion/ymj/4.gif" alt="4"
-							 title="ymj_4.gif"></td>
-					<td><img src="./images/emotion/ymj/5.gif" alt="5"
-							 title="ymj_5.gif"></td>
-					<td><img src="./images/emotion/ymj/6.gif" alt="6"
-							 title="ymj_6.gif"></td>
-					<td><img src="./images/emotion/ymj/7.gif" alt="7"
-							 title="ymj_7.gif"></td>
-				</tr>
-				</tbody>
-			</table>
-		</li>
-		<li style="width: 541px; display: table-cell; vertical-align: middle;">
-			<table class="emotion-table">
-				<tbody>
-				<tr class="ymj">
-					<td><img src="./images/emotion/ymj/8.gif" alt="8"
-							 title="ymj_8.gif"></td>
-					<td><img src="./images/emotion/ymj/9.gif" alt="9"
-							 title="ymj_9.gif"></td>
-					<td><img src="./images/emotion/ymj/10.gif" alt="10"
-							 title="ymj_10.gif"></td>
-					<td><img src="./images/emotion/ymj/11.gif" alt="11"
-							 title="ymj_11.gif"></td>
-				</tr>
-				<tr class="ymj">
-					<td><img src="./images/emotion/ymj/12.gif" alt="12"
-							 title="ymj_12.gif"></td>
-					<td><img src="./images/emotion/ymj/13.gif" alt="13"
-							 title="ymj_13.gif"></td>
-					<td><img src="./images/emotion/ymj/14.gif" alt="14"
-							 title="ymj_14.gif"></td>
-					<td><img src="./images/emotion/ymj/15.gif" alt="15"
-							 title="ymj_15.gif"></td>
-				</tr>
-				</tbody>
-			</table>
-		</li>
-		<li style="width: 541px; display: table-cell; vertical-align: middle;">
-			<table class="emotion-table">
-				<tbody>
-				<tr class="ymj">
-					<td><img src="./images/emotion/ymj/16.gif" alt="16"
-							 title="ymj_16.gif"></td>
-					<td><img src="./images/emotion/ymj/17.gif" alt="17"
-							 title="ymj_17.gif"></td>
-					<td><img src="./images/emotion/ymj/18.gif" alt="18"
-							 title="ymj_18.gif"></td>
-					<td><img src="./images/emotion/ymj/19.gif" alt="19"
-							 title="ymj_19.gif"></td>
-				</tr>
-				<tr class="ymj">
-					<td><img src="./images/emotion/ymj/20.gif" alt="20"
-							 title="ymj_20.gif"></td>
-					<td><img src="./images/emotion/ymj/21.gif" alt="21"
-							 title="ymj_21.gif"></td>
-					<td><img src="./images/emotion/ymj/22.gif" alt="22"
-							 title="ymj_22.gif"></td>
-					<td><img src="./images/emotion/ymj/23.gif" alt="23"
-							 title="ymj_23.gif"></td>
-				</tr>
-				</tbody>
-			</table>
-		</li>
-	</ul>
-	<ol>
-		<li class="active"></li>
-		<li></li>
-		<li></li>
-		<li></li>
-		<li></li>
-		<li></li>
-	</ol>
-</div>
-
-<!--头像上传-->
-<div class="headImg-popup hidden">
-	<div class="upload-image-box text-center">
-		<!--拖动缩放区域-->
-		<div class="move-image hasImg"></div>
-		<!--切割区域-->
-		<div class="clip-image"></div>
-	</div>
-	<div class="mt">
-		<!--滑竿-->
-		<input type="range" max="3.0" min="0.05" value="1" step="0.01" class="inp inp-block" id="range">
-	</div>
-	<aside class="text-center mt">
-		<input type="file" accept="image/*" multiple id="file-btn" class="hidden">
-		<button class="btn btn-primary upload-select-btn">选择图片</button>
-		<button class="btn btn-success upload-upload-btn">上传头像</button>
-	</aside>
-	<section>
-		<ul class="showImage">
-		</ul>
-	</section>
+    <div class="modal-header">
+        <button type="button" class="close" onclick="im.closeContacts();">&times;</button>
+        <h5 class="modal-title">
+            在线 <span class="text-danger total">0</span>
+            <span class="text-info text-font"> 点击联系人@TA</span>
+        </h5>
+    </div>
+    <div id="online">
+        <!--用户容器-->
+    </div>
 </div>
 
 <!--私聊窗口-->
@@ -306,9 +35,109 @@
 
 </div>
 
+<!--多人窗口-->
+<div class="chat-room-box hidden">
+
+</div>
+
+<!--菜单-->
+<!--<button type="button" class="btn btn-success-outline upload-avatar">
+    <i class="fa fa-image fa-2x" aria-hidden="true"></i>
+</button>-->
+<div class="menu z-index-top hidden" id="menu">
+    <div class="menu-row">
+        <button type="button" class="btn btn-success-outline upload-image">
+            <i class="fa fa-cloud-upload fa-2x" aria-hidden="true"></i>
+        </button>
+        <input type="file" class="hidden" multiple accept="image/*"/>
+        <button type="button" class="btn btn-success-outline upload-music">
+            <i class="fa fa-music fa-2x" aria-hidden="true"></i>
+        </button>
+        <input type="file" class="hidden" multiple accept="audio/*"/>
+        <button type="button" class="btn btn-success-outline bell-control">
+            <i class="fa fa-bell-slash-o fa-2x" aria-hidden="true"></i>
+        </button>
+    </div>
+</div>
+
+<!--注册/登录弹框-->
+<div class="modal fade" id="register" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel"
+     aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <form method="post" action="">
+                <div class="modal-header">
+                    <h5 class="modal-title">请登录/注册：</h5>
+                </div>
+                <div class="modal-body">
+                    <input type="text" id="username" class="form-control form-group" placeholder="起个名吧，亲:)"
+                           maxlength="30" autocomplete/>
+                    <input type="password" id="password" class="form-control form-group" placeholder="密码：默认123456"
+                           maxlength="16"/>
+                </div>
+                <div class="modal-footer text-center">
+                    <span class="text-danger text-center text-sm" id="error"></span>
+                    <button type="submit" class="btn btn-success-outline">提交
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!--图片预览-->
+<div id="slider" class="hidden">
+    <ul id="img-container"></ul>
+</div>
+<div id="backdrop"></div>
+
+<!--表情-->
+<div class="emotion z-index-normal hidden" id="emotion">
+</div>
+
+<!--头像上传-->
+<div class="headImg-popup hidden">
+    <div class="upload-image-box text-center">
+        <!--拖动缩放区域-->
+        <div class="move-image hasImg"></div>
+        <!--切割区域-->
+        <div class="clip-image"></div>
+    </div>
+    <div class="mt">
+        <!--滑竿-->
+        <input type="range" max="3.0" min="0.05" value="1" step="0.01" class="inp inp-block" id="range">
+    </div>
+    <aside class="text-center mt">
+        <input type="file" accept="image/*" multiple id="file-btn" class="hidden">
+        <button class="btn btn-primary upload-select-btn">选择图片</button>
+        <button class="btn btn-success upload-upload-btn">上传头像</button>
+    </aside>
+    <section>
+        <ul class="showImage">
+        </ul>
+    </section>
+</div>
+
 <!--视频-->
 <div class="video-box hidden">
-    <button type="button" class="close video-close" onclick="videoHelper.closeVideo()">&times;</button>
+    <button type="button" class="close video-close">&times;</button>
+</div>
+
+<!--消息列表-->
+<div class="main-box z-index-top">
+    <ul>
+        <li class="message-list"></li>
+        <li class="contacts-list"></li>
+        <li class="my-zone">
+            <div class="my-background"><img class="img-circle my-head upload-avatar" src="./images/chat.png"/></div>
+            <div class="username"></div>
+        </li>
+    </ul>
+    <ol class="box-nav box-shadow display-table text-center chat-title-color">
+        <li class="box-active table-cell">对话</li>
+        <li class="table-cell">联系人</li>
+        <li class="table-cell">我的</li>
+    </ol>
 </div>
 
 <!--<script type="text/javascript" src="http://cdn.bootcss.com/jquery/2.2.1/jquery.min.js"></script>
@@ -323,6 +152,6 @@
 <script type="text/javascript" src="./js/LjkUpload.js?v=0.1"></script>
 <script type="text/javascript" src="./js/html5ImgCompress/html5ImgCompress.min.js"></script>
 <script type="text/javascript" src="./js/adapter.js"></script>
-<script type="text/javascript" src="./js/index.js?v=1.25"></script>
+<script type="text/javascript" src="./js/index.js?v=1.26"></script>
 </body>
 </html>

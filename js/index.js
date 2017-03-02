@@ -1,93 +1,7 @@
-var H, W;
-function autoSize() {
-    H = Math.min(window.innerHeight, window.screen.height) - 140;
-    W = Math.min(window.innerWidth, window.screen.width);
-    $("body").width(W);
-    $("#room").width(W - 20).height(H - 20);
-}
-autoSize();
-window.addEventListener("resize", autoSize);
-
-var audio = document.createElement("audio");
-audio.src = "./media/notification.ogg";
-audio.volume = 1;
-var music = document.createElement("audio");
-var receiver_id = 0; //接收者ID
-var role_id = 0; //当前用户角色ID
-var user = JSON.parse(getCookie('user')); //当前用户
-var is_active = 1;
-const DEBUG = false;
-const COOKIE_EXPIRE_DAYS = 7; //cookie过期天数
-const MAX_LENGTH = 10000; //最大聊天字数
-const MAX_IMAGE = 1024 * 1024 * 4; //最大上传图片尺寸
-const MAX_UPLOAD = 5; //每次最多上传图片
-const COMPRESS_PERCENT = 0.3; //截图压缩比例
-const MAX_MUSIC_SIZE = 1024 * 1024 * 16; //最大音乐尺寸
-const MAX_LIMITS = 100; //断线最大重连次数
-const MATCH_URL = '((https?|ftp|file):\/\/[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|])'; //匹配URL
-var href = window.location.href; //当前的域名
-var end = href.lastIndexOf('/');
-href = (end == -1) ? href+'/' : href.substring(0, end) + '/'; //删除index.html?之类的字符
-var port = 8080;
-var protocol = window.location.protocol == 'https:' ? 'wss://' : 'ws://';
-var url = protocol + window.location.host + ':' + port;
-var ws = new WebSocket(url);
-
-const COMMON = 0;//公共消息
-const WELCOME = 1;//欢迎消息
-const QUIT = -1;//退出消息
-const SELF = 2;//本人消息
-const OTHER = 3;//他人消息
-const PERSONAL = 4;//私信
-const ONLINE = 10;//在线用户
-const REGISTER = 99;//用户注册
-const LOGIN = 100;//用户登录
-const ERROR = -2;//错误消息
-const WARNING = -3;//警告消息
-const REMOVE = -100;//移除用户
-const SYSTEM = 11;//系统消息
-const FORBIDDEN = -99;//禁用
-const DOWNLINE = -10;//下线
-const INCORRECT = -4;//用户名/密码错误
-const COMMON_IMAGE = 20;//公共图片
-const SELF_IMAGE = 22;//本人图片
-const OTHER_IMAGE = 23;//他人图片
-const PERSONAL_IMAGE = 24;//私信
-const COMMON_EMOTION = 30;//公共表情
-const SELF_EMOTION = 32;//本人表情
-const OTHER_EMOTION = 33;//他人图片
-const PERSONAL_EMOTION = 34;//私信表情
-const AVATAR_UPLOAD = 42;//上传头像
-const AVATAR_SUCCESS = 43;//上传成功
-const AVATAR_FAIL = -43;//上传失败
-const HISTORY_COMMON_MESSAGE = 50; //历史公共消息
-const HISTORY_PERSONAL_MESSAGE = 51; //历史个人消息
-const COMMON_MUSIC = 60; //公共音乐
-const SELF_MUSIC = 62; //本人音乐
-const OTHER_MUSIC = 63; //他人音乐
-const PERSONAL_MUSIC = 64; //私信音乐
-const PERSONAL_VIDEO_REQUEST = 70; //私信视频请求
-const PERSONAL_VIDEO_OFFLINE = -70; //离线
-const PERSONAL_VIDEO_ALLOW = 71; //请求通过
-const PERSONAL_VIDEO_DENY = -71; //请求拒绝
-const PERSONAL_VIDEO_OPEN = 72; //打开摄像头
-const PERSONAL_VIDEO_CLOSE = -72; //关闭摄像头
-const PERSONAL_VIDEO_END = 79; //传输结束
-
-const PERSONAL_VIDEO_OFFER_DESC = 80;
-const PERSONAL_VIDEO_ANSWER_DESC = 81;
-const PERSONAL_VIDEO_CANDIDATE = 82;
-
-const COMMON_VIDEO_REQUEST = 90;
-const COMMON_VIDEO_NOTIFY = 91;
-const PERSONAL_VIDEO_NOTIFY = 92;
-
-//取得cookie
 function getCookie(name) {
-    var nameEQ = name + "=";
-    var ca = document.cookie.split(';');    //把cookie分割成组
-    for (var i = 0; i < ca.length; i++) {
-        var c = ca[i];                      //取得字符串
+    let nameEQ = name + "=";
+    let ca = document.cookie.split(';');    //把cookie分割成组
+    for (let c of ca) {
         while (c.charAt(0) == ' ') {          //判断一下字符串有没有前导空格
             c = c.substring(1, c.length);      //有的话，从第二位开始取
         }
@@ -99,1551 +13,684 @@ function getCookie(name) {
 }
 
 function setCookie(name, value) {
-    var exp = new Date();
+    let exp = new Date();
     exp.setTime(exp.getTime() + COOKIE_EXPIRE_DAYS * 24 * 60 * 60 * 1000);
     document.cookie = name + "=" + escape(value) + ";expires=" + exp.toGMTString();
 }
 
-//子字符串替换
+const MESSAGE_COMMON = 100;//公共消息
+const MESSAGE_SELF = 101;//本人消息
+const MESSAGE_OTHER = 102;//他人消息
+const MESSAGE_PERSONAL = 103;//私信
+
+const USER_ONLINE = 200;//用户上线
+const USER_QUIT = 201;//用户退出
+const USER_LIST = 202;//用户列表
+const USER_QUERY = 203; //用户查询
+const USER_REGISTER = 204;//用户注册
+const USER_LOGIN = 205;//用户登录
+const USER_DISABLED = 206;//用户禁用
+const USER_DOWNLINE = 207;//用户下线
+const USER_INCORRECT = 208;//用户名/密码错误
+const USER_REMOVE = 209;//用户移除
+
+const USER_AVATAR_UPLOAD = 210;//上传头像
+const USER_AVATAR_SUCCESS = 211;//上传成功
+const USER_AVATAR_FAIL = 212;//上传失败
+
+const IMAGE_COMMON = 300;//公共图片
+const IMAGE_SELF = 301;//本人图片
+const IMAGE_OTHER = 302;//他人图片
+const IMAGE_PERSONAL = 303;//私信图片
+
+const EMOTION_COMMON = 400;//公共表情
+const EMOTION_SELF = 401;//本人表情
+const EMOTION_OTHER = 402;//他人图片
+const EMOTION_PERSONAL = 403;//私信表情
+
+const MUSIC_COMMON = 500; //公共音乐
+const MUSIC_SELF = 501; //本人音乐
+const MUSIC_OTHER = 502; //他人音乐
+const MUSIC_PERSONAL = 503; //私信音乐
+
+const VIDEO_PERSONAL_REQUEST = 600; //私信视频请求
+const VIDEO_PERSONAL_OFFLINE = 601; //离线
+const VIDEO_PERSONAL_ALLOW = 602; //请求通过
+const VIDEO_PERSONAL_DENY = 603; //请求拒绝
+const VIDEO_PERSONAL_OPEN = 604; //打开摄像头
+const VIDEO_PERSONAL_CLOSE = 605; //关闭摄像头
+const VIDEO_PERSONAL_END = 606; //传输结束
+
+const VIDEO_PERSONAL_OFFER_DESC = 607;
+const VIDEO_PERSONAL_ANSWER_DESC = 608;
+const VIDEO_PERSONAL_CANDIDATE = 609;
+
+const VIDEO_COMMON_REQUEST = 700;
+const VIDEO_COMMON_NOTIFY = 701;
+const VIDEO_PERSONAL_NOTIFY = 702;
+
+const HISTORY_MESSAGE_COMMON = 800; //历史公共消息
+const HISTORY_MESSAGE_PERSONAL = 801; //历史个人消息
+
+const ERROR = 900;//错误消息
+const WARNING = 901;//警告消息
+const SYSTEM = 902;//系统消息
+
+let USER = JSON.parse(getCookie('user')); //当前用户
+const DEBUG = true;
+const COOKIE_EXPIRE_DAYS = 7; //cookie过期天数
+const MAX_LENGTH = 10000; //最大聊天字数
+const MAX_IMAGE = 1024 * 1024 * 4; //最大上传图片尺寸
+const MAX_UPLOAD = 5; //每次最多上传图片
+const COMPRESS_PERCENT = 0.3; //截图压缩比例
+const MAX_MUSIC_SIZE = 1024 * 1024 * 16; //最大音乐尺寸
+const MAX_LIMITS = 100; //断线最大重连次数
+const MATCH_URL = '((https?|ftp|file):\/\/[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|])'; //匹配URL
+let href = window.location.href; //当前的域名
+let end = href.lastIndexOf('/');
+const CURRENT_URL = (end == -1) ? href + '/' : href.substring(0, end) + '/'; //删除index.html?之类的字符
+const PORT = 8080;
+const PROTOCOL = window.location.protocol == 'https:' ? 'wss://' : 'ws://';
+const SERVER_URL = PROTOCOL + window.location.host + ':' + PORT;
+const SHOW_TIME_DURING = 300;
+const FIRST_TIMESTAMP = (new Date()).getTime() / 1000;
+
+let audio = document.createElement("audio");
+audio.src = "./media/notification.ogg";
+audio.volume = 0;
+let music = document.createElement("audio");
+
+let socket = new WebSocket(SERVER_URL);
+
+let templates = new Map([
+    ['common_window',
+        `<div id="%ID%" class="chat-personal z-index-normal">
+                <div class="text-center chat-title chat-title-color box-shadow">
+                    <div class="table-cell title-left text-left btn-back"></div>
+                    <div class="table-cell title-center"><span class="group-name"></span>(<span class="total">0</span>)</div>
+                    <div class="table-cell title-right text-center">
+                        <div class="inline-block width-half btn-video"><i class="fa fa-video-camera" aria-hidden="true"></i></div>
+                        <div class="inline-block width-half btn-more"><i class="fa fa-paperclip" aria-hidden="true"></i></div>
+                    </div>
+                </div>
+                <div class="chat-content"></div>
+                <div class="text-center"><a href="javascript:void(0);" class="query-history">查看历史消息</a></div>
+                <div class="chat-features input-group z-index-normal">
+                    <span class="input-group-btn">
+                        <button type="button" class="btn btn-success-outline btn-emotion">
+                            <i class="fa fa-smile-o" aria-hidden="true"></i>
+                        </button>
+                    </span>
+                    <textarea class="form-control mess-input" autofocus rows="1" placeholder="说点什么吧..." maxlength="${MAX_LENGTH}"></textarea>
+                    <span class="input-group-btn">
+                        <button type="button" class="btn btn-success-outline mess-submit">发送</button>
+                    </span>
+                </div>
+            </div>`],
+    ['person_window',
+        `<div id="%ID%" class="chat-personal z-index-normal">
+                <div class="text-center chat-title chat-title-color">
+                    <div class="table-cell title-left text-left btn-back"></div>
+                    <div class="table-cell title-center">
+                        <span class="chat-status chat-status-online"></span>
+                        <span class="chat-username"></span>
+                    </div>
+                    <div class="table-cell title-right text-center">
+                        <div class="inline-block width-half btn-video"><i class="fa fa-video-camera" aria-hidden="true"></i></div>
+                        <div class="inline-block width-half btn-more"><i class="fa fa-paperclip" aria-hidden="true"></i></div>
+                    </div>
+                </div>
+                <div class="text-center"><a href="javascript:void(0);" class="query-history">查看历史消息</a></div>
+                <div class="chat-content"></div>
+                <div class="chat-features input-group z-index-normal">
+                    <span class="input-group-btn">
+                        <button type="button" class="btn btn-success-outline btn-emotion">
+                            <i class="fa fa-smile-o" aria-hidden="true"></i>
+                        </button>
+                    </span>
+                    <textarea class="form-control mess-input" autofocus rows="1" placeholder="说点什么吧..." maxlength="${MAX_LENGTH}"></textarea>
+                    <span class="input-group-btn">
+                        <button type="button" class="btn btn-success-outline mess-submit">发送</button>
+                    </span>
+                </div>
+            </div>`],
+    ['time_message', `<div class="text-center chat-system"><span>%TIME%</span></div>`],
+    ['history_common_btn', `<div class="text-center"><a href="javascript:;">查看历史消息</a></div>`],
+    ['history_personal_btn', `<div class="text-center"><a href="javascript:;">查看历史消息</a></div>`],
+    ['common_message',
+        `<table class="table-chat">
+            <tr>
+                <td class="td-head">
+                    <div class="head text-center text-muted img-circle">
+                        <a href="javascript:void(0);" title="点击头像私聊" data-id="%ID%" onclick="PersonWindow.toShow(this)">%AVATAR%</a>
+                    </div>
+                </td>
+                <td class="td-triangle"><div class="left-triangle-common"></div></td>
+                <td><div class="text-left text-sm">%INFO%:</div><div class="bubble-left text-left text-color">%MESSAGE%</div></td>
+                <td class="td-blank"></td>
+            </tr>
+        </table>`],
+    ['my_message',
+        `<table class="table-chat">
+            <tr>
+                <td class="td-blank"></td>
+                <td><div class="text-right text-sm">%INFO%:</div><div class="bubble-right text-left text-color">%MESSAGE%</div></td>
+                <td class="td-triangle"><div class="right-triangle-common"></div></td>
+                <td class="td-head"><div class="head text-center text-muted img-circle">%AVATAR%</div></td>
+            </tr>
+        </table>`],
+    ['self_message',
+        `<table class="table-chat">
+            <tr>
+                <td class="td-blank"></td>
+                <td><div class="bubble-right text-left">%MESSAGE%</div></td>
+                <td class="td-triangle"><div class="right-triangle"></div></td>
+                <td class="td-head"><div class="head text-center text-muted img-circle">%AVATAR%</div></td>
+            </tr>
+        </table>`],
+    ['private_message',
+        `<table class="table-chat">
+            <tr>
+                <td class="td-head">
+                    <div class="head text-center text-muted img-circle">
+                        <a href="javascript:void(0);" title="点击头像私聊">%AVATAR%</a>
+                    </div>
+                </td>
+                <td class="td-triangle"><div class="left-triangle"></div></td>
+                <td><div class="bubble-left text-left">%MESSAGE%</div></td>
+                <td class="td-blank"></td>
+            </tr>
+        </table>`],
+    ['warning_message',
+        `<div class="text-center text-danger">%MESSAGE%</div>`],
+    ['system_message',
+        `<div class="text-center text-muted">%MESSAGE%</div>`],
+    ['welcome_message',
+        `<div class="text-center text-info">
+            欢迎<a href="javascript:void(0);" data-id="%ID%" onclick="PersonWindow.toShow(this)">%USERNAME%</a>进入聊天室
+        </div>`],
+    ['quit_message',
+        `<div class="text-center text-muted">
+            用户%USERNAME%退出聊天室
+        </div>`],
+    ['welcome_text', '欢迎%USERNAME%进入聊天室'],
+    ['quit_text', '用户%USERNAME%退出聊天室'],
+    ['original_text', '%MESSAGE%'],
+    ['tip',
+        `<div class="text-center text-info">欢迎进入聊天室。文明上网，礼貌发言</div>`],
+    ['image',
+        `<img class="img-responsive img-msg" src="%URL%" alt="%USERNAME%" title="点击图片预览" />`],
+    ['music_message',
+        `<i class="fa fa-music fa-3x music-color table-cell"></i>
+        <div class="music-info table-cell" data-url="%MUSIC_URL%" title="点击播放/暂停" onclick="MusicWindow.playMusic(this, event)">
+            <progress class="progress music-color music-progress" value="0" max="100" data-time="0">0%</progress>
+            <span class="text-left music-name">%MUSIC_NAME%</span><span class="text-right music-during"></span>
+        </div>`],
+    ['contact_list_admin',
+        `<div id="%ID%" class="contacts-item">
+            <div class="contacts-head text-center text-muted img-circle table-cell">
+                <img src="./images/chat.png">
+            </div>
+            <div class="contacts-content table-cell">
+                <div class="contacts-title">%USERNAME%</div>
+                <div class="contacts-prop text-muted"><span class="user-status">%USER_STATUS%</span><span class="user-sign">%SIGN%</span></div>
+            </div>
+            <div class="table-cell contacts-btn">
+                <button type="button" class="btn btn-danger-outline user-remove">拉黑</button>
+            </div>
+        </div>`],
+    ['contact_list_user',
+        `<div id="%ID%" class="contacts-item">
+            <div class="contacts-head text-center text-muted img-circle table-cell">
+                <img src="./images/chat.png">
+            </div>
+            <div class="contacts-content table-cell">
+                <div class="contacts-title">%USERNAME%</div>
+                <div class="contacts-prop text-muted"><span class="user-status">%USER_STATUS%</span><span class="user-sign">%SIGN%</span></div>
+            </div>
+        </div>`],
+    ['message_list_item',
+        `<div id="%ID%" class="message-item animated">
+            <div class="head text-center text-muted img-circle message-head table-cell">
+                
+            </div>
+            <div class="message-content table-cell">
+                <div class="message-prop display-table">
+                    <span class="message-title table-cell"></span>
+                    <span class="message-time table-cell text-muted"></span>
+                </div>
+                <div class="message-new text-muted">
+                    <span class="message-last table-cell text-truncate"></span>
+                    <span class="hidden message-badge table-cell bg-info img-circle text-center text-truncate"></span>
+                </div>
+            </div>
+        </div>`],
+]);
+
 String.prototype.replaceMulti = function (search, replace) {
-    var str = this;
-    for (var i = 0, len = search.length; i < len; i++) {
-        str = str.replace(new RegExp(search[i], 'gi'), replace[i]);
-    }
+    let str = this;
+    search.forEach((value, key) => {
+        str = str.replace(new RegExp(value, 'gi'), replace[key]);
+    });
     return str;
 };
 
-ws.onopen = function () {
-    messageHelper.onOpen();
+Date.prototype.getTimeString = function () {
+    return this.toTimeString().substr(0, 8);
+};
+Date.prototype.getDateString = function () {
+    let year = this.getFullYear();
+    let month = this.getMonth() + 1;
+    let day = this.getDate();
+    return `${year}-${month}-${day}`;
 };
 
-ws.onclose = function (e) {
-    messageHelper.onClose(e);
-};
-
-ws.onerror = function (e) {
-    messageHelper.onError(e);
-};
-
-//TODO 配置文件，直接调用方法
-ws.onmessage = function (message) {
-    messageHelper.onMessage(message);
-};
-
-var dataHelper = {
-    is_msgpack: typeof msgpack == "object",
-    /**
-     * 编码数据
-     * @param {object} obj
-     * @returns {string}
-     */
-    encode: function (obj) {
-        return JSON.stringify(obj);
-    },
-    /**
-     * 解码数据
-     * @param {string} str
-     * @returns {object}
-     */
-    decode: function (str) {
-        return JSON.parse(str);
+//主窗口
+class MainWindow {
+    constructor() {
+        this.window = $(".main-box");
+        this.navs = this.window.find(".box-nav li");
     }
-};
 
-//======================消息处理============================
-var im = {
-    layer_user: [], //保存用户窗口顺序
-    chatContainer: $(".chat-box"),
-    current_user_id: 0, //当前聊天的用户ID
-    chat_personal_html:
-        '<div id="%ID%" class="chat-personal animated %CLASS_NAME%">\
-            <span class="chat-back" onclick="im.hide(this);"><返回</span>\
-            <div class="chat-title">\
-                <span class="chat-status chat-status-online"></span>\
-                <span>%USERNAME%</span>\
-            </div>\
-            <div class="chat-content">%MESSAGE%</div>\
-        </div>',
-    contactsContainer: $("#contacts"),
-    getWindowId: function (user_id) {
-        return "user-" + user_id;
-    },
-    getWindow: function (user_id) {
-        return $("#" + this.getWindowId(user_id));
-    },
-    hasWindow: function (user_id) {
-        return this.getWindow(user_id).length > 0;
-    },
-    isTop: function (user_id) {
-        return user_id == this.current_user_id;
-    },
-    getWindowContent: function (user_id) {
-        return this.getWindow(user_id).children(".chat-content");
-    },
-    writeMessage: function (user_id, html) {
-        this.getWindowContent(user_id).append(html);
-    },
-    writeHistoryMessage: function (user_id, html) {
-        this.getWindowContent(user_id).prepend(html);
-    },
-    tip: function (user, html, timestamp) {
-        this.open(user, html, timestamp, true);
-        if (this.isTop(user.user_id)) {
-            //当前正在聊天，则不提示
-            return;
-        }
-
-        audio.play();
-
-        var src = user.avatar ? './' + user.avatar : './images/chat.png';
-        layer.open({
-            style: 'background:#fff;cursor:pointer;bottom:-100px;',
-            content:'<div class="chat-min"><img src="'+src+'"><span>收到新消息</span></div>',
-            skin: 'msg',
-            success: function(elem) {
-                elem.onclick = function () {
-                    layer.close(this.getAttribute("index")); //点击时关闭弹框
-                    im.open(user, "", timestamp);
-                }
+    init() {
+        let swipe = new Swipe(this.window.get(0), {
+            speed: 150,
+            callback: (e, pos, li) => {
+                this.navs.removeClass("box-active").eq(pos).addClass("box-active");
             }
         });
-    },
-    open: function (user, html, timestamp, hidden) {
-        var user_id = user.user_id;
-        var username = user.username;
-        html = (typeof html == "undefined") ? "" : html;
-        hidden = typeof hidden != "undefined";
-
-        if (!hidden) {
-            this.current_user_id = user_id;
-            this.chatContainer.removeClass("hidden");
-            messageHelper.setReceiver(user);
-        }
-
-        if (this.hasWindow(user_id)) {
-            this.writeMessage(user_id, html);
-            var user_window = this.getWindow(user_id);
-            if (!hidden) {
-                user_window.removeClass("hidden bounceOutRight z-index-normal").addClass("bounceInRight z-index-top");
-            }
-            //检测在线
-            if (messageHelper.isOnline(user_id)) {
-                user_window.find(".chat-status").removeClass("chat-status-offline").addClass("chat-status-online");
-            } else {
-                user_window.find(".chat-status").removeClass("chat-status-online").addClass("chat-status-offline");
-            }
-        } else {
-            //无窗口，创建
-            html = messageHelper.history_personal_btn + html; //历史消息按钮
-            timestamp = (typeof timestamp == "undefined") ? (new Date()).getTime() / 1000 : timestamp;
-            messageHelper.setHistoryTime(user_id, timestamp);
-
-            var window_id = this.getWindowId(user_id);
-            var class_name = hidden ? "hidden z-index-normal" : "bounceInRight z-index-top";
-            var search = ["%ID%", "%CLASS_NAME%", "%USERNAME%", "%MESSAGE%"];
-            var replace = [window_id, class_name, username, html];
-            html = this.chat_personal_html.replaceMulti(search, replace);
-            this.chatContainer.append(html);
-        }
-
-        this.addLayer(user);
-        $(".chat-personal").not("#" + this.getWindowId(user_id)).removeClass("z-index-top").addClass("z-index-normal");
-        this.autoBottom();
-    },
-    hide: function (btn) {
-        this.delLayer();
-        $(btn).parent(".chat-personal").removeClass("bounceInRight z-index-top").addClass("bounceOutRight");
-        var len = this.layer_user.length;
-        if (0 == len) {
-            this.current_user_id = 0;
-            this.hideAll();
-        } else {
-            var user = this.layer_user[len - 1];
-            this.current_user_id = user.user_id;
-            messageHelper.setReceiver(user);
-        }
-        window.setTimeout(function () {
-            $(btn).parent(".chat-personal").addClass("hidden z-index-normal");
-        }, 500);
-    },
-    hideAll: function () {
-        this.layer_user = [];
-        messageHelper.setReceiver(0);
-        var container = this.chatContainer;
-        window.setTimeout(function () {
-            container.addClass("hidden");
-        }, 500);
-    },
-    addLayer: function (user) {
-        var index = false;
-        //查找数组中是否已经存在该用户，有则删除，之后重新排列
-        for (var i in this.layer_user) {
-            if (this.layer_user[i].user_id == user.user_id) {
-                index = i;
-                break;
-            }
-        }
-        if (index !== false) {
-            this.layer_user.splice(index, 1);
-        }
-        this.layer_user.push(user); //将用户加入数组队列
-    },
-    delLayer: function () {
-        this.layer_user.pop(); //将当前用户移出队列
-    },
-    autoBottom: function () {
-        if (this.current_user_id) {
-            var container = this.getWindowContent(this.current_user_id);
-            container.scrollTop(container[0].scrollHeight - container[0].offsetHeight);
-        }
-    },
-    openContacts: function () {
-        this.contactsContainer.removeClass("hidden bounceOut").addClass("animated bounceIn");
-        //this.contactsContainer.removeClass("hidden slideOutLeft").addClass("animated slideInLeft");
-    },
-    closeContacts: function () {
-        this.contactsContainer.addClass("animated bounceOut").removeClass("bounceIn");
-        //this.contactsContainer.removeClass("slideInLeft").addClass("animated slideOutLeft");
-    }
-};
-
-window.MessageHelper = function (options) {
-    this.room_container = options.room_container;
-    this.online_container = options.online_container;
-    this.submit_button = options.submit_button;
-    this.input_container = options.input_container;
-    this.upload_container = options.upload_container;
-    this.upload_music_container = options.upload_music_container;
-    this.input_container.attr("maxlength", MAX_LENGTH);
-    this.image_loading = 0; //图片上传动画
-    this.image_flag = true; //发送图片标志
-    var _this = this;
-
-    this.room_container.append(this.history_common_btn);
-
-    //粘贴图片
-    this.input_container.pastableTextarea(COMPRESS_PERCENT).on("loadImage", function () {
-        _this.image_loading = _this.loading("正在分析，请稍候...");
-    }).on("pasteImage", function (e, data) {
-        _this.image_loading = _this.loading('正在上传，请稍候...');
-        if (!_this.image_flag) {
-            return _this.toast('请等待图片上传完成再发送');
-        }
-        var type = receiver_id ? PERSONAL_IMAGE : COMMON_IMAGE;
-        var image = data.dataURL;
-        if (image.length > MAX_IMAGE) {
-            var size = MAX_IMAGE / 1024 / 1024;
-            _this.toast('图片太大，目前只支持'+size+'M');
-            return layer.close(_this.image_loading);
-        }
-        _this.image_flag = false;
-        messageHelper.sendMessageAsBlob(type, user.user_id, receiver_id, image);
-    }).on("pasteImageStart", function () {
-        _this.image_loading = _this.loading("处理中...");
-    });
-
-    //压缩图片
-    var is_locked = false;
-    var image_regexp = /(?:jpe?g|png|gif)/i;
-    function compressAndSend(files) {
-        if (is_locked) {
-            return _this.toast("正在上传中，请稍候再试");
-        }
-        var len = files.length;
-        if (len > MAX_UPLOAD) {
-            return _this.toast("目前最多只能上传"+MAX_UPLOAD+"张图片");
-        } else if (0 == len) {
-            return;
-        }
-        is_locked = true;
-        var type = receiver_id ? PERSONAL_IMAGE : COMMON_IMAGE;
-        var index = _this.loading("正在处理，总共"+len+"张图片", len*2);
-        var complete = 0;
-        function unlock() {
-            if (complete >= len) {
-                is_locked = false;
-                layer.close(index);
-            }
-        }
-        for (var i=0;i<len;i++) {
-            if (files[i].size < MAX_IMAGE / 2) {
-                var file = files[i];
-                var reader = new FileReader();
-                reader.onload = function (event) {
-                    complete++;
-                    if (!image_regexp.test(file.type.split("/").pop())) {
-                        unlock();
-                        _this.toast("请选择图片上传");
-                    } else {
-                        _this.sendMessageAsBlob(type, user.user_id, receiver_id, this.result);
-                        if (complete >= len) {
-                            unlock();
-                            _this.toast("上传完毕，点击图片可以预览哦:-)");
-                        }
-                    }
-                };
-                reader.readAsDataURL(file);
-            } else {
-                //压缩图片
-                new html5ImgCompress(files[i], {
-                    before: function(file) {
-                    },
-                    done: function (file, base64) {
-                        complete++;
-                        if (base64.length > MAX_IMAGE) {
-                            _this.toast(file.name+"太大");
-                        } else {
-                            _this.sendMessageAsBlob(type, user.user_id, receiver_id, base64);
-                        }
-                        if (complete >= len) {
-                            unlock();
-                            _this.toast("上传完毕，点击图片可以预览哦:-)");
-                        }
-                    },
-                    fail: function(file) {
-                        complete++;
-                        unlock();
-                        _this.toast("图片压缩失败");
-                    },
-                    complete: function(file) {
-                    },
-                    notSupport: function(file) {
-                        complete++;
-                        unlock();
-                        _this.toast('当浏览器不支持，换Chrome试试吧;-)');
-                    }
-                });
-            }
-        }
-    }
-
-    //点击上传图片
-    var input = this.upload_container.next("[type=file]");
-    this.upload_container.click(function () {
-        _this.toast("最多"+MAX_UPLOAD+"张哦");
-        input.trigger("click");
-    });
-    input.change(function () {
-        compressAndSend(this.files);
-    });
-
-    //上传音乐
-    var input_music = this.upload_music_container.next("[type=file]");
-    this.upload_music_container.click(function () {
-        input_music.trigger("click");
-    });
-    input_music.change(function () {
-        if (0 == this.files.length) {
-            _this.toast("请选择一首音乐");
-            return;
-        }
-        var index = _this.loading("正在处理，请稍候...", 3);
-        var reader = new FileReader();
-        var file = this.files[0];
-        reader.onload = function (event) {
-            layer.close(index);
-            var name = file.name;
-            var type = file.type;
-            var regexp = /(?:mp3|ogg|wav)/i;
-            if (!regexp.test(type.split('/').pop())) {
-                _this.toast("目前只支持mp3,ogg,wav格式");
-                return;
-            }
-            if (file.size > MAX_MUSIC_SIZE) {
-                var size = MAX_MUSIC_SIZE / 1024 / 1024;
-                _this.toast("文件大太，目前最大"+size+'M');
-                return;
-            }
-            index = _this.loading("上传中，请稍候...", 3);
-            type = (0 == receiver_id) ? COMMON_MUSIC : PERSONAL_MUSIC;
-            _this.sendMessageAsBlob(type, user.user_id, receiver_id, {
-                name: name,
-                data: this.result
-            });
-            layer.close(index);
-            _this.toast("上传音乐完毕");
-        };
-        reader.readAsDataURL(file);
-    });
-
-    //拖放上传
-    //移入
-    document.addEventListener("dragenter", function (e) {
-        $("body").css("border", "5px solid rgba(0,255,0, 0.3)");
-    }, false);
-    //移出
-    document.addEventListener("dragleave", function (e) {
-        $("body").css("border", "none");
-    }, false);
-    //放到何处
-    document.addEventListener("dragover", function (e) {
-        e.preventDefault(); //阻止默认的无法放置
-    }, false);
-    //进行放置
-    document.addEventListener("drop", function (e) {
-        e.preventDefault(); //阻止默认的以链接方式打开
-        $("body").css("border", "none");
-        compressAndSend(e.dataTransfer.files);
-    }, false);
-};
-
-MessageHelper.prototype = {
-    retry_times: 0, //断线重试次数
-
-    prev_time: 0,//上次消息时间 (new Date()).getTime()
-
-    show_time_during: 300,//显示聊天时间的间隔时长
-
-    query_time: {}, //查询时间
-
-    history_time: {}, //历史时间
-
-    time_message: '<div class="text-center chat-system"><span>%TIME%</span></div>',//时间信息
-
-    is_first: true, //是否第一次进入
-
-    search: [" ", "\n", "\r\n", "\t", "\\\\'", '\\\\\\\\', MATCH_URL], //空格、换行、制表符...转换标签，保持原貌（适用于颜文字、代码等）
-
-    replace: ["&nbsp;", "<br />", "<br />", "&nbsp;&nbsp;&nbsp;&nbsp;", "'", "\\", "<a href='$1' target='_blank'>$1</a>"],
-
-    history_common_btn: '<div class="text-center"><a href="javascript:;" onclick="messageHelper.getHistoryCommonMessage(this, event)">查看历史消息</a></div>',
-
-    history_personal_btn: '<div class="text-center"><a href="javascript:;" onclick="messageHelper.getHistoryPersonalMessage(this, event)">查看历史消息</a></div>',
-
-    common_message:
-        '<table class="table-chat">\
-            <tr>\
-                <td class="td-head">\
-                    <div class="head text-center text-muted img-circle">\
-                        <a href=\'javascript:im.open(%USER%);\' title="点击头像私聊">%AVATAR%</a>\
-                    </div>\
-                </td>\
-                <td class="td-triangle"><div class="left-triangle-common"></div></td>\
-                <td><div class="text-left text-sm">%INFO%:</div><div class="bubble-left text-left text-color">%MESSAGE%</div></td>\
-                <td class="td-blank"></td>\
-            </tr>\
-        </table>',
-
-    my_message:
-        '<table class="table-chat">\
-            <tr>\
-                <td class="td-blank"></td>\
-                <td><div class="text-right text-sm">%INFO%:</div><div class="bubble-right text-left text-color">%MESSAGE%</div></td>\
-                <td class="td-triangle"><div class="right-triangle-common"></div></td>\
-                <td class="td-head"><div class="head text-center text-muted img-circle">%AVATAR%</div></td>\
-            </tr>\
-        </table>',//我发出的 me@all
-
-    self_message:
-        '<table class="table-chat">\
-            <tr>\
-                <td class="td-blank"></td>\
-                <td><div class="bubble-right text-left">%MESSAGE%</div></td>\
-                <td class="td-triangle"><div class="right-triangle"></div></td>\
-                <td class="td-head"><div class="head text-center text-muted img-circle">%AVATAR%</div></td>\
-            </tr>\
-        </table>',//我发出的 me@other
-
-    private_message:
-        '<table class="table-chat">\
-            <tr>\
-                <td class="td-head">\
-                    <div class="head text-center text-muted img-circle">\
-                        <a href=\'javascript:im.open(%USER%);\' title="点击头像私聊">%AVATAR%</a>\
-                    </div>\
-                </td>\
-                <td class="td-triangle"><div class="left-triangle"></div></td>\
-                <td><div class="bubble-left text-left">%MESSAGE%</div></td>\
-                <td class="td-blank"></td>\
-            </tr>\
-        </table>',//私信 other@me
-
-    warning_message: '<div class="text-center text-danger">%MESSAGE%</div>',
-
-    system_message: '<div class="text-center text-muted">%MESSAGE%</div>',
-
-    welcome_message:
-        '<div class="text-center text-info">\
-            欢迎<a href=\'javascript:im.open(%USER%);\'>%USERNAME%</a>进入聊天室\
-        </div>',
-
-    quit_message:
-        '<div class="text-center text-muted">\
-            用户%USERNAME%退出聊天室\
-        </div>',
-
-    tip: '<div class="text-center text-info">欢迎进入聊天室。文明上网，礼貌发言</div>',
-
-    common_image: '<img class="img-responsive img-msg" src="%URL%" onload="messageHelper.autoBottom()" onclick="imageHelper.preview(this)" alt="%SENDER%" title="点击图片预览" />',
-
-    history_common_image: '<img class="img-responsive img-msg" src="%URL%" onload="" onclick="imageHelper.preview(this)" alt="%SENDER%" title="点击图片预览" />',
-
-    private_image: '<img class="img-responsive img-msg" src="%URL%" onload="im.autoBottom()" onclick="imageHelper.preview(this)" alt="%SENDER%" title="点击图片预览" />',
-
-    history_private_image: '<img class="img-responsive img-msg" src="%URL%" onload="" onclick="imageHelper.preview(this)" alt="%SENDER%" title="点击图片预览" />',
-
-    music_message:
-        '<i class="fa fa-music fa-3x music-color table-cell"></i>\
-        <div class="music-info table-cell" onclick="messageHelper.playMusic(this, event);" data-url="%MUSIC_URL%" title="点击播放/暂停">\
-            <progress class="progress music-color music-progress" value="0" max="100" data-time="0">0%</progress>\
-            <span class="text-left music-name">%MUSIC_NAME%</span><span class="text-right music-during"></span>\
-        </div>',
-
-    welcome: function (mess) {
-        var html = this.getTimeMessage(mess);
-        if (user.user_id == mess.user.user_id) {
-            if (this.is_first) {
-                html += this.tip;
-                this.toast(user.username + "，欢迎回来");
-                this.is_first = false;
-                this.history_time[0] = this.query_time[0] = mess.timestamp; //查询时间点
-            } else {
-                html = "";
-                this.toast("已成功连接！");
-            }
-        } else {
-            var search = ["%USER_ID%", "%USERNAME%", "%USER%"];
-            var replace = [mess.user.user_id, mess.user.username, JSON.stringify(mess.user)];
-            html += this.welcome_message.replaceMulti(search, replace);
-        }
-        this.room_container.append(html);
-        this.autoBottom();
-    },
-
-    quit: function (mess) {
-        var html = this.getTimeMessage(mess);
-        var search = ["%USERNAME%"];
-        var replace = [mess.user.username];
-        html += this.quit_message.replaceMulti(search, replace);
-        this.room_container.append(html);
-        this.autoBottom();
-    },
-
-    getCommonHtml: function (mess, html) {
-        var search, avatar, info, replace;
-        avatar = mess.sender.avatar ? '<img src="./'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
-        info = mess.sender.username;
-        mess.mess = mess.mess.replaceMulti(this.search, this.replace);
-        if (user.user_id == mess.sender.user_id) {
-            search = ["%INFO%", "%MESSAGE%", "%AVATAR%"];
-            replace = [info, mess.mess, avatar];
-            html += this.my_message.replaceMulti(search, replace);
-        } else {
-            search = ["%USER%", "%AVATAR%", "%INFO%", "%MESSAGE%"];
-            replace = [JSON.stringify(mess.sender), avatar, info, mess.mess];
-            html += this.common_message.replaceMulti(search, replace);
-        }
-        return html;
-    },
-
-    common: function (mess) {
-        var html = this.getTimeMessage(mess);
-        html = this.getCommonHtml(mess, html);
-        this.room_container.append(html);
-        this.autoBottom();
-    },
-
-    getCommonImageHtml: function (mess, html, image_html) {
-        var search = ["%URL%", "%SENDER%"];
-        var replace = [href + mess.mess, mess.sender.username];
-        var image = image_html.replaceMulti(search, replace);
-        var avatar = mess.sender.avatar ? '<img src="./'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
-        var info = mess.sender.username;
-        if (user.user_id == mess.sender.user_id) {
-            search = ["%INFO%", "%MESSAGE%", "%AVATAR%"];
-            replace = [info, image, avatar];
-            html += this.my_message.replaceMulti(search, replace);
-            this.image_flag = true;
-            this.image_loading && layer.close(this.image_loading);
-        } else {
-            search = ["%USER%", "%AVATAR%", "%INFO%", "%MESSAGE%"];
-            replace = [JSON.stringify(mess.sender), avatar, info, image];
-            html += this.common_message.replaceMulti(search, replace);
-        }
-        return html;
-    },
-
-    commonImage: function (mess) {
-        var html = this.getTimeMessage(mess);
-        html = this.getCommonImageHtml(mess, html, this.common_image);
-        this.room_container.append(html);
-    },
-
-    getSelfHtml: function (mess, html) {
-        mess.mess = mess.mess.replaceMulti(this.search, this.replace);
-        var avatar = mess.sender.avatar ? '<img src="./'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
-        var search = ["%MESSAGE%", "%AVATAR%"];
-        var replace = [mess.mess, avatar];
-        html += this.self_message.replaceMulti(search, replace);
-        return html;
-    },
-
-    self: function (mess) {
-        var html = this.getTimeMessage(mess);
-        html = this.getSelfHtml(mess, html);
-
-        im.writeMessage(mess.receiver.user_id, html);
-        im.autoBottom();
-    },
-
-    getSelfImageHtml: function(mess, html, image_html) {
-        var search = ["%URL%", "%SENDER%"];
-        var replace = [href + mess.mess, mess.sender.username];
-        var image = image_html.replaceMulti(search, replace);
-        var avatar = mess.sender.avatar ? '<img src="./'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
-
-        search = ["%MESSAGE%", "%AVATAR%"];
-        replace = [image, avatar];
-        html += this.self_message.replaceMulti(search, replace);
-        return html;
-    },
-
-    selfImage: function (mess) {
-        var html = this.getTimeMessage(mess);
-        html = this.getSelfImageHtml(mess, html, this.private_image);
-
-        this.image_flag = true;
-        this.image_loading && layer.close(this.image_loading);
-        im.writeMessage(mess.receiver.user_id, html);
-        im.autoBottom();
-    },
-
-    getOtherHtml: function (mess, html) {
-        mess.mess = mess.mess.replaceMulti(this.search, this.replace);
-        var avatar = mess.sender.avatar ? '<img src="./'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
-        var search = ["%USER%", "%AVATAR%", "%MESSAGE%"];
-        var replace = [JSON.stringify(mess.sender), avatar, mess.mess];
-        html += this.private_message.replaceMulti(search, replace);
-        return html;
-    },
-
-    other: function (mess) {
-        var html = this.getTimeMessage(mess);
-        html = this.getOtherHtml(mess, html);
-
-        im.tip(mess.sender, html, mess.timestamp);
-    },
-
-    getOtherImageHtml: function(mess, html, image_html) {
-        var search = ["%URL%", "%SENDER%"];
-        var replace = [href + mess.mess, mess.sender.username];
-        var image = image_html.replaceMulti(search, replace);
-        var avatar = mess.sender.avatar ? '<img src="./'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
-        search = ["%USER%", "%AVATAR%", "%MESSAGE%"];
-        replace = [JSON.stringify(mess.sender), avatar, image];
-        html += this.private_message.replaceMulti(search, replace);
-        return html;
-    },
-
-    otherImage: function (mess) {
-        var html = this.getTimeMessage(mess);
-        html = this.getOtherImageHtml(mess, html, this.private_image);
-
-        im.tip(mess.sender, html, mess.timestamp);
-    },
-
-    //获取历史消息
-    getHistoryCommonMessage: function (btn, e) {
-        e.stopPropagation();
-        btn.parentNode.removeChild(btn); //暂时删除按钮，接收到数据后，再显示按钮，防止操作频繁
-        var query_time = this.query_time[0] - 0.0001; //精确到4位，和服务器保持一致
-        ws.send(dataHelper.encode({
-            "type": HISTORY_COMMON_MESSAGE,
-            "sender_id": user.user_id,
-            "query_time": query_time
-        }));
-    },
-
-    setQueryTime: function (receiver_id) {
-        var date = new Date();
-        date.setTime(this.query_time[receiver_id] * 1000);
-        var curr_date = date.toDateString(); //当前日期
-        var time = date.getHours()+date.getMinutes()+date.getSeconds();
-        var second = (0 == time) ? 86400 : 0; //如果不是整点，则查截止到今天的，否则是前一天的
-        this.query_time[receiver_id] = Date.parse(curr_date) / 1000 - second;
-
-        date.setTime((this.query_time[receiver_id]-1) * 1000);
-        var query_date = date.toLocaleDateString();
-        this.toast("继续点击查" + query_date + "消息");
-    },
-
-    setHistoryTime: function (receiver_id, timestamp) {
-        this.history_time[receiver_id] = this.query_time[receiver_id] = timestamp;
-    },
-
-    //历史消息处理
-    history_common_message: function (mess) {
-        var data = mess.mess, len = data.length;
-        var html = this.history_common_btn;
-        if (0 == len) {
-            this.setQueryTime(0);
-
-            this.room_container.prepend(html);
-            return;
-        }
-
-        for (var i=0;i<len;i++) {
-            var dataI = dataHelper.decode(data[i]);
-            var time_message = this.getHistoryTimeMessage(0, dataI);
-            switch (dataI.type) {
-                case COMMON:
-                    html += this.getCommonHtml(dataI, time_message);
-                    break;
-                case COMMON_IMAGE:
-                case COMMON_EMOTION:
-                    html += this.getCommonImageHtml(dataI, time_message, this.history_common_image);
-                    break;
-                case COMMON_MUSIC:
-                    html += this.getCommonMusicHtml(dataI, time_message);
-                    break;
-            }
-        }
-        this.room_container.prepend(html);
-        this.setHistoryTime(0, dataHelper.decode(data[0]).timestamp); //重置为第一个时间戳
-    },
-
-    getHistoryPersonalMessage: function (btn, e) {
-        e.stopPropagation();
-        btn.parentNode.removeChild(btn);
-        var query_time = this.query_time[receiver_id] - 0.0001;
-        ws.send(dataHelper.encode({
-            "type": HISTORY_PERSONAL_MESSAGE,
-            "sender_id": user.user_id,
-            "query_time": query_time,
-            "receiver_id": receiver_id
-        }));
-    },
-
-    history_personal_message: function (mess) {
-        var data = mess.mess,len=data.length;
-        var html = this.history_personal_btn;
-        var receiver_id = mess.receiver_id;
-        if (0 == len) {
-            this.setQueryTime(receiver_id);
-
-            im.writeHistoryMessage(receiver_id, html);
-            return;
-        }
-
-        for (var i=0;i<len;i++) {
-            var dataI = dataHelper.decode(data[i]), time_message;
-            switch (dataI.type) {
-                case PERSONAL:
-                    if (dataI.sender.user_id == user.user_id) {
-                        time_message = this.getHistoryTimeMessage(dataI.receiver.user_id, dataI);
-                        html += this.getSelfHtml(dataI, time_message);
-                    } else {
-                        time_message = this.getHistoryTimeMessage(dataI.sender.user_id, dataI);
-                        html += this.getOtherHtml(dataI, time_message);
-                    }
-                    break;
-                case PERSONAL_IMAGE:
-                case PERSONAL_EMOTION:
-                    if (dataI.sender.user_id == user.user_id) {
-                        time_message = this.getHistoryTimeMessage(dataI.receiver.user_id, dataI);
-                        html += this.getSelfImageHtml(dataI, time_message, this.history_private_image);
-                    } else {
-                        time_message = this.getHistoryTimeMessage(dataI.sender.user_id, dataI);
-                        html += this.getOtherImageHtml(dataI, time_message, this.history_private_image);
-                    }
-                    break;
-                case PERSONAL_MUSIC:
-                    if (dataI.sender.user_id == user.user_id) {
-                        time_message = this.getHistoryTimeMessage(dataI.receiver.user_id, dataI);
-                        html += this.getSelfMusicHtml(dataI, time_message);
-                    } else {
-                        time_message = this.getHistoryTimeMessage(dataI.sender.user_id, dataI);
-                        html += this.getOtherMusicHtml(dataI, time_message);
-                    }
-                    break;
-            }
-        }
-        im.writeHistoryMessage(receiver_id, html);
-
-        this.setHistoryTime(receiver_id, dataHelper.decode(data[0]).timestamp); //重置为第一个时间戳
-    },
-
-    getCommonMusicHtml: function (mess, html) {
-        var search, avatar, info, message, replace;
-        avatar = mess.sender.avatar ? '<img src="./'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
-        info = mess.sender.username;
-
-        search = ["%MUSIC_URL%", "%MUSIC_NAME%"];
-        replace = [mess.mess, mess.name];
-        message = this.music_message.replaceMulti(search, replace);
-
-        if (user.user_id == mess.sender.user_id) {
-            search = ["%INFO%", "%MESSAGE%", "%AVATAR%"];
-            replace = [info, message, avatar];
-            html += this.my_message.replaceMulti(search, replace);
-        } else {
-            search = ["%USER%", "%AVATAR%", "%INFO%", "%MESSAGE%"];
-            replace = [JSON.stringify(mess.sender), avatar, info, message];
-            html += this.common_message.replaceMulti(search, replace);
-        }
-        return html;
-    },
-
-    common_music: function (mess) {
-        var html = this.getTimeMessage(mess);
-        html = this.getCommonMusicHtml(mess, html);
-        this.room_container.append(html);
-        this.autoBottom();
-    },
-
-    getSelfMusicHtml: function (mess, html) {
-        var search, avatar, message, replace;
-        avatar = mess.sender.avatar ? '<img src="./'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
-        search = ["%MUSIC_URL%", "%MUSIC_NAME%"];
-        replace = [mess.mess, mess.name];
-        message = this.music_message.replaceMulti(search, replace);
-
-        search = ["%MESSAGE%", "%AVATAR%"];
-        replace = [message, avatar];
-        html += this.self_message.replaceMulti(search, replace);
-        return html;
-    },
-
-    self_music: function (mess) {
-        var html = this.getTimeMessage(mess);
-        html = this.getSelfMusicHtml(mess, html);
-
-        im.writeMessage(mess.receiver.user_id, html);
-    },
-
-    getOtherMusicHtml: function (mess, html) {
-        var search, avatar, message, replace;
-        avatar = mess.sender.avatar ? '<img src="./'+mess.sender.avatar+'" />' : '<img src="./images/chat.png" />';
-        search = ["%MUSIC_URL%", "%MUSIC_NAME%"];
-        replace = [mess.mess, mess.name];
-        message = this.music_message.replaceMulti(search, replace);
-
-        search = ["%USER%", "%AVATAR%", "%MESSAGE%"];
-        replace = [JSON.stringify(mess.sender), avatar, message];
-        html += this.private_message.replaceMulti(search, replace);
-        return html;
-    },
-
-    other_music: function (mess) {
-        var html = this.getTimeMessage(mess);
-        html = this.getOtherMusicHtml(mess, html);
-
-        im.tip(mess.sender, html, mess.timestamp);
-    },
-
-    music_timer: 0,
-
-    getDuring: function(second) {
-        var minute = Math.floor(second / 60);
-        var sec = Math.ceil(second - minute * 60);
-        minute = minute > 9 ? minute : '0' + minute;
-        sec = sec > 9 ? sec : '0' + sec;
-        return minute + ":" + sec;
-    },
-
-    playMusic: function (btn, e) {
-        e.stopPropagation(); //阻止冒泡事件
-        var url = href + $(btn).attr("data-url");
-        var progress = $(btn).children("progress");
-        var music_during = $(btn).children(".music-during");
-        if (music.src != url) {
-            clearInterval(this.music_timer);
-            music.pause();
-            music.src = url;
-        }
-
-        if (music.paused) {
-            music.currentTime = progress.attr("data-time"); //保留播放进度
-            music.play();
-            var _this = this;
-            this.music_timer = window.setInterval(function () {
-                try {
-                    var percent = (music.currentTime / music.duration * 100);
-                    progress.val(percent);
-                    progress.attr("data-time", music.currentTime);
-                    //计算时长
-                    music_during.text(_this.getDuring(music.currentTime) + "/" + _this.getDuring(music.duration));
-                    if (percent >= 100) {
-                        progress.attr("data-time", 0); //清零，下次重新播放
-                        clearInterval(_this.music_timer);
-                    }
-                } catch (e) {
-                    _this.toast("播放失败，请稍候再试...");
-                    console.log(e);
-                    clearInterval(_this.music_timer);
-                }
-            }, 200);
-        } else {
-            music.pause();
-            clearInterval(this.music_timer);
-        }
-    },
-
-    online_users: {}, //在线用户
-
-    online: function (mess) {
-        this.online_container.html("");
-        this.online_users = {};
-        var total = 0, list;
-        var users = mess.users;
-        var html = '<div class="form-control btn-success-outline text-center" onclick="im.hideAll();im.closeContacts();">所有人</div>';
-        if (1 == role_id) {
-            list =
-                '<div class="input-group">\
-                    <div class="form-control btn-success-outline text-center" onclick=\'im.open(%USER%);im.closeContacts();\'>%USERNAME%</div>\
-                    <span class="input-group-btn">\
-                        <button type="button" class="btn btn-danger-outline" onclick="messageHelper.forbid(\'%USER_ID%\', \'%ADMIN_ID%\')">拉黑</button>\
-                    </span>\
-                </div>';
-        } else {
-            list = '<div class="form-control btn-success-outline text-center" onclick=\'im.open(%USER%);im.closeContacts();\'>%USERNAME%</div>';
-        }
-        var search = ["%USER_ID%", "%USERNAME%", "%ADMIN_ID%", "%USER%"];
-        for (var i in users) {
-            total++;
-            if (user.user_id == users[i].user_id) continue;
-            var replace = [users[i].user_id, users[i].username, user.user_id, JSON.stringify(users[i])];
-            html += list.replaceMulti(search, replace);
-            this.online_users[users[i].user_id] = users[i].username;
-        }
-        $(".total").text(total);
-        this.online_container.append(html);
-    },
-
-    isOnline: function (user_id) {
-        return this.online_users.hasOwnProperty(user_id);
-    },
-
-    register: function (mess) {
-        //弹出框
-        $("#register").modal({
-            backdrop: true,
-            keyboard: false
+        this.navs.click(function () {
+            swipe.slide($(this).index(), 150);
         });
-        this.autoBottom();
-    },
+    }
+}
 
-    reg: function (username, password) {
-        if (!username) {
-            this.toast("请输入用户名");
-            return;
-        }
-        username = username.substr(0, 30);
-        !password && (password = '123456');
-        ws.send(dataHelper.encode({
-            type: REGISTER,
-            username: username,
-            password: password
-        }));
-    },
+let mainWindow = new MainWindow();
+mainWindow.init();
 
-    incorrect: function (mess) {
-        this.toast(mess.mess)
-        $("#password").val("");//清空密码
-        window.setTimeout(function () {
-            $("#error").text("");
-        }, 1000);
-        this.autoBottom();
-    },
-
-    login: function (mess) {
-        $("#register").modal("hide");// 弹框退出
-        user = mess.user;
-        role_id = user.role_id;
-        is_active = user.is_active;
-        setCookie("user", JSON.stringify(user));//刷新cookie
-        this.autoBottom();
-        this.input_container.focus();
-    },
-
-    error: function (mess) {
-        this.image_flag = true;
-        this.image_loading && layer.close(this.image_loading);
-        this.toast(mess.mess);
-    },
-
-    system: function (mess) {
-        var html = this.system_message.replace(/%MESSAGE%/g, mess.mess);
-        this.room_container.append(html);
-        this.autoBottom();
-    },
-
-    warning: function (mess) {
-        var html = this.warning_message.replace(/%MESSAGE%/g, mess.mess);
-        this.room_container.append(html);
-        this.autoBottom();
-    },
-
-    avatar_success: function (mess) {
-        var obj = {avatar: href + mess.mess};
-        $.extend(user, obj);
-        setCookie('user', JSON.stringify(user));
-        avatarHelper.close();
-        this.toast("上传成功，发消息试试吧;-)");
-    },
-
-    avatar_fail: function (mess) {
-        this.toast(mess.mess);
-    },
-
-    getTimeMessage: function (mess) {
-        var html = "";
-        if (Math.abs(mess.timestamp - this.prev_time) > this.show_time_during) {
-            html = this.time_message.replace(/%TIME%/g, mess.time);
-            this.prev_time = mess.timestamp;
-        }
-        return html;
-    },
-
-    getHistoryTimeMessage: function (user_id, mess) {
-        var html = "";
-        if (Math.abs(this.history_time[user_id] - mess.timestamp) > this.show_time_during) {
-            var date = new Date();
-            date.setTime(mess.timestamp * 1000);
-            var curr_date = date.toLocaleDateString();
-            html = this.time_message.replace(/%TIME%/g, curr_date + " " + mess.time);
-            this.history_time[user_id] = mess.timestamp;
-        }
-        return html;
-    },
-
-    //自动到底部，图片需要加载完成时再调用
-    autoBottom: function () {
-        this.room_container.scrollTop(this.room_container.get(0).scrollHeight - this.room_container.get(0).offsetHeight);
-    },
-
-    autoTop: function () {
-        this.room_container.scrollTop(0);
-    },
-
-    //设置接收人
-    setReceiver: function (user) {
-        var text;
-        if (0 == user) {
-            receiver_id = 0;
-            text = "发送";
-        } else {
-            receiver_id = user.user_id;
-            text = "@" + user.username;
-        }
-        this.submit_button.text(text);
-    },
-
-    //发送消息
-    send: function () {
-        this.input_container.focus();
-        var mess = this.input_container.val();
-        if ("" == mess) {
-            return;
-        }
-        if (mess.length > MAX_LENGTH)
-            mess = mess.substr(0, MAX_LENGTH);
-        var type = receiver_id ? PERSONAL : COMMON;
-        this.sendMessage(type, user.user_id, receiver_id, mess);
-        this.input_container.val("");
-    },
-
-    //按键ctrl+enter
-    sendMess: function (event) {
-        if (event.ctrlKey && event.keyCode == 13)
-            this.send();
-    },
-
-    forbid: function (user_id, admin_id) {
-        this.sendMessage(REMOVE, admin_id, user_id, "");
-    },
-
-    sendMessage: function (type, sender_id, receiver_id, mess) {
-        ws.send(dataHelper.encode({
-            type: type,
-            sender_id: sender_id,
-            receiver_id: receiver_id,
-            mess: mess
-        }));
-    },
-
-    sendMessageAsBlob: function (type, sender_id, receiver_id, mess) {
-        try {
-            ws.send(new Blob([dataHelper.encode({
-                type: type,
-                sender_id: sender_id,
-                receiver_id: receiver_id,
-                mess: mess
-            })], {type: "application/json"}));
-        } catch (e) {
-            //UC不能使用Blob，换明文试一次
-            this.sendMessage(type, sender_id, receiver_id, mess);
-        }
-    },
-
-    toast: function (content) {
+class Util {
+    static toast(content) {
         return layer.open({
             content: content
-            ,skin: 'msg'
-            ,time: 3
+            , skin: 'msg'
+            , time: 3
         });
-    },
+    }
 
-    loading: function (content, time, shadeClose) {
-        if (typeof time=="undefined") time = false;
-        if (typeof shadeClose=="undefined") shadeClose = true;
+    static loading(content, time, shadeClose) {
+        if (typeof time == "undefined") time = false;
+        if (typeof shadeClose == "undefined") shadeClose = true;
         return layer.open({
             type: 2
-            ,content: content
-            ,time: time
-            ,shadeClose: shadeClose
+            , content: content
+            , time: time
+            , shadeClose: shadeClose
         });
-    },
-
-    controlBell: function (btn) {
-        var i = $(btn).children("i");
-        if (i.hasClass("fa-bell-o")) {
-            this.toast("声音：关");
-            audio.volume = 0;
-            music.volume = 0;
-            i.removeClass("fa-bell-o").addClass("fa-bell-slash-o");
-        } else {
-            this.toast("声音：开");
-            audio.volume = 1;
-            music.volume = 1;
-            audio.play();
-            i.removeClass("fa-bell-slash-o").addClass("fa-bell-o");
-        }
-    },
-
-    about: function () {
-        layer.open({
-            content: "QQ群：345480905",
-            btn: "联知道了"
-        })
-    },
-
-    onOpen: function () {
-        //握手成功
-        if ((typeof(user) == 'object') && user.hasOwnProperty('user_id') && user.user_id) {
-            ws.send(dataHelper.encode({
-                type: LOGIN,
-                sender_id: user.user_id
-            }));
-        } else {
-            this.register();
-        }
-    },
-
-    onClose: function (e) {
-        //连接关闭
-        $(".total").text(0);//清除在线人数
-        $("#online").text("");//清除在线列表
-        var d = new Date();
-        var date = 'Y-m-d H:i:s';
-        var search = ['Y', 'm', 'd', 'H', 'i', 's'];
-        var replace = [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()];
-        date = date.replaceMulti(search, replace);
-        if (!is_active) {
-            return;
-        }
-        var index = this.loading(date + ' 已断线，重试中...', false, false);
-        var _this = this;
-        var timer = window.setInterval(function () {
-            try {
-                //断线重连
-                if (_this.retry_times >= MAX_LIMITS) {
-                    window.clearInterval(timer);
-                    layer.close(index);
-                    //alert(ws.readyState);
-                    _this.toast("无法连接到服务器，请稍候再试");
-                    return;
-                }
-                if (ws.readyState == WebSocket.OPEN) {
-                    window.clearInterval(timer);
-                    ws.onclose = function (e) {
-                        _this.onClose(e);
-                    };
-
-                    ws.onerror = function (e) {
-                        _this.onError(e);
-                    };
-
-                    ws.onmessage = function (message) {
-                        _this.onMessage(message);
-                    };
-                    _this.onOpen();
-                    layer.close(index);
-                    _this.retry_times = 0;
-                    return;
-                }
-                ws = new WebSocket(url);
-                _this.retry_times++;
-            } catch (e) {}
-        }, 2000);
-    },
-
-    onError: function (e) {
-        $(".total").text(0);//清除在线人数
-        $("#online").text("");//清除在线列表
-        this.toast('连接服务器失败');
-    },
-
-    onMessage: function (message) {
-        var mess = dataHelper.decode(message.data);
-        try {
-            switch (mess.type) {
-                case WELCOME://欢迎消息
-                    this.welcome(mess);
-                    break;
-                case QUIT://退出消息
-                    this.quit(mess);
-                    break;
-                case COMMON://公共消息
-                    this.common(mess);
-                    break;
-                case COMMON_IMAGE://公共消息
-                case COMMON_EMOTION:
-                    this.commonImage(mess);
-                    break;
-                case SELF://myself @other
-                    this.self(mess);
-                    break;
-                case SELF_IMAGE://myself @other
-                case SELF_EMOTION:
-                    this.selfImage(mess);
-                    break;
-                case OTHER://other @me
-                    this.other(mess);
-                    break;
-                case OTHER_IMAGE://other @me
-                case OTHER_EMOTION:
-                    this.otherImage(mess);
-                    break;
-                case ONLINE://在线用户列表
-                    this.online(mess);
-                    break;
-                case REGISTER://需要注册
-                    this.register();
-                    break;
-                case INCORRECT://登录出错
-                    this.incorrect(mess);
-                    break;
-                case LOGIN://已经登录
-                    this.login(mess);
-                    break;
-                case ERROR://出错
-                    this.error(mess);
-                    break;
-                case REMOVE://移除
-                case FORBIDDEN://禁用
-                    is_active = 0;
-                    this.warning(mess);
-                    break;
-                case WARNING://警告
-                    this.warning(mess);
-                    break;
-                case SYSTEM://系统信息
-                    this.system(mess);
-                    break;
-                case DOWNLINE://下线
-                    is_active = 0;
-                    this.system(mess);
-                    break;
-                case AVATAR_SUCCESS:
-                    this.avatar_success(mess);
-                    break;
-                case AVATAR_FAIL:
-                    this.avatar_fail(mess);
-                    break;
-                case HISTORY_COMMON_MESSAGE:
-                    this.history_common_message(mess);
-                    break;
-                case HISTORY_PERSONAL_MESSAGE:
-                    this.history_personal_message(mess);
-                    break;
-                case COMMON_MUSIC:
-                    this.common_music(mess);
-                    break;
-                case SELF_MUSIC:
-                    this.self_music(mess);
-                    break;
-                case OTHER_MUSIC:
-                    this.other_music(mess);
-                    break;
-                case COMMON_VIDEO_REQUEST:
-                    videoHelper.request(mess, true);
-                    break;
-                case PERSONAL_VIDEO_REQUEST:
-                    videoHelper.request(mess, false);
-                    break;
-                case PERSONAL_VIDEO_OFFLINE:
-                    videoHelper.offline(mess);
-                    break;
-                case PERSONAL_VIDEO_ALLOW:
-                    videoHelper.allow(mess);
-                    break;
-                case PERSONAL_VIDEO_DENY:
-                    videoHelper.deny(mess);
-                    break;
-                case PERSONAL_VIDEO_OPEN:
-                    videoHelper.video_open(mess);
-                    break;
-                case PERSONAL_VIDEO_CLOSE:
-                    videoHelper.video_close(mess);
-                    break;
-                case PERSONAL_VIDEO_END:
-                    videoHelper.end(mess);
-                    break;
-                case PERSONAL_VIDEO_OFFER_DESC:
-                    videoHelper.offer_desc(mess);
-                    break;
-                case PERSONAL_VIDEO_ANSWER_DESC:
-                    videoHelper.answer_desc(mess);
-                    break;
-                case PERSONAL_VIDEO_CANDIDATE:
-                    videoHelper.video_candidate(mess);
-                    break;
-                case COMMON_VIDEO_NOTIFY:
-                    videoHelper.common_notify(mess);
-                    break;
-                case PERSONAL_VIDEO_NOTIFY:
-                    videoHelper.personal_notify(mess);
-                    break;
-            }
-        } catch (e) {
-            alert(e);
-        }
     }
-};
-var messageHelper = new MessageHelper({
-    room_container: $("#room"),
-    online_container: $("#online"),
-    submit_button: $("#submit"),
-    input_container: $("#mess"),
-    upload_container: $("#upload-image"),
-    upload_music_container: $("#upload-music")
-});
+}
 
-var imageHelper = {
-    //图片预览-针对移动设备，参见Touch events
-    preview: function (img) {
-        var container = $("#img-container");
-        var slider = $("#slider");
-        var _this = this;
-        $("#room").css("overflow", "hidden");
-        $("#backdrop").fadeIn();
-        slider.removeClass("hidden bounceOutUp").addClass("animated bounceInDown");
-        container.html("");
-        var html = "";
-        var index = 0;
-        var images = $(img).parents(".table-chat").parent().find("img.img-msg");
-        var total = images.length;
-        $.each(images, function (i, n) {
-            if (n == img) {
-                index = i;
-            }
-            var sequence = i + 1;
+class DataHelper {
+    static encode(obj) {
+        return JSON.stringify(obj);
+    }
+
+    static decode(str) {
+        return JSON.parse(str);
+    }
+}
+
+class ImageView {
+    constructor() {
+        this.container = $("#img-container");
+        this.slider = $("#slider");
+        this.backdrop = $("#backdrop");
+    }
+
+    preview(container) {
+        let html = "";
+        let index = 0;
+        let images = container.find("img.img-msg");
+        let total = images.length;
+        this.container.html("");
+        $.each(images, (i, n) => {
+            let sequence = i + 1;
             html +=
-                '<li>\
-                    <div class="pinch-zoom">\
-                        <img src="' + n.src + '" onclick="event.stopPropagation();" />\
-						</div>\
-						<div class="description">' + n.alt + " (" + sequence + "/" + total + ")" + '</div>\
-					</li>';
+                `<li>
+                    <div class="pinch-zoom">
+                        <img src="${n.src}" onclick="event.stopPropagation();" />
+						</div>
+						<div class="description">${n.alt} (${sequence}/${total})</div>
+                </li>`;
         });
-        images = ""; //释放内存
-        container.append(html);
-        container.ready(function () {
+        this.container.append(html);
+        this.container.ready(() => {
             //手指滑动
-            var swipe = new Swipe(slider.get(0), {
+            let swipe = new Swipe(this.slider.get(0), {
                 speed: 400,
                 startSlide: index
             });
 
             //手指缩放
-            $('div.pinch-zoom').each(function () {
+            $("div.pinch-zoom").each(function () {
                 new RTP.PinchZoom($(this), {
-                    tapZoomFactor:2,
-                    zoomOutFactor:1.3,
-                    animationDuration:300,
-                    animationInterval:5,
-                    maxZoom:4,
-                    minZoom:.5,
-                    lockDragAxis:false,
-                    use2d:true
+                    tapZoomFactor: 2,
+                    zoomOutFactor: 1.3,
+                    animationDuration: 300,
+                    animationInterval: 5,
+                    maxZoom: 4,
+                    minZoom: .5,
+                    lockDragAxis: false,
+                    use2d: true
                 });
             });
 
-            slider.click(_this.closePreview);
+            this.slider.click(() => {
+                this.hide();
+            });
 
 
-            var max = total - 1;
-            var start = swipe.getPos();
+            let max = total - 1;
+            let start = swipe.getPos();
 
             //滑动滚轮切换
-            container.get(0).onmousewheel = function (e) {
-                var ee = e || window.event;
-                var target = ee.delta ? ee.delta : ee.wheelDelta;
+            this.container.get(0).onmousewheel = function (e) {
+                let ee = e || window.event;
+                let target = ee.delta ? ee.delta : ee.wheelDelta;
                 if (target < 0) {
                     start++;
                     start = Math.min(start, max);
                 } else if (target > 0) {
-                    start --;
+                    start--;
                     start = Math.max(start, 0);
                 }
                 swipe.slide(start, 400);
             };
+
+            images.each((i, n) => {
+                $(n).click((e) => {
+                    this.show();
+                    swipe.slide(i, 0);
+                });
+            });
         });
 
-    },
-    //取消预览
-    closePreview: function () {
-        $("#room").css("overflow", "auto");
-        $("#slider").removeClass("bounceInDown").addClass("animated bounceOutUp");
-        $("#backdrop").fadeOut();
+        images = ""; //释放内存
     }
-};
 
-var avatarHelper = {
-    container: $(".headImg-popup"),
-    backdrop: $("#backdrop"),
-    open: function () {
+    show() {
         this.backdrop.fadeIn();
-        this.container.removeClass("hidden slideOutUp").addClass("animated slideInDown");
-    },
-    close: function () {
-        this.container.removeClass("slideInDown").addClass("animated slideOutUp");
-        this.backdrop.fadeOut();
-    },
-    init: function () {
-        var _this = this;
-        this.backdrop.bind("click", function () {
-            _this.close();
-        });
-        $(".showImage").bind("click", function () {
-            _this.close();
-        });
-
-        var ljkUpload = new LjkUpload(this.container);
-        var $file_btn = $(".upload-select-btn"),     //文件选择按钮
-            $move_image = $(".move-image"),    //裁剪框
-            $range = $("#range");               //滑块
-
-        ljkUpload.tip = function (msg) {
-            layer.open({
-                content: msg
-                ,skin: 'msg'
-                ,time: 3
-            });
-        };
-        ljkUpload.loading = function (msg) {
-            return layer.open({
-                type: 2,
-                content: msg
-            });
-        };
-        ljkUpload.delete = function (loading) {
-            layer.close(loading);
-        };
-
-        //拖拽
-        ljkUpload.moveImage({
-            ele:$move_image
-        });
-        //预览
-        ljkUpload.showImage({
-            fileSelectBtn:$file_btn,
-            fileBtn:$("aside input[type='file']"),
-            showEle:$move_image,
-            isImage:true,          //是文件 false  默认 true
-            maxSize:1024*10            //文件最大限制  KB   默认1M
-        });
-        //缩放
-        ljkUpload.rangeToScale({
-            range:$range,
-            ele:$move_image
-        });
-        //裁剪
-        ljkUpload.clipImage({
-            clipSuccess:function( src ){       //clipSuccess  裁剪成功 返回 base64图片
-                var index = ljkUpload.loading("上传中，请稍候");
-                var html = '<img src="'+src+'" />';
-                $(".showImage").html(html);
-
-                messageHelper.sendMessageAsBlob(AVATAR_UPLOAD, user.user_id, 0, src);
-                ljkUpload.delete(index);
-            }
-        });
+        this.slider.removeClass("hidden bounceOutUp").addClass("animated bounceInDown");
     }
-};
-avatarHelper.init();
 
-//=====================表情======================
+    hide() {
+        this.slider.removeClass("bounceInDown").addClass("animated bounceOutUp");
+        this.backdrop.fadeOut();
+    }
+}
+let imageView = new ImageView();
 
-var emotionHelper = {
-    total: 0,//表情总页数
-    emotion_html: "",
-    position_html: "",
-    container: $("#emotion"),
-    dots: [],
-    emotion_height: 0,
-    bottom: 80,
-    speed: 100,
-    config: [
-        {name:"ywz", suffix: '.gif', cols:4, rows:2, len:24, start:1},
-        {name:"ymj", suffix: '.gif', cols:4, rows:2, len:24, start:0}
-    ],
-    init: function () {
-        //this.build();
+class Upload {
+    static sendMessage(type, receiver_id = 0, mess = "") {
+        let defaults = {
+            type: MESSAGE_COMMON,
+            receiver_id: 0,
+            mess: "",
+        };
+        socket.send(DataHelper.encode(
+            Object.assign(defaults, {
+                type,
+                sender_id: USER.user_id,
+                receiver_id,
+                mess,
+            })));
+    }
+}
+
+//消息抽象类
+class MessageContext {
+    constructor() {
+        this.data = new Map();
+    }
+
+    process(mess) {
+    }
+
+    set window_id(value) {
+        this.data.set("window_id", value);
+    }
+
+    get window_id() {
+        return this.data.get("window_id");
+    }
+}
+
+//消息装饰器
+class MessageDecorator extends MessageContext {
+    constructor(message) {
+        super();
+        this.message = message;
+    }
+}
+
+class CommonBubbleDecorator extends MessageDecorator {
+    constructor(message) {
+        super(message);
+    }
+
+    process(mess) {
+        let html = this.message.process(mess);
+        let search = ["%INFO%", "%ID%"];
+        let replace = [mess.sender.username, mess.sender_id];
+        return html.replaceMulti(search, replace);
+    }
+}
+
+
+class PersonBubbleDecorator extends MessageDecorator {
+    constructor(message) {
+        super(message);
+    }
+
+    process(mess) {
+        let html = this.message.process(mess);
+        let search = [];
+        let replace = [];
+        return html.replaceMulti(search, replace);
+    }
+}
+
+class WelcomeDecorator extends MessageDecorator {
+    constructor(message) {
+        super(message);
+    }
+
+    process(mess) {
+        let html = this.message.process(mess);
+        let search = ["%ID%", "%USERNAME%"];
+        let replace = [mess.user.user_id, mess.user.username];
+        return html.replaceMulti(search, replace);
+    }
+}
+
+class AvatarDecorator extends MessageDecorator {
+    constructor(message) {
+        super(message);
+    }
+
+    process(mess) {
+        let html = this.message.process(mess);
+        let avatar = mess.sender.avatar ? '<img src="./' + mess.sender.avatar + '" />' : '<img src="./images/chat.png" />';
+        let search = ["%AVATAR%"];
+        let replace = [avatar];
+        return html.replaceMulti(search, replace);
+    }
+}
+
+//反转义消息
+class ParseCodeDecorator extends MessageDecorator {
+    constructor(message) {
+        super(message);
+    }
+
+    process(mess) {
+        let html = this.message.process(mess);
+        let search = [" ", "\n", "\r\n", "\t", "\\\\'", '\\\\\\\\', MATCH_URL]; //空格、换行、制表符...转换标签，保持原貌（适用于颜文字、代码等）
+        let replace = ["&nbsp;", "<br />", "<br />", "&nbsp;&nbsp;&nbsp;&nbsp;", "'", "\\", "<a href='$1' target='_blank'>$1</a>"];
+        let decorator_mess = mess.mess.replaceMulti(search, replace);
+        search = ["%MESSAGE%"];
+        replace = [decorator_mess];
+        return html.replaceMulti(search, replace);
+    }
+}
+
+class MusicDecorator extends MessageDecorator {
+    constructor(message) {
+        super(message);
+    }
+
+    process(mess) {
+        let html = this.message.process(mess);
+        let search = ["%MUSIC_URL%", "%MUSIC_NAME%"];
+        let replace = [mess.mess, mess.name];
+        let decorator_mess = templates.get("music_message").replaceMulti(search, replace);
+        search = ["%MESSAGE%"];
+        replace = [decorator_mess];
+        return html.replaceMulti(search, replace);
+    }
+}
+
+class ImageDecorator extends MessageDecorator {
+    constructor(message, username) {
+        super(message);
+        this.username = username;
+    }
+
+    process(mess) {
+        let html = this.message.process(mess);
+        let search = ["%URL%", "%USERNAME%"];
+        let replace = [CURRENT_URL + mess.mess, this.username];
+        let decorator_mess = templates.get("image").replaceMulti(search, replace);
+        search = ["%MESSAGE%"];
+        replace = [decorator_mess];
+        return html.replaceMulti(search, replace);
+    }
+}
+
+class NormalMessageDecorator extends MessageDecorator {
+    constructor(message) {
+        super(message);
+    }
+
+    process(mess) {
+        let html = this.message.process(mess);
+        let search = ["%MESSAGE%"];
+        let replace = [mess.mess];
+        return html.replaceMulti(search, replace);
+    }
+}
+
+
+class TimeTextMessage extends MessageContext {
+    constructor(template, window_id, is_history = 0) {
+        super();
+        this.template = template;
+        this.flag = `${window_id}_${is_history}`;
+        if (!TimeTextMessage.time) {
+            TimeTextMessage.time = new Map();
+        }
+
+        if (!TimeTextMessage.time.has(this.flag)) {
+            TimeTextMessage.time.set(this.flag, 0);
+        }
+    }
+
+    process(mess) {
+        let html = "";
+        if (Math.abs(mess.timestamp - TimeTextMessage.time.get(this.flag)) > SHOW_TIME_DURING) {
+            let date = new Date(mess.timestamp * 1000);
+            let date_str = date.getDateString();
+            let is_today = date_str == (new Date()).getDateString();
+            let str = is_today ? date.getTimeString() : `${date_str} ${date.getTimeString()}`;
+            html = templates.get("time_message").replace(/%TIME%/g, str);
+            TimeTextMessage.time.set(this.flag, mess.timestamp);
+        }
+
+        return html + "\n" + this.template;
+    }
+}
+
+class OriginalMessage extends MessageContext {
+    constructor(template) {
+        super();
+        this.template = template;
+    }
+
+    process(mess) {
+        return this.template;
+    }
+}
+
+//===================窗口容器=====================
+
+class EmotionWindow {
+    constructor() {
+        this.total = 0;//表情总页数
+        this.emotion_html = "";
+        this.position_html = "";
+        this.container = $("#emotion");
+        this.dots = [];
+        this.emotion_height = 0;
+        this.bottom = 80;
+        this.speed = 150;
+        this.config = [
+            {name: "ywz", suffix: '.gif', cols: 4, rows: 2, len: 24, start: 1},
+            {name: "ymj", suffix: '.gif', cols: 4, rows: 2, len: 24, start: 0}
+        ];
+        this.type = EMOTION_COMMON;
+        this.receiver_id = '0';
+    }
+
+    init() {
+        this.build();
 
         this.dots = this.container.children("ol").children("li");
         this.emotion_height = this.container.height();
 
         //导航滑动、样式
-        var _this = this;
-        var swipe = new Swipe(document.getElementById('emotion'), {
+        let swipe = new Swipe(document.getElementById('emotion'), {
             speed: 200,
-            callback: function (e, pos, li) {
-                _this.dots.removeClass("active").eq(pos).addClass("active");
+            callback: (e, pos, li) => {
+                this.dots.removeClass("active").eq(pos).addClass("active");
             }
         });
         this.dots.click(function () {
             swipe.slide($(this).index(), 500);
         });
+        this.bindMessage();
+    }
 
-        //表情点击发送消息
-        this.container.find("img").click(function (event) {
-            event.stopPropagation();
-            var type = receiver_id ? PERSONAL_EMOTION : COMMON_EMOTION;
-            messageHelper.sendMessage(type, user.user_id, receiver_id, $(this).prop("title"));
-        });
-
-        //点击空白折叠
-        function hide(event) {
-            event.stopPropagation();
-            _this.close();
-            im.closeContacts();
-        }
-        $("#room").bind("click", hide);
-        $(".chat-box").bind("click", hide);
-    },
-    build: function () {
+    build() {
+        this.container.html("<ul></ul><ol></ol>");
         //表情元素
-        for (var i in this.config) {
-            var name = this.config[i].name;
-            var suffix = this.config[i].suffix;
-            var cols = this.config[i].cols;
-            var rows = this.config[i].rows;
-            var len = this.config[i].len;
-            var current = this.config[i].start;
-            var pages = Math.ceil(len / (cols * rows));//当前表情包页数
+        for (let config of this.config) {
+            let name = config.name;
+            let suffix = config.suffix;
+            let cols = config.cols;
+            let rows = config.rows;
+            let len = config.len;
+            let current = config.start;
+            let pages = Math.ceil(len / (cols * rows));//当前表情包页数
             this.total += pages;
             //外层每页li
-            for (var j = 0; j < pages; j++) {
-                var li = '<li><table class="emotion-table">';
+            for (let j = 0; j < pages; j++) {
+                let li = '<li><table class="emotion-table">';
                 //每行tr
-                for (var k = 0; k < rows; k++) {
+                for (let k = 0; k < rows; k++) {
                     li += '<tr class="' + name + '">';
-                    for (var l = 0; l < cols; l++) {
+                    for (let l = 0; l < cols; l++) {
                         if (current > len) break;//退出td
                         li += '<td><img src="./images/emotion/' + name + '/' + current + suffix +
-                            '" alt="' + current + '" title="'+ name + '_' + current + suffix + '"></td>';
+                            '" alt="' + current + '" title="' + name + '_' + current + suffix + '"></td>';
                         current++;
                     }
                     li += '</tr>';
@@ -1656,99 +703,482 @@ var emotionHelper = {
 
         //导航元素
         this.position_html += '<li class="active"></li>';
-        for (var m = 0; m < this.total - 1; m++) {
+        for (let m = 0; m < this.total - 1; m++) {
             this.position_html += '<li></li>';
         }
         this.position_html += '</li>';
         this.container.children("ol").html(this.position_html);
-    },
-    open: function () {
-        if (H > this.emotion_height) {
-            this.toggle();
-        } else {
-            window.setTimeout("emotionHelper.toggle()", 200); //手机打开键盘时，窗口大小会变化
-        }
-    },
-    close: function () {
-        var _this = this;
-        $("#room").animate({
-            height: H
-        }, this.speed, "linear", function () {
-            _this.container.addClass("hidden");
-        });
-        $(".chat-box").animate({
-            bottom: _this.bottom
-        }, this.speed);
-    },
-    toggle: function () {
-        var available_height = H - this.emotion_height;
-        var _this = this;
-        if (this.container.hasClass("hidden")) {
-            //展开
-            this.container.removeClass("hidden");
+    }
 
-            $("#room").animate({
-                height: available_height
-            }, this.speed);
-            $(".chat-box").animate({
-                bottom: _this.emotion_height + _this.bottom
-            }, this.speed);
-        } else {
-            //折叠
-            this.close();
+    close(window) {
+        if (this.container.hasClass("hidden")) return;
+        let height = window.height() + this.emotion_height;
+        //窗口下降
+        window.animate({height}, this.speed, "linear", () => {
+            this.container.addClass("hidden");
+        });
+        this.container.animate({top: height}, this.speed);
+    }
+
+    bindClose(elem, window) {
+        elem.bind("click", () => {
+            this.close(window);
+        });
+    }
+
+    bindToggle(elem, window) {
+        elem.bind("click", () => {
+            if (this.container.hasClass("hidden")) {
+                //展开
+                this.container.removeClass("hidden");
+                let height = window.height() - this.emotion_height;
+                //窗口上升
+                window.animate({height}, this.speed);
+                this.container.animate({top: height}, this.speed);
+            } else {
+                //折叠
+                this.close(window);
+            }
+        });
+    }
+
+    flushProp(type, receiver_id) {
+        this.type = type;
+        this.receiver_id = receiver_id;
+    }
+
+    bindMessage() {
+        //表情点击发送消息
+        this.container.find("img").each((i, n) => {
+            let img = $(n);
+            img.click((event) => {
+                Upload.sendMessage(this.type, this.receiver_id, img.prop("title"));
+            });
+        });
+    }
+}
+let emotion = new EmotionWindow();
+emotion.init();
+
+class MenuWindow {
+    constructor() {
+        this.container = $("#menu");
+        this.container.bind("click", () => {
+            this.hide();
+        });
+        this.controlBell();
+    }
+
+    show() {
+        this.container.removeClass("hidden z-index-normal fadeOut").addClass("z-index-top animated fadeIn menu-active");
+    }
+
+    hide() {
+        this.container.removeClass("fadeIn menu-active").addClass("hidden");
+    }
+
+    bindToggle(elem, window) {
+        elem.bind("click", () => {
+            if (this.container.hasClass("menu-active")) {
+                this.hide();
+            } else {
+                this.show();
+            }
+        });
+    }
+
+    bindHide(elem, window) {
+        elem.bind("click", () => {
+            this.hide();
+        });
+    }
+
+    getUploadImageBtn() {
+        return this.container.find(".upload-image");
+    }
+
+    getUploadMusicBtn() {
+        return this.container.find(".upload-music");
+    }
+
+    getBellBtn() {
+        return this.container.find(".bell-control");
+    }
+
+    getVideoChatBtn() {
+        return this.container.find(".video-chat");
+    }
+
+    controlBell() {
+        let btn = this.getBellBtn();
+        btn.click((e) => {
+            let i = btn.children("i");
+            if (i.hasClass("fa-bell-o")) {
+                Util.toast("声音：关");
+                audio.volume = 0;
+                music.volume = 0;
+                i.removeClass("fa-bell-o").addClass("fa-bell-slash-o");
+            } else {
+                Util.toast("声音：开");
+                audio.volume = 1;
+                music.volume = 1;
+                audio.play();
+                i.removeClass("fa-bell-slash-o").addClass("fa-bell-o");
+            }
+        });
+    }
+}
+let menu = new MenuWindow();
+
+class LoginWindow {
+    constructor() {
+        if (!LoginWindow.cache) {
+            this.window = $("#register");
+            this.bindSubmit();
+            LoginWindow.cache = this;
+        }
+        return LoginWindow.cache;
+    }
+
+    display() {
+        this.window.modal({
+            backdrop: true,
+            keyboard: false
+        });
+    }
+
+    bindSubmit() {
+        this.window.find("[type=submit]").click(() => {
+            let username = $("#username").val();
+            let password = $("#password").val();
+            username = username.substr(0, 30);
+            !password && (password = '123456');
+            socket.send(DataHelper.encode({
+                type: USER_REGISTER,
+                username: username,
+                password: password
+            }));
+            return false;
+        });
+    }
+
+    login(mess) {
+        this.window.modal("hide");// 弹框退出
+        USER = mess.user;
+        setCookie("user", JSON.stringify(USER));//刷新cookie
+        Util.toast(`${USER.username}，欢迎回来`);
+    }
+
+    incorrect(mess) {
+        Util.toast(mess.mess);
+        $("#password").val("");//清空密码
+        window.setTimeout(function () {
+            $("#error").text("");
+        }, 1000);
+    }
+}
+
+class ImageWindow {
+    constructor() {
+        this.is_locked = false;
+        this.image_regexp = /(?:jpe?g|png|gif)/i;
+        this.compress_size = MAX_IMAGE / 2;
+        this.type = IMAGE_COMMON;
+        this.receiver_id = '0';
+    }
+
+    init() {
+        document.addEventListener("dragenter", function (e) {
+            $("body").css("border", "5px solid rgba(0,255,0, 0.3)");
+        }, false);
+        //移出
+        document.addEventListener("dragleave", function (e) {
+            $("body").css("border", "none");
+        }, false);
+        //放到何处
+        document.addEventListener("dragover", function (e) {
+            e.preventDefault(); //阻止默认的无法放置
+        }, false);
+        //进行放置
+        document.addEventListener("drop", (e) => {
+            e.preventDefault(); //阻止默认的以链接方式打开
+            $("body").css("border", "none");
+            this.compress(e.dataTransfer.files, this.upload.bind(this));
+        }, false);
+    }
+
+    flushProp(type, receiver_id) {
+        this.type = type;
+        this.receiver_id = receiver_id;
+    }
+
+    upload(file) {
+        Upload.sendMessage(this.type, this.receiver_id, file);
+    }
+
+    compress(files, callback) {
+        if (this.is_locked) {
+            return Util.toast("正在上传中，请稍候再试");
+        }
+        let len = files.length;
+        if (len > MAX_UPLOAD) {
+            return Util.toast("目前最多只能上传" + MAX_UPLOAD + "张图片");
+        } else if (0 == len) {
+            return;
+        }
+        this.is_locked = true;
+        let index = Util.loading("正在处理，总共" + len + "张图片", len * 2);
+        let complete = 0;
+
+        let completeCallBack = (content = "") => {
+            if (complete >= len) {
+                this.is_locked = false;
+                layer.close(index);
+                if (content) {
+                    Util.toast(content);
+                }
+            }
+        };
+
+        for (let file of files) {
+            complete++;
+            if (file.size < this.compress_size) {
+                let reader = new FileReader();
+                reader.onload = (e) => {
+                    if (!this.image_regexp.test(file.type.split("/").pop())) {
+                        Util.toast("请选择图片上传");
+                    } else {
+                        callback(e.currentTarget.result);
+                    }
+                    completeCallBack("上传完毕，点击图片可以预览哦:-)");
+                };
+                reader.readAsDataURL(file);
+            } else {
+                //压缩图片
+                new html5ImgCompress(file, {
+                    before: function (file) {
+                    },
+                    done: function (file, base64) {
+                        if (base64.length > MAX_IMAGE) {
+                            Util.toast(file.name + "太大");
+                        } else {
+                            callback(base64);
+                        }
+                        completeCallBack("上传完毕，点击图片可以预览哦:-)");
+                    },
+                    fail: function (file) {
+                        Util.toast("图片压缩失败");
+                        completeCallBack();
+                    },
+                    complete: function (file) {
+                    },
+                    notSupport: function (file) {
+                        Util.toast("当浏览器不支持，换Chrome试试吧;-)");
+                        completeCallBack();
+                    }
+                });
+            }
         }
     }
-};
-emotionHelper.init();
+
+    bindUpload(elem) {
+        let input = elem.next("[type=file]");
+        elem.bind("click", (e) => {
+            e.stopPropagation();
+            Util.toast("最多" + MAX_UPLOAD + "张哦");
+            input.trigger("click");
+        });
+        input.bind("change", (e) => {
+            e.stopPropagation();
+            this.compress(e.currentTarget.files, (file) => {
+                this.upload(file);
+            });
+        });
+    }
+}
+let image = new ImageWindow();
+image.init();
+image.bindUpload(menu.getUploadImageBtn());
+
+class MusicWindow {
+    constructor() {
+        this.type = MUSIC_COMMON;
+        this.receiver_id = '0';
+        this.size_m = MAX_MUSIC_SIZE / 1024 / 1024;
+        MusicWindow.music_timer = 0;
+    }
+
+    init() {
+
+    }
+
+    flushProp(type, receiver_id) {
+        this.type = type;
+        this.receiver_id = receiver_id;
+    }
+
+    upload(name, data) {
+        Upload.sendMessage(this.type, this.receiver_id, {name, data});
+    }
+
+    bindUpload(elem) {
+        let input = elem.next("[type=file]");
+        elem.bind("click", (e) => {
+            e.stopPropagation();
+            Util.toast(`最大${this.size_m}M`);
+            input.trigger("click");
+        });
+        input.bind("change", (e) => {
+            e.stopPropagation();
+            if (0 == e.currentTarget.files.length) {
+                return Util.toast("请选择一首音乐");
+            }
+
+            let index = Util.loading("正在处理，请稍候...", 3);
+            let reader = new FileReader();
+            let file = e.currentTarget.files[0];
+            reader.onload = (e) => {
+                layer.close(index);
+                let name = file.name;
+                let type = file.type;
+                let regexp = /(?:mp3|ogg|wav)/i;
+                if (!regexp.test(type.split('/').pop())) {
+                    return Util.toast("目前只支持mp3,ogg,wav格式");
+                }
+                if (file.size > MAX_MUSIC_SIZE) {
+                    return Util.toast(`文件大太，目前最大${this.size_m}M`);
+                }
+
+                index = Util.loading("上传中，请稍候...", 3);
+                this.upload(name, e.currentTarget.result);
+                layer.close(index);
+                Util.toast("上传音乐完毕");
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    static playMusic(btn, e) {
+        e.stopPropagation(); //阻止冒泡事件
+        let url = href + $(btn).attr("data-url");
+        let progress = $(btn).children("progress");
+        let music_during = $(btn).children(".music-during");
+        if (music.src != url) {
+            clearInterval(MusicWindow.music_timer);
+            music.pause();
+            music.src = url;
+        }
+
+        function getDuring(second) {
+            let minute = Math.floor(second / 60);
+            let sec = Math.ceil(second - minute * 60);
+            minute = minute > 9 ? minute : '0' + minute;
+            sec = sec > 9 ? sec : '0' + sec;
+            return minute + ":" + sec;
+        }
+
+        if (music.paused) {
+            music.currentTime = progress.attr("data-time"); //保留播放进度
+            music.play();
+            MusicWindow.music_timer = window.setInterval(() => {
+                try {
+                    let percent = (music.currentTime / music.duration * 100);
+                    progress.val(percent);
+                    progress.attr("data-time", music.currentTime);
+                    //计算时长
+                    music_during.text(getDuring(music.currentTime) + "/" + getDuring(music.duration));
+                    if (percent >= 100) {
+                        progress.attr("data-time", 0); //清零，下次重新播放
+                        clearInterval(MusicWindow.music_timer);
+                    }
+                } catch (e) {
+                    Util.toast("播放失败，请稍候再试...");
+                    console.log(e);
+                    clearInterval(MusicWindow.music_timer);
+                }
+            }, 200);
+        } else {
+            music.pause();
+            clearInterval(MusicWindow.music_timer);
+        }
+    }
+}
+let musicWindow = new MusicWindow();
+musicWindow.bindUpload(menu.getUploadMusicBtn());
 
 function trace(arg) {
     if (!DEBUG)
         return;
-    var now = (window.performance.now() / 1000).toFixed(3);
+    let now = (window.performance.now() / 1000).toFixed(3);
     console.log(now + ': ', arg);
 }
-var videoHelper = {
-    local_video: null,
-    local_stream: null,
-    video_box: $(".video-box"),
-    backdrop: $("#backdrop"),
-    is_connected: false,
-    startTime: 0,
-    count: 1,
-    volume: 0.3, //音量[0-1]
-    is_multi : false,
-    max_video: 4,
-    user_stream: {},
-    user_video: {},
-    is_open: false, //是否打开了媒体，多人聊天时不用重复打开
-    constraints: {
-        audio: {echoCancellation: true, autoGainControl: true, volume: 0.3},
-        video: {
-            width: {min: 640, ideal: 1280, max: 1920},
-            height: {min: 480, ideal: 720, max: 1080}
-        }
-    },
-    servers: {
-        iceServers: [
-            {urls: "turn:ridersam@123.206.83.227", credential: 1399579, username: ""},
-            {urls: "stun:stun1.l.google.com:19302"},
-            {urls: "stun:stun2.l.google.com:19302"},
-            {urls: "stun:stun3.l.google.com:19302"},
-            {urls: "stun:stun4.l.google.com:19302"},
-            {urls: "stun:stun.ekiga.net"}
-        ]
-    },
-    peerConnection: {},
-    init: function () {
+
+//视频
+class VideoWindow {
+    constructor() {
+        this.local_video = null;
+        this.local_stream = null;
+        this.video_box = $(".video-box");
+        this.backdrop = $("#backdrop");
+        this.close_btn = this.video_box.find(".video-close");
+        this.is_connected = false;
+        this.startTime = this.getTimestamp();
+        this.count = 1;
+        this.volume = 0.3;//音量[0-1]
+        this.is_multi = false;
+        this.max_video = 4;
+        this.user_stream = {};
+        this.user_video = {};
+        this.is_open = false; //是否打开了媒体，多人聊天时不用重复打开
+        this.constraints = {
+            audio: {echoCancellation: true, autoGainControl: true, volume: 0.3},
+            video: {
+                width: {min: 640, ideal: 1280, max: 1920},
+                height: {min: 480, ideal: 720, max: 1080}
+            }
+        };
+        this.servers = {
+            iceServers: [
+                {urls: "turn:ridersam@123.206.83.227", credential: 1399579, username: ""},
+                {urls: "stun:stun1.l.google.com:19302"},
+                {urls: "stun:stun2.l.google.com:19302"},
+                {urls: "stun:stun3.l.google.com:19302"},
+                {urls: "stun:stun4.l.google.com:19302"},
+                {urls: "stun:stun.ekiga.net"}
+            ]
+        };
+        this.peerConnection = {};
+        this.offerOptions = {
+            offerToReceiveAudio: 1,
+            offerToReceiveVideo: 1
+        };
+
+        this.type = VIDEO_COMMON_REQUEST;
+        this.receiver_id = '0';
+        this.notify_type = VIDEO_COMMON_NOTIFY;
+    }
+
+    init() {
         this.local_video = document.createElement("video");
         this.local_video.controls = true;
         this.local_video.autoplay = true;
         this.local_video.muted = true;
         this.local_video.volume = 0; //本地视频播放静音，防止回声
         $(this.video_box).append(this.local_video);
-    },
-    createVideo: function (user_id) {
-        var video = document.createElement("video");
+
+        this.close_btn.bind("click", () => {
+            this.closeVideo();
+        });
+    }
+
+    flushProp(type, receiver_id, notify_type) {
+        this.type = type;
+        this.receiver_id = receiver_id;
+        this.notify_type = notify_type;
+    }
+
+    createVideo(user_id) {
+        let video = document.createElement("video");
         video.controls = true;
         video.autoplay = true;
         video.volume = this.volume;
@@ -1757,115 +1187,115 @@ var videoHelper = {
         this.count++;
         this.user_video[user_id] = video;
         return video;
-    },
-    closeVideo: function () {
-        var _this = this;
+    }
+
+    closeVideo() {
         layer.open({
-            title: ["提示", "background:#eee"],
+            title: ["提示", "background:#FF4351;color:white;"],
             content: "不聊了么？",
             btn: ["关闭", "继续"],
-            yes: function (index) {
+            yes: (index) => {
                 layer.close(index);
-                _this.notify_end();
-                _this.closeAll();
-                _this.endTip();
+                this.notify_end();
+                this.endTip();
+                this.closeAll();
             }
         });
-    },
-    confirm: function () {
-        var content, type;
-        if (receiver_id) {
-            this.is_multi = false;
-            if (messageHelper.online_users.hasOwnProperty(receiver_id)) {
-                var username = messageHelper.online_users[receiver_id];
+    }
+
+    confirm(type, receiver_id, is_multi = false) {
+        let content;
+        this.is_multi = is_multi;
+        if (!this.is_multi) {
+            if (UserObserver.isOnline(receiver_id)) {
+                let username = UserObserver.getUser(receiver_id).username;
                 content = "将邀请" + username + "视频聊天，是否继续？";
-                type = PERSONAL_VIDEO_REQUEST;
             } else {
-                messageHelper.toast("对方已经离线...");
-                return;
+                return Util.toast("对方已经离线...");
             }
         } else {
-            this.is_multi = true;
             content = "将邀请多人视频聊天，是否继续？";
-            type = COMMON_VIDEO_REQUEST;
         }
         layer.open({
-            title: ["提示", "background:#eee"],
+            title: ["提示", "background:#FF4351;color:white;"],
             content: content,
             btn: ["确认", "取消"],
-            yes: function (index) {
+            yes: (index) => {
                 layer.close(index);
-                messageHelper.sendMessage(type, user.user_id, receiver_id, '');
+                Upload.sendMessage(type, receiver_id, 'confirm');
             }
         });
-    },
-    request: function (mess, is_multi) {
-        var receiver_id = mess.sender.user_id;
-        var username = mess.sender.username;
-        var _this = this;
-        if (mess.sender.user_id == user.user_id)
+    }
+
+    request(mess, is_multi) {
+        let username = mess.sender.username;
+        if (mess.sender_id == USER.user_id)
             return;
-        var content = is_multi ?  username + "邀请您多人视频聊天，是否允许？" : username + "请求和您视频聊天，是否允许？";
+        let content = is_multi ? username + "邀请您多人视频聊天，是否允许？" : username + "请求和您视频聊天，是否允许？";
         this.is_multi = is_multi;
         layer.open({
-            title: ["提示", "background:#eee"],
+            title: ["提示", "background:#FF4351;color:white;"],
             content: content,
             btn: ["允许", "拒绝"],
-            yes: function (index) {
+            yes: (index) => {
                 layer.close(index);
-                _this.closeAll(); //关闭正在聊天的视频
-                _this.accept(mess);
+                this.closeAll(); //关闭正在聊天的视频
+                this.accept(mess);
             },
-            no: function (index) {
+            no: (index) => {
                 layer.close(index);
-                _this.close(receiver_id);
-                messageHelper.sendMessage(PERSONAL_VIDEO_DENY, user.user_id, receiver_id, '');
+                this.close(mess.sender_id);
+                Upload.sendMessage(VIDEO_PERSONAL_DENY, mess.sender_id, 'request');
             }
         });
-    },
-    //caller
-    allow: function(mess) {
-        var receiver_id = mess.sender.user_id;
-        this.open();
-        this.connect(true, receiver_id);
-        this.notify_other(receiver_id);
-    },
-    //receiver
-    accept: function (mess) {
-        var receiver_id = mess.sender.user_id;
-        this.open();
-        var completeCallBack = function () {
-            messageHelper.sendMessage(PERSONAL_VIDEO_ALLOW, user.user_id, receiver_id, '');
-        };
-        this.connect(false, receiver_id, completeCallBack);
+    }
 
-        if (!this.is_multi)
-            im.open(mess.sender, "", mess.timestamp);
-    },
-    deny: function (mess) {
+    //caller
+    allow(mess) {
+        this.open();
+        this.connect(true, mess.sender_id);
+        this.notify_other(mess.sender_id);
+    }
+
+    //receiver
+    accept(mess) {
+        this.open();
+        let completeCallBack = () => {
+            Upload.sendMessage(VIDEO_PERSONAL_ALLOW, mess.sender_id, 'accept');
+        };
+        this.connect(false, mess.sender_id, completeCallBack);
+    }
+
+    deny(mess) {
         this.is_connected = false;
-        this.close(mess.sender.user_id);
-        messageHelper.toast(mess.sender.username + mess.mess);
-    },
-    offline: function (mess) {
+        this.close(mess.sender_id);
+        Util.toast(mess.sender.username + mess.mess);
+    }
+
+    offline(mess) {
         this.is_connected = false;
-        messageHelper.toast(mess.sender.username + mess.mess);
-        this.close(mess.sender.user_id);
-    },
-    end: function (mess) {
+        Util.toast(mess.sender.username + mess.mess);
+        this.close(mess.sender_id);
+    }
+
+    end(mess) {
         layer.closeAll();
-        this.close(mess.sender.user_id);
-    },
-    open: function () {
+        this.close(mess.sender_id);
+    }
+
+    open() {
         this.local_video.className = this.is_multi ? "video-multi" : "video-double-min";
         this.backdrop.fadeIn();
         this.video_box.removeClass("hidden").show();
-    },
-    endTip: function () {
-        var during = ((this.getTimestamp() - this.startTime) / 60).toFixed(1);
-        messageHelper.toast("视频聊天结束，总共" + during + "分钟");
-    },
-    close: function (user_id) {
+    }
+
+    endTip() {
+        if (!this.is_connected) return;
+        let during = ((this.getTimestamp() - this.startTime) / 60).toFixed(1);
+        Util.toast("视频聊天结束，总共" + during + "分钟");
+    }
+
+    close(user_id) {
         this.count--;
         if (this.user_video.hasOwnProperty(user_id)) {
             this.user_video[user_id].remove();
@@ -1876,35 +1306,37 @@ var videoHelper = {
             delete this.user_stream[user_id];
         }
         if (this.count <= 1) {
-            this.closeAll();
             this.endTip();
+            this.closeAll();
         }
-    },
-    closeAll: function () {
+    }
+
+    closeAll() {
         this.count = 1;
         this.is_connected = false;
         this.is_open = false;
         this.video_box.addClass("hidden");
         this.backdrop.fadeOut();
 
-        console.log('disconnect');
+        trace('disconnect');
         this.stop();
-    },
-    stop: function () {
+    }
+
+    stop() {
         this.unsetMedia(this.local_stream);
 
-        for (var i in this.user_stream) {
-            this.unsetMedia(this.user_stream[i]);
+        for (let key of Object.keys(this.user_stream)) {
+            this.unsetMedia(this.user_stream[key]);
         }
-        for (var j in this.user_video) {
-            $(this.user_video[j]).remove();
-            delete this.user_video[j];
+        for (let key of Object.keys(this.user_video)) {
+            $(this.user_video[key]).remove();
+            delete this.user_video[key];
         }
 
-        for (var k in this.peerConnection) {
-            if (this.peerConnection[k]) {
-                this.peerConnection[k].close();
-                this.peerConnection[k] = null;
+        for (let key of Object.keys(this.peerConnection)) {
+            if (this.peerConnection[key]) {
+                this.peerConnection[key].close();
+                this.peerConnection[key] = null;
             }
         }
 
@@ -1913,57 +1345,64 @@ var videoHelper = {
         this.peerConnection = {};
         this.local_video.src = "";
         this.local_stream = null;
-    },
-    unsetMedia: function (stream) {
+    }
+
+    unsetMedia(stream) {
         if (!stream)
             return;
-        stream.getTracks().forEach(function(track) {
+        stream.getTracks().forEach(function (track) {
             track.stop();
         });
-    },
-    notify_end: function () {
-        for (var i in this.user_video) {
-            messageHelper.sendMessage(PERSONAL_VIDEO_END, user.user_id, i, '');
+    }
+
+    notify_end() {
+        for (let key of Object.keys(this.user_video)) {
+            Upload.sendMessage(VIDEO_PERSONAL_END, key, '');
         }
-    },
-    getTimestamp: function () {
+    }
+
+    getTimestamp() {
         return (new Date()).getTime() / 1000;
-    },
-    connect: function (isCaller, receiver_id, completeCallBack) {
+    }
+
+    connect(isCaller, receiver_id, completeCallBack) {
         try {
-            console.log('connect');
+            trace('connect');
 
             //创建连接
-            var peerConnection = new RTCPeerConnection(this.servers);
+            let peerConnection = new RTCPeerConnection(this.servers);
             this.peerConnection[receiver_id] = peerConnection;
             trace('Created local peer connection object peerConnection');
 
-            var _this = this, videoTracks, audioTracks;
-            var username = messageHelper.online_users.hasOwnProperty(receiver_id) ? messageHelper.online_users[receiver_id] : "对方";
+            let videoTracks, audioTracks;
+            let username = UserObserver.getUser(receiver_id).username;
+            if (!UserObserver.isOnline(receiver_id)) {
+                throw new Error(`${username}已经离线`);
+            }
 
-            peerConnection.onicecandidate = function (e) {
+            peerConnection.onicecandidate = (e) => {
                 if (e.candidate) {
                     trace('peerConnection candidate: ' + e.candidate.candidate);
-                    messageHelper.sendMessage(PERSONAL_VIDEO_CANDIDATE, user.user_id, receiver_id, e.candidate);
+                    Upload.sendMessage(VIDEO_PERSONAL_CANDIDATE, receiver_id, e.candidate);
                 }
             };
 
-            peerConnection.oniceconnectionstatechange = function (e) {
-                trace('peerConnection ICE state: ' + this.iceConnectionState);
-                console.log('peerConnection ICE state change event: ', e, this);
+            peerConnection.oniceconnectionstatechange = (e) => {
+                trace('peerConnection ICE state: ' + e.currentTarget.iceConnectionState);
+                trace('peerConnection ICE state change event: ', e, e.currentTarget);
 
                 //异常退出，则销毁视频
-                if (this.iceConnectionState == "failed") {
-                    _this.close(receiver_id);
-                    messageHelper.toast(username + "异常退出");
+                if (e.currentTarget.iceConnectionState == "failed") {
+                    this.close(receiver_id);
+                    Util.toast(username + "异常退出");
                 }
             };
 
-            peerConnection.onaddstream = function (e) {
+            peerConnection.onaddstream = (e) => {
                 trace('received remote stream');
-                var video = _this.createVideo(receiver_id);
+                let video = this.createVideo(receiver_id);
                 video.srcObject = e.stream;
-                _this.user_stream[receiver_id] = e.stream;
+                this.user_stream[receiver_id] = e.stream;
             };
 
             if (this.is_open) {
@@ -1978,16 +1417,16 @@ var videoHelper = {
 
             //获取本地媒体
             trace('Requesting local stream');
-            navigator.mediaDevices.getUserMedia(_this.constraints)
-                .then(function (stream) {
-                    _this.local_stream = stream;
-                    _this.is_open = true;
-                    messageHelper.sendMessage(PERSONAL_VIDEO_OPEN, user.user_id, receiver_id, "");
+            navigator.mediaDevices.getUserMedia(this.constraints)
+                .then((stream) => {
+                    this.local_stream = stream;
+                    this.is_open = true;
+                    Upload.sendMessage(VIDEO_PERSONAL_OPEN, receiver_id, "connect");
                     peerConnection.addStream(stream);
                     trace('Added local stream to peerConnection');
 
                     if (isCaller) {
-                        _this.caller(receiver_id);
+                        this.caller(receiver_id);
                     }
 
                     videoTracks = stream.getVideoTracks();
@@ -2000,93 +1439,94 @@ var videoHelper = {
                     }
 
                     trace('Received local stream');
-                    _this.local_video.srcObject = stream;
-                    _this.user_stream[receiver_id] = stream;
+                    this.local_video.srcObject = stream;
+                    this.user_stream[receiver_id] = stream;
 
                     if (typeof completeCallBack == "function") {
                         completeCallBack();
                     }
                 })
-                .catch(function (e) {
-                    _this.failed(receiver_id, "调用视频失败：" + e.toLocaleString());
+                .catch((e) => {
+                    this.failed(receiver_id, "调用视频失败：" + e.toLocaleString());
                 });
         } catch (e) {
             this.failed(receiver_id, "创建连接失败：" + e.toLocaleString());
         }
-    },
-    failed: function (receiver_id, message) {
-        messageHelper.sendMessage(PERSONAL_VIDEO_CLOSE, user.user_id, receiver_id, "");
-        messageHelper.toast(message);
+    }
+
+    failed(receiver_id, message) {
+        trace(message);
+        Upload.sendMessage(VIDEO_PERSONAL_CLOSE, receiver_id, "failed");
+        Util.toast(message);
         this.close(receiver_id);
-    },
-    offerOptions: {
-        offerToReceiveAudio: 1,
-        offerToReceiveVideo: 1
-    },
-    caller: function (receiver_id) {
-        var peerConnection = this.peerConnection[receiver_id];
+    }
+
+    caller(receiver_id) {
+        let peerConnection = this.peerConnection[receiver_id];
         //创建offer
         trace('peerConnection createOffer start');
-        trace("iceConnectionState:"+peerConnection.iceConnectionState+",iceGatheringState:"+peerConnection.iceGatheringState+",signalingState:"+peerConnection.signalingState);
+        trace("iceConnectionState:" + peerConnection.iceConnectionState + ",iceGatheringState:" + peerConnection.iceGatheringState + ",signalingState:" + peerConnection.signalingState);
 
         peerConnection.createOffer(this.offerOptions).then(
-            function (desc) {
+            (desc) => {
                 trace('Offer from peerConnection\n' + desc.sdp);
                 trace('createOffer setLocalDescription start');
-                trace("iceConnectionState:"+peerConnection.iceConnectionState+",iceGatheringState:"+peerConnection.iceGatheringState+",signalingState:"+peerConnection.signalingState);
+                trace("iceConnectionState:" + peerConnection.iceConnectionState + ",iceGatheringState:" + peerConnection.iceGatheringState + ",signalingState:" + peerConnection.signalingState);
 
                 //设置本地描述
-                peerConnection.setLocalDescription(desc).then(function(){
+                peerConnection.setLocalDescription(desc).then(function () {
                     trace('createOffer setLocalDescription complete');
 
                     //发送SDP到远程
-                    messageHelper.sendMessage(PERSONAL_VIDEO_OFFER_DESC, user.user_id, receiver_id, desc);
+                    Upload.sendMessage(VIDEO_PERSONAL_OFFER_DESC, receiver_id, desc);
                 }, function (error) {
                     trace('createOffer setLocalDescription failed: ' + error.toString());
                 });
             },
-            function (error) {
+            (error) => {
                 trace('createOffer create session description failed: ' + error.toString());
             }
         );
-    },
-    video_candidate: function (mess) {
-        var candidate = mess.mess;
-        var peerConnection = this.peerConnection[mess.sender.user_id];
+    }
+
+    video_candidate(mess) {
+        let candidate = mess.mess;
+        let peerConnection = this.peerConnection[mess.sender_id];
 
         trace('video_candidate:', candidate);
         if (!peerConnection) {
-            messageHelper.toast("添加节点失败：未找到对应连接");
+            Util.toast("添加节点失败：未找到对应连接");
             return;
         }
 
-        trace("iceConnectionState:"+peerConnection.iceConnectionState+",iceGatheringState:"+peerConnection.iceGatheringState+",signalingState:"+peerConnection.signalingState);
+        trace("iceConnectionState:" + peerConnection.iceConnectionState + ",iceGatheringState:" + peerConnection.iceGatheringState + ",signalingState:" + peerConnection.signalingState);
         peerConnection.addIceCandidate(
             new RTCIceCandidate(candidate)
-        ).then(function () {
+        ).then(() => {
             trace('peerConnection addIceCandidate success');
-        }, function (error) {
+        }, (error) => {
             trace('peerConnection failed to add ICE Candidate: ' + error.toString());
         });
-    },
-    desc: function (mess) {
-        var desc = mess.mess;
-        var peerConnection = this.peerConnection[mess.sender.user_id];
+    }
+
+    desc(mess) {
+        let desc = mess.mess;
+        let peerConnection = this.peerConnection[mess.sender_id];
 
         //设置远程描述
         trace('setRemoteDescription start');
-        trace("iceConnectionState:"+peerConnection.iceConnectionState+",iceGatheringState:"+peerConnection.iceGatheringState+",signalingState:"+peerConnection.signalingState);
+        trace("iceConnectionState:" + peerConnection.iceConnectionState + ",iceGatheringState:" + peerConnection.iceGatheringState + ",signalingState:" + peerConnection.signalingState);
 
-        peerConnection.setRemoteDescription(desc).then(function () {
+        peerConnection.setRemoteDescription(desc).then(() => {
             trace('setRemoteDescription complete');
-        }, function (error) {
+        }, (error) => {
             trace('setRemoteDescription failed: ' + error.toString());
         });
-    },
-    offer_desc: function (mess) {
-        var _this = this;
-        var receiver_id = mess.sender.user_id;
-        var peerConnection = this.peerConnection[receiver_id];
+    }
+
+    offer_desc(mess) {
+        let receiver_id = mess.sender_id;
+        let peerConnection = this.peerConnection[receiver_id];
         try {
             this.desc(mess);
 
@@ -2095,61 +1535,1640 @@ var videoHelper = {
             trace("iceConnectionState:" + peerConnection.iceConnectionState + ",iceGatheringState:" + peerConnection.iceGatheringState + ",signalingState:" + peerConnection.signalingState);
 
             peerConnection.createAnswer().then(
-                function (desc) {
+                (desc) => {
                     trace('Answer from peerConnection:\n' + desc.sdp);
                     trace('createAnswer setLocalDescription start');
                     trace("iceConnectionState:" + peerConnection.iceConnectionState + ",iceGatheringState:" + peerConnection.iceGatheringState + ",signalingState:" + peerConnection.signalingState);
 
                     //设置本地描述
-                    peerConnection.setLocalDescription(desc).then(function () {
+                    peerConnection.setLocalDescription(desc).then(() => {
                         trace('createAnswer setLocalDescription complete');
                         //回传SDP
-                        messageHelper.sendMessage(PERSONAL_VIDEO_ANSWER_DESC, user.user_id, receiver_id, desc);
+                        Upload.sendMessage(VIDEO_PERSONAL_ANSWER_DESC, receiver_id, desc);
                         this.is_connected = true;
-                        _this.startTime = _this.getTimestamp();
-                    }, function (error) {
+                        this.startTime = this.getTimestamp();
+                    }, (error) => {
                         trace('createAnswer setLocalDescription failed: ' + error.toString());
                     });
                 },
-                function (error) {
+                (error) => {
                     trace('createAnswer create session description failed: ' + error.toString());
                 }
             );
         } catch (e) {
             this.failed(receiver_id, "建立连接失败！" + e.toLocaleString());
         }
-    },
-    answer_desc: function (mess) {
+    }
+
+    answer_desc(mess) {
         this.desc(mess);
         this.is_connected = true;
         this.startTime = this.getTimestamp();
-    },
-    notify_other: function (receiver_id) {
+    }
+
+    notify_other(receiver_id) {
         if (this.count <= 1)
             return;
-        for (var i in this.user_video) {
-            if (i == receiver_id)
+        for (let key of Object.keys(this.user_video)) {
+            if (key == receiver_id)
                 continue;
-            var mess = {
+            let mess = {
                 user_id: receiver_id
             };
-            messageHelper.sendMessage(COMMON_VIDEO_NOTIFY, user.user_id, i, mess);
+            Upload.sendMessage(VIDEO_COMMON_NOTIFY, key, mess);
         }
-    },
-    common_notify: function (mess) {
-        var receiver_id = mess.mess.user_id;
-        messageHelper.sendMessage(PERSONAL_VIDEO_NOTIFY, user.user_id, receiver_id, "");
-        this.connect(true, receiver_id);
-    },
-    personal_notify: function (mess) {
-        var receiver_id = mess.sender.user_id;
-        this.connect(false, receiver_id);
-    },
-    video_open: function (mess) {
-        messageHelper.toast(mess.sender.username + "已经打开视频，等待传输...");
-    },
-    video_close: function (mess) {
-        this.close(mess.sender.user_id);
     }
-};
-videoHelper.init();
+
+    common_notify(mess) {
+        let receiver_id = mess.mess.user_id;
+        Upload.sendMessage(VIDEO_PERSONAL_NOTIFY, receiver_id, "common_notify");
+        this.connect(true, receiver_id);
+    }
+
+    personal_notify(mess) {
+        let receiver_id = mess.sender_id;
+        this.connect(false, receiver_id);
+    }
+
+    video_open(mess) {
+        Util.toast(mess.sender.username + "已经打开视频，等待传输...");
+    }
+
+    video_close(mess) {
+        this.close(mess.sender_id);
+    }
+}
+
+let videoWindow = new VideoWindow();
+videoWindow.init();
+
+class SingleWindow {
+    constructor(id, initCallBack = '') {
+        this.id = id;
+        this.is_show = 0;
+        this.is_multi = true;
+        this.message_type = MESSAGE_COMMON;
+        this.emotion_type = EMOTION_COMMON;
+        this.image_type = IMAGE_COMMON;
+        this.music_type = MUSIC_COMMON;
+        this.video_type = VIDEO_COMMON_REQUEST;
+        this.notify_type = VIDEO_COMMON_NOTIFY;
+        this.history_type = HISTORY_MESSAGE_COMMON;
+    }
+
+    getId() {
+        return this.id;
+    }
+
+    getWindowId() {
+        return this.window_id;
+    }
+
+    getWindow() {
+        return $(`#${this.window_id}`);
+    }
+
+    initWindow(initCallBack = '') {
+        if (this.getWindow().length <= 0) {
+            this.window = this.createWindow();
+            this.title_container = this.window.find(".chat-title");
+            this.content_container = this.window.find(".chat-content");
+            this.features_container = this.window.find(".chat-features");
+            this.back_btn = this.window.find(".btn-back");
+            this.mess_input = this.window.find(".mess-input");
+            this.mess_submit = this.window.find(".mess-submit");
+            this.video_btn = this.window.find(".btn-video");
+            this.more_btn = this.window.find(".btn-more");
+            this.query_history_btn = this.window.find(".query-history");
+            this.query_time = 0;
+            //绑定事件
+            this.back_btn.bind("click", this.hide.bind(this));
+
+            //表情展示
+            emotion.bindToggle(this.window.find(".btn-emotion"), this.window);
+            emotion.bindClose(this.content_container, this.window);
+
+            //发送消息
+            this.bindSubmit();
+
+            //历史查询
+            this.bindQuery();
+
+            //菜单展示
+            menu.bindToggle(this.more_btn, this);
+            menu.bindHide(this.back_btn, this);
+            menu.bindHide(this.content_container, this);
+
+            //上传头像
+
+            //上传图片
+
+            //视频聊天
+            this.bindVideo();
+
+            //粘贴图片
+            this.bindInput();
+
+            //键盘发送
+            this.bindKeyboard();
+
+            if (initCallBack) {
+                initCallBack(this);
+            }
+        }
+    }
+
+    createWindow() {
+        let search = ["%ID%"];
+        let replace = [this.window_id];
+        let html = templates.get(this.template_name).replaceMulti(search, replace);
+        this.container.append(html);
+        return this.getWindow();
+    }
+
+    write(content) {
+        this.content_container.append(content);
+    }
+
+    writeHistory(content) {
+        this.content_container.prepend(content);
+    }
+
+    display() {
+        this.is_show = 1;
+        this.container.removeClass("hidden");
+        this.window.removeClass("slideOutRight z-index-normal").addClass("animated slideInRight z-index-top");
+    }
+
+    hide() {
+        this.is_show = 0;
+        this.window.removeClass("slideInRight").addClass("animated slideOutRight");
+        window.setTimeout(() => {
+            this.window.removeClass("z-index-top").addClass("z-index-normal");
+        }, 1000);
+    }
+
+    hidden() {
+        this.window.addClass("slideOutLeft");
+        window.setTimeout(() => {
+            this.window.removeClass("slideOutLeft z-index-top").addClass("z-index-normal slideOutRight");
+        }, 1000);
+    }
+
+    showEvent(box) {
+        this.flushBackBtn(box.getName());
+        this.autoBottom();
+        emotion.flushProp(this.emotion_type, this.id);
+        image.flushProp(this.image_type, this.id);
+        musicWindow.flushProp(this.music_type, this.id);
+        videoWindow.flushProp(this.video_type, this.id, this.notify_type);
+    }
+
+    hideEvent(box) {
+        emotion.close(this.window);
+    }
+
+    getName() {
+        return this.name;
+    }
+
+    bindBottom(elem) {
+        elem.bind("load", () => {
+            this.autoBottom();
+        });
+    }
+
+    autoBottom() {
+        let container = this.content_container;
+        let speed = 100;
+        let scrollTop = container[0].scrollHeight - container[0].offsetHeight;
+        container.animate({scrollTop, speed});
+    }
+
+    isShow() {
+        return this.is_show;
+    }
+
+    bindSubmit() {
+        this.mess_submit.bind("click", () => {
+            this.send();
+        });
+    }
+
+    send() {
+        let mess = this.mess_input.val();
+        if (!mess) {
+            this.mess_input.focus();
+            return;
+        }
+        Upload.sendMessage(this.message_type, this.id, mess);
+        this.mess_input.val("");
+        this.mess_input.focus();
+    }
+
+    bindInput() {
+        let loading;
+        this.image_flag = true;
+        this.mess_input.pastableTextarea(COMPRESS_PERCENT).on("loadImage", () => {
+            loading = Util.loading("正在分析，请稍候...");
+        }).on("pasteImage", (e, data) => {
+            loading = Util.loading('正在上传，请稍候...');
+            if (!this.image_flag) {
+                return Util.toast('请等待图片上传完成再发送');
+            }
+            let image = data.dataURL;
+            if (image.length > MAX_IMAGE) {
+                let size = MAX_IMAGE / 1024 / 1024;
+                Util.toast('图片太大，目前只支持' + size + 'M');
+                return layer.close(this.image_loading);
+            }
+            this.image_flag = false;
+            Upload.sendMessage(this.image_type, this.id, image);
+        }).on("pasteImageStart", () => {
+            loading = Util.loading("处理中...");
+        });
+    }
+
+    bindKeyboard() {
+        this.mess_input.bind("keydown", (e) => {
+            //ctrl+Enter键换行
+            if (e.ctrlKey && e.keyCode == 13) {
+                this.mess_input.val(this.mess_input.val() + "\n");
+                return;
+            }
+            //Enter键发送
+            if (e.keyCode == 13) {
+                //阻止默认换行
+                e.preventDefault();
+                this.send();
+            }
+
+        });
+    }
+
+    imageUnlock() {
+        this.image_flag = true;
+        layer.closeAll();
+    }
+
+    bindQuery() {
+        this.setQueryTime((new Date()).getTime() / 1000);
+        this.query_history_btn.on("click", () => {
+            let query_time = this.getQueryTime() - 0.0001; //精确到4位，和服务器保持一致，并去除边界的一条
+            Upload.sendMessage(this.history_type, this.id, query_time);
+            this.query_history_btn.hide().show(300);
+        });
+    }
+
+    flushQueryTime() {
+        let date = new Date();
+        date.setTime(this.getQueryTime() * 1000);
+        let curr_date = date.toDateString(); //当前日期
+        let time = date.getHours() + date.getMinutes() + date.getSeconds();
+        let second = (0 == time) ? 86400 : 0; //如果不是整点，则查截止到今天的，否则是前一天的
+        let query_time = Date.parse(curr_date) / 1000 - second;
+        this.setQueryTime(query_time);
+
+        date.setTime((query_time - 1) * 1000);
+        let query_date = date.toLocaleDateString();
+        Util.toast("继续点击查" + query_date + "消息");
+    }
+
+    setQueryTime(timestamp) {
+        this.query_time = timestamp;
+    }
+
+    getQueryTime() {
+        return this.query_time;
+    }
+
+    bindVideo() {
+        this.video_btn.bind("click", () => {
+            videoWindow.confirm(this.video_type, this.id, this.is_multi);
+        });
+    }
+
+    flushBackBtn(name) {
+        this.back_btn.text(`<${name}`);
+    }
+
+    getTitleContainer() {
+        return this.title_container;
+    }
+
+    getMenuContainer() {
+        return this.menu_container;
+    }
+
+    getContentContainer() {
+        return this.content_container;
+    }
+
+    getFeaturesContainer() {
+        return this.features_container;
+    }
+
+    getBackBtn() {
+        return this.back_btn;
+    }
+
+    getMessInput() {
+        return this.mess_input;
+    }
+
+    getMessSubmit() {
+        return this.mess_submit;
+    }
+}
+
+//私人窗口
+class PersonWindow extends SingleWindow {
+    constructor(id, initCallBack = '') {
+        super(id, initCallBack);
+        this.container = $(".chat-box");
+        this.template_name = "person_window";
+
+        this.is_multi = false;
+        this.window_id = `person_${id}`;
+        this.message_type = MESSAGE_PERSONAL;
+        this.emotion_type = EMOTION_PERSONAL;
+        this.image_type = IMAGE_PERSONAL;
+        this.music_type = MUSIC_PERSONAL;
+        this.video_type = VIDEO_PERSONAL_REQUEST;
+        this.notify_type = VIDEO_PERSONAL_NOTIFY;
+        this.history_type = HISTORY_MESSAGE_PERSONAL;
+
+        this.initWindow(initCallBack);
+
+        if (!PersonWindow.windows) {
+            PersonWindow.windows = new Map();
+        }
+
+        if (!PersonWindow.windows.has(id)) {
+            PersonWindow.windows.set(id, this);
+        }
+        return PersonWindow.windows.get(id);
+    }
+
+    flushTitle(user, is_online = 1) {
+        this.flushStatus(is_online);
+        this.name = user.username;
+        this.window.find(".chat-username").text(this.name);
+    }
+
+    flushStatus(is_online) {
+        let status = is_online ? "chat-status-online" : "chat-status-offline";
+        this.window.find(".chat-status").removeClass("chat-status-online chat-status-offline").addClass(status);
+    }
+
+    static toShow(btn) {
+        let id = $(btn).data("id");
+        let singleWindow = new PersonWindow(id);
+        let singleWindow2 = new CommonWindow('0');
+        singleWindow.showEvent(new MessageListWindow('0'));
+        singleWindow.display();
+
+        singleWindow2.hidden();
+    }
+}
+
+//公共窗口，群聊(多个群ID)
+class CommonWindow extends SingleWindow {
+    constructor(id, initCallBack = '') {
+        super(id, initCallBack);
+        this.container = $(".chat-room-box");
+        this.template_name = "common_window";
+
+        this.is_multi = true;
+        this.window_id = `room_${id}`;
+        this.message_type = MESSAGE_COMMON;
+        this.emotion_type = EMOTION_COMMON;
+        this.music_type = MUSIC_COMMON;
+        this.video_type = VIDEO_COMMON_REQUEST;
+        this.notify_type = VIDEO_COMMON_NOTIFY;
+        this.history_type = HISTORY_MESSAGE_COMMON;
+
+        this.initWindow(initCallBack);
+
+        if (!CommonWindow.windows) {
+            CommonWindow.windows = new Map();
+        }
+
+        if (!CommonWindow.windows.has(id)) {
+            CommonWindow.windows.set(id, this);
+        }
+        return CommonWindow.windows.get(id);
+    }
+
+    flushTitle(group, total) {
+        //this.name = group.name;
+        this.name = "大厅";
+        this.window.find(".group-name").text(this.name);
+        this.flushTotal(total);
+    }
+
+    flushTotal(total) {
+        this.window.find(".total").text(total);
+    }
+}
+
+//迷你弹窗
+class MiniWindow {
+
+}
+
+class Box {
+    display() {
+        this.window.removeClass("hidden z-index-normal slideOutLeft").addClass("animated slideInLeft z-index-top");
+    }
+
+    hide() {
+        this.window.removeClass("slideInLeft").addClass("animated slideOutLeft");
+        window.setTimeout(() => {
+            this.window.removeClass("z-index-top").addClass("z-index-normal");
+        }, 1000);
+    }
+
+    hideEvent() {
+
+    }
+
+    showEvent() {
+
+    }
+
+    getName() {
+        return this.name;
+    }
+
+    getItem(item_id = "") {
+
+    }
+
+    bindClick(singleWindow, item_id = "") {
+        //列表->窗口事件
+        let elem = this.getItem(item_id);
+        elem.bind("click", () => {
+            this.hideEvent();
+            this.hide();
+
+            singleWindow.showEvent(this);
+            singleWindow.display();
+        });
+
+        //窗口->列表事件
+        elem = singleWindow.getBackBtn();
+        elem.bind("click", () => {
+            this.showEvent();
+            this.display();
+
+            singleWindow.hideEvent(this);
+            singleWindow.hide();
+        });
+    }
+}
+
+//消息列表窗口
+class MessageListWindow extends Box {
+    constructor(id, initCallBack = '') {
+        super();
+        this.window = $(".main-box");
+        this.container = $(".message-list");
+        this.template_name = "message_list_item";
+        this.item_id = `item_${id}`;
+        this.name = '消息';
+        this.initWindow(initCallBack);
+
+        if (!MessageListWindow.total) {
+            MessageListWindow.total = 0;
+        }
+
+        if (!MessageListWindow.windows) {
+            MessageListWindow.windows = new Map();
+        }
+
+        if (!MessageListWindow.windows.has(id)) {
+            MessageListWindow.windows.set(id, this);
+        }
+        return MessageListWindow.windows.get(id);
+    }
+
+    getWindowId() {
+        return this.item_id;
+    }
+
+    getWindow() {
+        return this.window;
+    }
+
+    getItem() {
+        return $(`#${this.item_id}`);
+    }
+
+    initWindow(initCallBack = '') {
+        if (this.getItem().length <= 0) {
+            this.unread = 0;
+            this.item = this.createWindow();
+            this.head_container = this.item.find(".message-head");
+            this.title_container = this.item.find(".message-title");
+            this.time_container = this.item.find(".message-time");
+            this.badge_container = this.item.find(".message-badge");
+            this.last_container = this.item.find(".message-last");
+
+            if (initCallBack) {
+                initCallBack(this);
+            }
+        }
+    }
+
+    createWindow() {
+        let search = ["%ID%"];
+        let replace = [this.item_id];
+        let html = templates.get(this.template_name).replaceMulti(search, replace);
+        this.container.append(html);
+        return this.getItem();
+    }
+
+    getUnread() {
+        return this.unread;
+    }
+
+    getName() {
+        let unread = MessageListWindow.total;
+        return unread ? `${this.name}(${unread})` : this.name;
+    }
+
+    getHeadContainer() {
+        return this.head_container;
+    }
+
+    getTitleContainer() {
+        return this.title_container;
+    }
+
+    getTimeContainer() {
+        return this.time_container;
+    }
+
+    getBadgeContainer() {
+        return this.badge_container;
+    }
+
+    getLastContainer() {
+        return this.last_container;
+    }
+
+    clearUnread() {
+        MessageListWindow.total -= this.unread;
+        this.unread = 0;
+        this.badge_container.addClass("hidden").text("");
+    }
+
+    hideEvent() {
+        this.clearUnread();
+    }
+
+    flushTitle(user, mess) {
+        let message = mess.message ? mess.message : '';
+        let html = user.avatar ? '<img src="./' + user.avatar + '" />' : '<img src="./images/chat.png" />';
+        this.head_container.html(html);
+        this.title_container.text(user.username);
+        this.time_container.text(mess.time);
+        this.last_container.text(message.substr(0, 20));
+    }
+
+    flushItemNum() {
+        MessageListWindow.total++;
+        this.unread++;
+        this.badge_container.removeClass("hidden").text(this.unread);
+    }
+}
+
+//联系人
+class ContactsWindow extends Box {
+    constructor() {
+        super();
+        this.name = '联系人';
+        this.window = $(".main-box");
+        this.role_id = USER.role_id;
+        this.container = $(".contacts-list");
+        this.template_name = (this.role_id > 0) ?
+            "contact_list_admin" : "contact_list_user";
+        this.search = ["%ID%", "%USERNAME%", "%USER_STATUS%", "%SIGN%"];
+        if (!ContactsWindow.total) {
+            ContactsWindow.total = 0;
+        }
+        if (!ContactsWindow.ids) {
+            ContactsWindow.ids = new Set();
+        }
+    }
+
+    getItemId(id) {
+        return `contacts_${id}`;
+    }
+
+    getItem(item_id) {
+        return $(`#${item_id}`);
+    }
+
+    flushList(users) {
+        for (let [, user] of users) {
+            this.addUser(user);
+        }
+    }
+
+    getUserStatus(is_online) {
+        return is_online ? '[在线]' : '[离线]';
+    }
+
+
+    flushUser(user) {
+
+    }
+
+    addUser(user) {
+        ContactsWindow.total++;
+        let user_id = user.user_id;
+        let id = this.getItemId(user_id);
+        let username = user.username;
+        let is_online = UserObserver.isOnline(user_id);
+        let user_status = this.getUserStatus(is_online);
+        let replace = [id, username, user_status, ""];
+        let html = templates.get(this.template_name).replaceMulti(this.search, replace);
+        this.container.append(html);
+
+        ContactsWindow.ids.add(user_id);
+
+        let window = new PersonWindow(user_id);
+        this.bindClick(window, id);
+
+        //移除按钮
+        if (this.role_id > 0) {
+            this.bindRemove(user);
+        }
+    }
+
+    bindRemove(user) {
+        let user_id = user.user_id;
+        let item = this.getItem(this.getItemId(user_id));
+        let btn = item.find(".user-remove");
+        btn.bind("click", (e) => {
+            e.stopPropagation();
+            layer.open({
+                title: ["提示", "background:#FF4351;color:white;"],
+                content: `确定移除${user.username}？`,
+                btn: ["确认", "取消"],
+                yes: (index) => {
+                    layer.close(index);
+                    this.removeUser(user_id);
+                    //item.remove();
+                }
+            });
+        });
+
+    }
+
+    removeUser(user_id) {
+        Upload.sendMessage(USER_REMOVE, user_id, 'remove');
+    }
+
+    flushUserStatus(user_id, is_online) {
+        let user_status = this.getUserStatus(is_online);
+        let item = this.getItem(this.getItemId(user_id));
+        item.find(".user-status").text(user_status);
+    }
+
+    static isExists(user_id) {
+        return ContactsWindow.ids.has(user_id);
+    }
+}
+
+class AvatarWindow {
+    constructor() {
+        this.container = $(".headImg-popup");
+        this.backdrop = $("#backdrop");
+    }
+
+    init() {
+        this.backdrop.bind("click", () => {
+            this.hide();
+        });
+        $(".showImage").bind("click", () => {
+            this.hide();
+        });
+
+        let ljkUpload = new LjkUpload(this.container);
+        let $file_btn = $(".upload-select-btn"),     //文件选择按钮
+            $move_image = $(".move-image"),    //裁剪框
+            $range = $("#range");               //滑块
+
+        ljkUpload.tip = function (msg) {
+            layer.open({
+                content: msg
+                , skin: 'msg'
+                , time: 3
+            });
+        };
+        ljkUpload.loading = function (msg) {
+            return layer.open({
+                type: 2,
+                content: msg
+            });
+        };
+        ljkUpload.delete = function (loading) {
+            layer.close(loading);
+        };
+
+        //拖拽
+        ljkUpload.moveImage({
+            ele: $move_image
+        });
+        //预览
+        ljkUpload.showImage({
+            fileSelectBtn: $file_btn,
+            fileBtn: $("aside input[type='file']"),
+            showEle: $move_image,
+            isImage: true,          //是文件 false  默认 true
+            maxSize: 1024 * 10            //文件最大限制  KB   默认1M
+        });
+        //缩放
+        ljkUpload.rangeToScale({
+            range: $range,
+            ele: $move_image
+        });
+        //裁剪
+        ljkUpload.clipImage({
+            clipSuccess: function (src) {       //clipSuccess  裁剪成功 返回 base64图片
+                let index = ljkUpload.loading("上传中，请稍候");
+                let html = '<img src="' + src + '" />';
+                $(".showImage").html(html);
+
+                Upload.sendMessage(USER_AVATAR_UPLOAD, 0, src);
+                ljkUpload.delete(index);
+            }
+        });
+    }
+
+    display() {
+        this.backdrop.fadeIn();
+        this.container.removeClass("hidden slideOutUp").addClass("animated slideInDown");
+    }
+
+    hide() {
+        this.container.removeClass("slideInDown").addClass("animated slideOutUp");
+        this.backdrop.fadeOut();
+    }
+}
+let avatar = new AvatarWindow();
+avatar.init();
+
+//我的设置
+class MyZoneWindow extends Box {
+    constructor() {
+        super();
+        this.window = $(".main-box");
+        this.container = $(".my-zone");
+        this.avatar_container = this.container.find(".my-head");
+        this.username_container = this.container.find(".username");
+        this.upload_avatar_btn = this.container.find(".upload-avatar");
+    }
+
+    init() {
+        this.upload_avatar_btn.bind("click", () => {
+            avatar.display();
+        });
+    }
+
+    flushUserInfo(user) {
+        if (user.avatar) {
+            this.avatar_container.attr("src", '.' + user.avatar);
+        }
+        this.username_container.text(user.username);
+    }
+
+    flushUserAvatar(avatar) {
+        this.avatar_container.attr("src", '.' + avatar);
+    }
+}
+let myZoneWindow = new MyZoneWindow();
+myZoneWindow.init();
+
+
+//=======================通知、观察者======================
+class SplSubject {
+    constructor() {
+        this.obsevers = new Set();
+    }
+
+    attach(observer) {
+        this.obsevers.add(observer);
+    }
+
+    detach(observer) {
+        this.obsevers.delete(observer);
+    }
+
+    notify() {
+        this.obsevers.forEach(
+            (observer, key) => {
+                observer.update(this);
+            }
+        );
+    }
+}
+
+//消息通知
+class MessageNotifier extends SplSubject {
+    constructor(mess) {
+        super();
+        this.data = mess;
+        this.type = mess.type;
+    }
+
+    getData() {
+        return this.data;
+    }
+
+    setData(mess) {
+        this.data = mess;
+    }
+}
+
+class Observer {
+    update(splSubject) {
+    }
+}
+
+//用户观察者，监测用户信息变化、存储用户信息
+class UserObserver extends Observer {
+    constructor() {
+        super();
+        this.storage = localStorage;
+        this.version = null;
+        if (!UserObserver.users) {
+            UserObserver.users = new Map();
+            this.initCache();
+        }
+
+        if (!UserObserver.online_users) {
+            UserObserver.online_users = new Set();
+        }
+    }
+
+    update(splSubject) {
+        let mess = splSubject.getData();
+        let user, users;
+        switch (splSubject.type) {
+            case USER_ONLINE:
+                user = mess.user;
+                UserObserver.online(user.user_id);
+                this.addUser(user);
+                break;
+            case USER_QUIT:
+                user = mess.user;
+                UserObserver.downline(user.user_id);
+                break;
+            case USER_LIST:
+                users = mess.users;
+                users.forEach((user, key) => {
+                    this.addUser(user);
+                    UserObserver.online(user.user_id);
+                });
+                break;
+            case USER_QUERY:
+                this.addUser(mess.user);
+                break;
+            case USER_DOWNLINE://下线
+                UserObserver.downline(USER.user_id);
+                Util.toast(mess.mess);
+                break;
+            case USER_AVATAR_SUCCESS:
+                let update = {avatar: mess.mess};
+                user = Object.assign(USER, update);
+                setCookie('user', JSON.stringify(user));
+                USER.avatar = mess.mess;
+                this.flushUser(USER);
+                break;
+            case USER_REMOVE://移除
+            case USER_DISABLED://禁用
+                USER.is_active = 0;
+                this.flushUser(USER);
+                Util.loading(mess.mess, false, false);
+                break;
+            default:
+                return;
+                break;
+        }
+    }
+
+    initCache() {
+        let user_ids = this.getUserIds();
+        for (let user_id of user_ids) {
+            let user = JSON.parse(this.storage.getItem(user_id));
+            UserObserver.users.set(user_id, user);
+        }
+
+        this.version = this.storage.getItem("version");
+        if (!this.version) {
+            this.storage.setItem("version", "1.0");
+            this.version = "1.0";
+        }
+    }
+
+    getUserIds() {
+        let ids = JSON.parse(this.storage.getItem("user_ids"));
+        if (ids == null) {
+            ids = [];
+            this.storage.setItem("user_ids", JSON.stringify(ids));
+        }
+        return ids;
+    }
+
+    addUserId(user_id) {
+        let ids = this.getUserIds();
+        let set = new Set(ids);
+        set.add(user_id);
+        ids = [...set];
+        this.storage.setItem("user_ids", JSON.stringify(ids));
+    }
+
+
+    addUser(user) {
+        let user_id = user.user_id;
+        this.addUserId(user_id);
+        this.flushUser(user);
+    }
+
+    flushUser(user) {
+        let user_id = user.user_id;
+        this.storage.setItem(user_id, JSON.stringify(user));
+        UserObserver.users.set(user_id, user);
+    }
+
+    static getUser(user_id) {
+        let user = UserObserver.users.get(user_id);
+        if (!user) {
+            //查询用户信息
+            Upload.sendMessage(USER_QUERY, user_id);
+            user = false;
+        }
+        return user;
+    }
+
+    static isOnline(user_id) {
+        return UserObserver.online_users.has(user_id);
+    }
+
+    static online(user_id) {
+        UserObserver.online_users.add(user_id);
+    }
+
+    static downline(user_id) {
+        UserObserver.online_users.delete(user_id);
+    }
+
+    static total() {
+        return UserObserver.online_users.size; //算上本人
+    }
+
+    static getUsers(delete_me = true) {
+        if (delete_me) {
+            let users = new Map();
+            UserObserver.users.forEach((value, key) => {
+                users.set(key, value);
+            });
+            users.delete(USER.user_id); //用副本操作，不影响原来的
+            return users;
+        } else {
+            return UserObserver.users;
+        }
+    }
+
+    static isExists(user_id) {
+        return UserObserver.users.has(user_id);
+    }
+}
+
+//消息列表观察者
+class MessageListObserver extends Observer {
+    constructor() {
+        super();
+    }
+
+    update(splSubject) {
+        let mess = splSubject.getData();
+        let id, user, singleWindow, template, window_id, decorator, content, template_id;
+        switch (splSubject.type) {
+            case MESSAGE_SELF://myself @other
+                user = mess.receiver;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                mess.message = mess.mess;
+                break;
+            case IMAGE_SELF://myself @other
+                user = mess.receiver;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                mess.message = "[图片]";
+                break;
+            case EMOTION_SELF:
+                user = mess.receiver;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                mess.message = "[表情]";
+                break;
+            case MUSIC_SELF:
+                user = mess.receiver;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                mess.message = `[音乐]${mess.name}`;
+                break;
+            case MESSAGE_OTHER://other @me
+                user = mess.sender;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                mess.message = mess.mess;
+                break;
+            case IMAGE_OTHER://other @me
+                user = mess.sender;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                mess.message = "[图片]";
+                break;
+            case EMOTION_OTHER:
+                user = mess.sender;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                mess.message = "[表情]";
+                break;
+            case MUSIC_OTHER:
+                user = mess.sender;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                mess.message = `[音乐]${mess.name}`;
+                break;
+
+            case USER_ONLINE://欢迎消息
+                id = '0';
+                singleWindow = new CommonWindow(id);
+                decorator = new WelcomeDecorator(new OriginalMessage(templates.get("welcome_text")));
+                mess.message = decorator.process(mess);
+                break;
+            case USER_QUIT://退出消息
+                id = '0';
+                singleWindow = new CommonWindow(id);
+                decorator = new WelcomeDecorator(new OriginalMessage(templates.get("quit_text")));
+                mess.message = decorator.process(mess);
+                break;
+            case USER_DOWNLINE:
+                id = '0';
+                singleWindow = new CommonWindow(id);
+                decorator = new NormalMessageDecorator(new OriginalMessage(templates.get("original_text")));
+                mess.message = decorator.process(mess);
+                break;
+            case MESSAGE_COMMON://公共消息
+                id = '0';
+                singleWindow = new CommonWindow(id);
+                mess.message = `${mess.sender.username}:${mess.mess}`;
+                break;
+            case IMAGE_COMMON://公共消息
+                id = '0';
+                singleWindow = new CommonWindow(id);
+                mess.message = `${mess.sender.username}:[图片]`;
+                break;
+            case EMOTION_COMMON:
+                id = '0';
+                singleWindow = new CommonWindow(id);
+                mess.message = `${mess.sender.username}:[表情]`;
+                break;
+            case MUSIC_COMMON:
+                id = '0';
+                singleWindow = new CommonWindow(id);
+                mess.message = `${mess.sender.username}:[音乐]${mess.name}`;
+                break;
+            default:
+                return;
+                break;
+        }
+        let messageList = new MessageListWindow(id, (messageListWindow) => {
+            messageListWindow.bindClick(singleWindow);
+        });
+        if (id == '0') user = {username: "大厅"};
+        messageList.flushTitle(user, mess);
+        if (!singleWindow.isShow()) {
+            messageList.flushItemNum();
+        } else {
+            messageList.clearUnread();
+        }
+    }
+}
+
+//公共窗口观察者
+class CommonWindowObserver extends Observer {
+    constructor(is_history = 0) {
+        super();
+        this.is_history = is_history;
+    }
+
+    update(splSubject) {
+        let mess = splSubject.getData();
+        let id, user, commonWindow, template, window_id, decorator, content, is_self, container;
+        user = mess.sender || mess.user;
+        id = '0';
+        commonWindow = new CommonWindow(id);
+        window_id = commonWindow.getWindowId();
+        switch (splSubject.type) {
+            case USER_ONLINE://欢迎消息
+                commonWindow.flushTitle(user, UserObserver.total());
+                if (USER.user_id == user.user_id) return;
+                template = templates.get("welcome_message");
+                decorator = new WelcomeDecorator(new TimeTextMessage(template, window_id, this.is_history));
+
+                break;
+            case USER_QUIT://退出消息
+                commonWindow.flushTotal(UserObserver.total());
+                template = templates.get("quit_message");
+                decorator = new WelcomeDecorator(new TimeTextMessage(template, window_id, this.is_history));
+
+                break;
+            case USER_LIST:
+                commonWindow.flushTotal(UserObserver.total());
+                return;
+                break;
+            case USER_DOWNLINE:
+                commonWindow.flushTotal(UserObserver.total());
+                return;
+                break;
+            case MESSAGE_COMMON://公共消息
+                commonWindow.flushTotal(UserObserver.total());
+                is_self = user.user_id == USER.user_id;
+                template = is_self ? templates.get("my_message") : templates.get("common_message");
+                decorator = new CommonBubbleDecorator(new AvatarDecorator(new ParseCodeDecorator(new TimeTextMessage(template, window_id, this.is_history))));
+
+                break;
+            case IMAGE_COMMON://公共消息
+            case EMOTION_COMMON:
+                commonWindow.flushTotal(UserObserver.total());
+                is_self = user.user_id == USER.user_id;
+                template = is_self ? templates.get("my_message") : templates.get("common_message");
+                decorator = new CommonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username)));
+
+                container = commonWindow.getContentContainer();
+                commonWindow.imageUnlock();
+                break;
+            case MUSIC_COMMON:
+                is_self = user.user_id == USER.user_id;
+                template = is_self ? templates.get("my_message") : templates.get("common_message");
+                decorator = new CommonBubbleDecorator(new AvatarDecorator(new MusicDecorator(new TimeTextMessage(template, window_id, this.is_history))));
+                break;
+            default:
+                return;
+                break;
+        }
+
+        content = decorator.process(mess);
+        if (this.is_history) {
+            commonWindow.writeHistory(content);
+        } else {
+            commonWindow.write(content);
+            commonWindow.autoBottom();
+        }
+
+        if (container) {
+            imageView.preview(container);
+        }
+    }
+}
+
+//私人窗口观察者
+class PersonWindowObserver extends Observer {
+    constructor(is_history = 0) {
+        super();
+        this.is_history = is_history;
+    }
+
+    update(splSubject) {
+        let mess = splSubject.getData();
+        let id, user, singleWindow, template, window_id, decorator, content, template_id, container;
+        switch (splSubject.type) {
+            case USER_ONLINE:
+                user = mess.user;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                singleWindow.flushTitle(user, UserObserver.isOnline(id));
+                return;
+                break;
+            case USER_QUIT:
+                user = mess.user;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                singleWindow.flushStatus(0);
+                return;
+                break;
+            case USER_LIST:
+                let users = UserObserver.getUsers();
+                for (let [id, user] of users) {
+                    singleWindow = new PersonWindow(id);
+                    singleWindow.flushTitle(user, UserObserver.isOnline(id));
+                }
+                return;
+                break;
+            case MESSAGE_SELF://myself @other
+                user = mess.receiver;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                window_id = singleWindow.getWindowId();
+                template = templates.get("self_message");
+                decorator = new PersonBubbleDecorator(new AvatarDecorator(new ParseCodeDecorator(new TimeTextMessage(template, window_id, this.is_history))));
+
+                break;
+            case IMAGE_SELF://myself @other
+            case EMOTION_SELF:
+                user = mess.receiver;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                window_id = singleWindow.getWindowId();
+                template = templates.get("self_message");
+                decorator = new PersonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username)));
+
+                container = singleWindow.getContentContainer();
+
+                singleWindow.imageUnlock();
+                break;
+            case MESSAGE_OTHER://other @me
+                user = mess.sender;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                window_id = singleWindow.getWindowId();
+                template = templates.get("private_message");
+                decorator = new PersonBubbleDecorator(new AvatarDecorator(new ParseCodeDecorator(new TimeTextMessage(template, window_id, this.is_history))));
+
+                //TODO sound
+                break;
+            case IMAGE_OTHER://other @me
+            case EMOTION_OTHER:
+                user = mess.sender;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                window_id = singleWindow.getWindowId();
+                template = templates.get("private_message");
+                decorator = new PersonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username)));
+
+                container = singleWindow.getContentContainer();
+                singleWindow.imageUnlock();
+                break;
+            case MUSIC_SELF:
+                user = mess.receiver;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                window_id = singleWindow.getWindowId();
+                template = templates.get("self_message");
+                decorator = new PersonBubbleDecorator(new AvatarDecorator(new MusicDecorator(new TimeTextMessage(template, window_id, this.is_history))));
+                break;
+            case MUSIC_OTHER:
+                user = mess.sender;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                window_id = singleWindow.getWindowId();
+                template = templates.get("private_message");
+                decorator = new PersonBubbleDecorator(new AvatarDecorator(new MusicDecorator(new TimeTextMessage(template, window_id, this.is_history))));
+                break;
+            default:
+                return;
+                break;
+        }
+        content = decorator.process(mess);
+        if (this.is_history) {
+            singleWindow.writeHistory(content);
+        } else {
+            singleWindow.write(content);
+            singleWindow.autoBottom();
+        }
+        audio.play();
+
+        user = UserObserver.getUser(id);
+        let is_online = UserObserver.isOnline(id);
+        singleWindow.flushTitle(user, is_online);
+
+        if (container) {
+            imageView.preview(container);
+        }
+    }
+}
+
+
+//迷你弹窗观察者
+class MiniWindowObserver extends Observer {
+    constructor() {
+        super();
+    }
+
+    update(splSubject) {
+        switch (splSubject.type) {
+
+        }
+    }
+}
+
+//登录窗口观察者
+class LoginWindowObserver extends Observer {
+    constructor() {
+        super();
+    }
+
+    update(splSubject) {
+        let mess = splSubject.getData();
+        let window = new LoginWindow();
+        switch (splSubject.type) {
+            case USER_REGISTER://需要注册
+                window.display();
+                break;
+            case USER_INCORRECT://登录出错
+                window.incorrect(mess);
+                break;
+            case USER_LOGIN://已经登录
+                window.login(mess);
+                break;
+            default:
+                return;
+                break;
+        }
+    }
+}
+
+//联系人
+class ContactsWindowObserver extends Observer {
+    constructor() {
+        super();
+    }
+
+    update(splSubject) {
+        let contactsWindow;
+        let mess = splSubject.getData();
+        let users, user, user_id;
+        switch (splSubject.type) {
+            case USER_LIST://在线用户列表
+                contactsWindow = new ContactsWindow();
+                users = UserObserver.getUsers();
+                contactsWindow.flushList(users);
+                break;
+            case USER_QUIT:
+                //刷新用户状态
+                contactsWindow = new ContactsWindow();
+                user = mess.user;
+                contactsWindow.flushUserStatus(user.user_id, 0);
+                break;
+            case USER_ONLINE:
+                user = mess.user;
+                user_id = user.user_id;
+                if (user_id == USER.user_id) return;
+                contactsWindow = new ContactsWindow();
+                contactsWindow.flushUserStatus(user_id, 1);
+                if (ContactsWindow.isExists(user_id)) return;
+                contactsWindow.addUser(user);
+                break;
+            case ERROR://出错
+            case WARNING://警告
+            case SYSTEM://系统信息
+                Util.toast(mess.mess);
+                window.setTimeout(() => {
+                    layer.closeAll();
+                }, 3000);
+                break;
+            default:
+                return;
+                break;
+        }
+    }
+}
+
+class MyZoneWindowObserver extends Observer {
+    constructor() {
+        super();
+    }
+
+    update(splSubject) {
+        let mess = splSubject.getData();
+        switch (splSubject.type) {
+            case USER_LOGIN:
+                myZoneWindow.flushUserInfo(mess.user);
+                break;
+            case USER_AVATAR_SUCCESS:
+                myZoneWindow.flushUserAvatar(mess.mess);
+                avatar.hide();
+                Util.toast("上传成功，发消息试试吧;-)");
+                //TODO 更新多个窗口头像：消息列表、对话窗口
+                break;
+            case USER_AVATAR_FAIL:
+                Util.toast(mess.mess);
+                break;
+        }
+    }
+}
+
+//视频
+class VideoWindowObserver extends Observer {
+    constructor() {
+        super();
+    }
+
+    update(splSubject) {
+        let mess = splSubject.getData();
+        switch (splSubject.type) {
+            case VIDEO_COMMON_REQUEST:
+                videoWindow.request(mess, true);
+                break;
+            case VIDEO_PERSONAL_REQUEST:
+                videoWindow.request(mess, false);
+                break;
+            case VIDEO_PERSONAL_OFFLINE:
+                videoWindow.offline(mess);
+                break;
+            case VIDEO_PERSONAL_ALLOW:
+                videoWindow.allow(mess);
+                break;
+            case VIDEO_PERSONAL_DENY:
+                videoWindow.deny(mess);
+                break;
+            case VIDEO_PERSONAL_OPEN:
+                videoWindow.video_open(mess);
+                break;
+            case VIDEO_PERSONAL_CLOSE:
+                videoWindow.video_close(mess);
+                break;
+            case VIDEO_PERSONAL_END:
+                videoWindow.end(mess);
+                break;
+            case VIDEO_PERSONAL_OFFER_DESC:
+                videoWindow.offer_desc(mess);
+                break;
+            case VIDEO_PERSONAL_ANSWER_DESC:
+                videoWindow.answer_desc(mess);
+                break;
+            case VIDEO_PERSONAL_CANDIDATE:
+                videoWindow.video_candidate(mess);
+                break;
+            case VIDEO_COMMON_NOTIFY:
+                videoWindow.common_notify(mess);
+                break;
+            case VIDEO_PERSONAL_NOTIFY:
+                videoWindow.personal_notify(mess);
+                break;
+            default:
+                return;
+                break;
+        }
+    }
+}
+
+class MessageHelper {
+    constructor() {
+        MessageHelper.queue = [];
+        MessageHelper.times = 0;
+        MessageHelper.limit_times = 3;
+        MessageHelper.userObserver = new UserObserver();
+        MessageHelper.reconnect_times = 0;
+    }
+
+    onOpen() {
+        if (typeof USER == 'object') {
+            Upload.sendMessage(USER_LOGIN);
+        } else {
+            let window = new LoginWindow();
+            window.display();
+        }
+    }
+
+    onClose(e) {
+        //TODO 联系人离线
+        if (!USER.is_active) return;
+        let d = new Date();
+        let date = 'Y-m-d H:i:s';
+        let search = ['Y', 'm', 'd', 'H', 'i', 's'];
+        let replace = [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()];
+        date = date.replaceMulti(search, replace);
+
+        let index = Util.loading(date + ' 已断线，重试中...', false, false);
+        let timer = window.setInterval(() => {
+            try {
+                //断线重连
+                if (MessageHelper.reconnect_times >= MAX_LIMITS) {
+                    window.clearInterval(timer);
+                    layer.close(index);
+                    return Util.toast("无法连接到服务器，请稍候再试");
+                }
+                if (socket.readyState == WebSocket.OPEN) {
+                    window.clearInterval(timer);
+                    socket.onclose = messageHelper.onClose;
+
+                    socket.onerror = messageHelper.onError;
+
+                    socket.onmessage = messageHelper.onMessage;
+
+                    messageHelper.onOpen();
+                    layer.close(index);
+
+                    MessageHelper.reconnect_times = 0;
+                    return;
+                }
+                socket = new WebSocket(SERVER_URL);
+                MessageHelper.reconnect_times++;
+            } catch (e) {
+                trace(e);
+            }
+        }, 2000);
+    }
+
+    onError(e) {
+        trace(e);
+        Util.toast("连接服务器出错");
+    }
+
+    onMessage(message) {
+        let mess = DataHelper.decode(message.data);
+        let id = mess.receiver_id;
+        let singleWindow, list;
+        switch (mess.type) {
+            case HISTORY_MESSAGE_COMMON:
+                list = mess.mess.reverse();
+                for (let one of list) {
+                    MessageHelper.doOnMessage(one, 1);
+                }
+                singleWindow = new CommonWindow(id);
+                if (list.length <= 0) {
+                    singleWindow.flushQueryTime();
+                } else {
+                    singleWindow.setQueryTime(list[list.length - 1].timestamp);
+                }
+                break;
+            case HISTORY_MESSAGE_PERSONAL:
+                list = mess.mess.reverse();
+                for (let one of list) {
+                    MessageHelper.doOnMessage(one, 1);
+                }
+                singleWindow = new PersonWindow(id);
+                if (list.length <= 0) {
+                    singleWindow.flushQueryTime();
+                } else {
+                    singleWindow.setQueryTime(list[list.length - 1].timestamp);
+                }
+                break;
+            default:
+                MessageHelper.doOnMessage(mess);
+        }
+
+
+        if ((MessageHelper.queue.length > 0) && (MessageHelper.times < MessageHelper.limit_times)) {
+            MessageHelper.times++;
+            MessageHelper.doOnMessage(MessageHelper.delQueue());
+        }
+    }
+
+    static doOnMessage(mess, is_history = 0) {
+        let notifier = new MessageNotifier(mess);
+        let res = true;
+        notifier.attach(MessageHelper.userObserver);
+        notifier.notify();
+        notifier.detach(MessageHelper.userObserver);
+
+        if (mess.hasOwnProperty("sender_id")) {
+            res = mess.sender = UserObserver.getUser(mess.sender_id);
+        }
+
+        if (mess.hasOwnProperty("receiver_id") && mess.receiver_id != '0') {
+            res = mess.receiver = UserObserver.getUser(mess.receiver_id);
+        }
+
+        if (!res) {
+            MessageHelper.addQueue(mess);
+            return;
+        }
+
+        if (!is_history) {
+            notifier.attach(new LoginWindowObserver());
+            notifier.attach(new MessageListObserver());
+            notifier.attach(new ContactsWindowObserver());
+            notifier.attach(new MiniWindowObserver());
+            notifier.attach(new VideoWindowObserver());
+            notifier.attach(new MyZoneWindowObserver());
+        }
+        notifier.attach(new PersonWindowObserver(is_history));
+        notifier.attach(new CommonWindowObserver(is_history));
+
+        notifier.notify();
+    }
+
+    static addQueue(message) {
+        return MessageHelper.queue.push(message);
+    }
+
+    static delQueue() {
+        return MessageHelper.queue.shift();
+    }
+}
+
+let messageHelper = new MessageHelper();
+socket.onopen = messageHelper.onOpen;
+socket.onmessage = messageHelper.onMessage;
+socket.onclose = messageHelper.onClose;
+socket.onerror = messageHelper.onError;

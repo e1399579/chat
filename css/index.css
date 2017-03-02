@@ -4,7 +4,7 @@ body {
     overflow: hidden;
 }
 
-#room {
+.chat-room-content {
     border-radius: 0;
     box-shadow: none;
     margin: 0;
@@ -17,19 +17,33 @@ body {
     background: #EEE;
 }
 
-.room-title {
+.chat-title {
     height: 60px;
     line-height: 60px;
     font-size: 18px;
+    display: table;
+    width: 100%;
 }
 
 .menu {
     line-height: 40px;
-    background: #EEE;
+    background: #FFF;
+    position: absolute;
+    width: 100%;
+    top: 60px;
+    left: 0;
+}
+
+.menu-row {
+    display: table;
+    width: 100%;
 }
 
 .menu button {
-    padding: 0.2rem 0.75rem;
+    display: table-cell;
+    text-align: center;
+    width: 33.3%;
+    border: 0;
 }
 
 .text-font {
@@ -140,6 +154,11 @@ body {
     display: table-cell;
 }
 
+.display-table {
+    display: table;
+    width: 100%;
+}
+
 .music-color {
     color: #5C3BB5;
 }
@@ -239,6 +258,10 @@ div.pinch-zoom img {
 .emotion {
     width: 100%;
     height: 164px;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: white;
 }
 
 .emotion ul {
@@ -347,18 +370,21 @@ div.pinch-zoom img {
 .chat-box {
     position: absolute;
     top: 0;
-    bottom: 80px;
+    bottom: 0;
     left: 0;
     right: 0;
     text-align: center;
 }
 
-.chat-personal {
+.chat-personal, .chat-room-box {
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
+    /*width: 100%;
+    height: 100%;*/
+    right: 0;
+    bottom: 0;
+    background: #C2D2E3;
 }
 
 .chat-personal .chat-back {
@@ -370,15 +396,12 @@ div.pinch-zoom img {
     cursor: pointer;
 }
 
-.chat-personal .chat-title {
+.chat-title-color {
     background-color: #275CA2;
     color: white;
-    height: 60px;
-    line-height: 60px;
-    font-size: 18px;
 }
 
-.chat-personal .chat-title .chat-status {
+.chat-personal .chat-status {
     width: 10px;
     height: 10px;
     border-radius: 50%;
@@ -395,15 +418,18 @@ div.pinch-zoom img {
 
 .chat-content {
     position: absolute;
-    margin-top: 60px;
-    top: 0;
-    bottom: 0;
+    top: 84px;
+    bottom: 48px;
     left: 0;
     right: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    background: #C2D2E3;
     padding: 10px;
+}
+
+.chat-features {
+    position: absolute;
+    bottom: 10px;
 }
 
 .chat-system span {
@@ -423,6 +449,7 @@ div.pinch-zoom img {
     top: 0;
     left: 0;
     right: 0;
+    z-index: 14;
 }
 
 .headImg-popup button {
@@ -605,4 +632,143 @@ input[type="range"]::-webkit-slider-thumb {
     z-index: 17;
     font-size: 3rem;
     padding: 0 6px !important;
+}
+
+.main-box {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+}
+
+.main-box ul {
+    position: absolute;
+    top: 60px;
+    bottom: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.main-box ul li {
+    vertical-align: top !important;
+}
+
+.message-item {
+    padding: 5px 10px;
+    border-bottom: 1px solid #999;
+    display: table;
+    width: 100%;
+}
+
+.message-content {
+    vertical-align: top;
+    padding-left: 10px;
+}
+
+.message-title {
+    font-size: 18px;
+}
+
+.message-time {
+    width: 20px;
+    font-size: 14px;
+}
+
+.message-new {
+    display: table;
+    width: 100%;
+    font-size: 14px;
+}
+
+.message-last {
+
+}
+
+.message-badge {
+    width: 22px;
+}
+
+.title-left, .title-right {
+    width: 20%;
+}
+
+.title-center {
+    width: 50%;
+}
+
+.inline-block {
+    display: inline-block;
+}
+
+.box-nav {
+    position: absolute;
+    top: 0;
+    height: 56px;
+    width: 100%;
+    line-height: 56px;
+}
+
+.box-active {
+    border-bottom-color: white !important;
+}
+
+.box-nav li {
+    width: 33.33%;
+    border-bottom: 4px solid #275CA2;
+}
+
+.box-shadow {
+    box-shadow: 0 0 5px 1px gray !important;
+}
+
+.contacts-item {
+    padding: 5px 10px;
+    border-bottom: 1px solid #999;
+    display: table;
+    width: 100%;
+}
+
+.contacts-head, .contacts-head img {
+    width: 45px;
+    height: 45px;
+}
+
+.contacts-content {
+    vertical-align: middle;
+    padding-left: 10px;
+    line-height: 1.5;
+}
+
+.contacts-title {
+    font-size: 16px;
+}
+
+.contacts-prop {
+    font-size: 14px;
+}
+
+.contacts-btn {
+    width: 66px;
+}
+
+.width-half {
+    width: 45%;
+}
+
+.my-background {
+    height: 200px;
+    background: #EEE;
+    text-align: center;
+    line-height: 200px;
+}
+
+.my-head {
+    width: 160px;
+    height: 160px;
+}
+
+.my-zone .username {
+    font-size: 20px;
 }
