@@ -290,6 +290,7 @@ class MainWindow {
     constructor() {
         this.window = $(".main-box");
         this.navs = this.window.find(".box-nav li");
+        this.boxs = this.window.find("ul li");
     }
 
     init() {
@@ -302,6 +303,7 @@ class MainWindow {
         this.navs.click(function () {
             swipe.slide($(this).index(), 150);
         });
+        this.boxs.removeClass("hidden");
     }
 }
 
@@ -2172,9 +2174,16 @@ class ContactsWindow extends Box {
     }
 
     flushList(users) {
-        for (let [, user] of users) {
+        this.clear();
+        for (let user of users) {
             this.addUser(user);
         }
+    }
+
+    clear() {
+        ContactsWindow.total = 0;
+        ContactsWindow.ids = new Set();
+        this.container.html(""); //清空列表
     }
 
     getUserStatus(is_online) {
@@ -2186,7 +2195,7 @@ class ContactsWindow extends Box {
 
     }
 
-    addUser(user) {
+    addUser(user, prepend=false) {
         ContactsWindow.total++;
         let user_id = user.user_id;
         let id = this.getItemId(user_id);
@@ -2195,7 +2204,10 @@ class ContactsWindow extends Box {
         let user_status = this.getUserStatus(is_online);
         let replace = [id, username, user_status, ""];
         let html = templates.get(this.template_name).replaceMulti(this.search, replace);
-        this.container.append(html);
+        if (prepend)
+            this.container.prepend(html);
+        else
+            this.container.append(html);
 
         ContactsWindow.ids.add(user_id);
 
@@ -2438,11 +2450,6 @@ class UserObserver extends Observer {
             case USER_QUERY:
                 this.addUser(mess.user);
                 break;
-            case USER_DOWNLINE://下线
-                USER.is_active = 0;
-                UserObserver.downline(USER.user_id);
-                Util.toast(mess.mess);
-                break;
             case USER_AVATAR_SUCCESS:
                 let update = {avatar: mess.mess};
                 user = Object.assign(USER, update);
@@ -2450,8 +2457,10 @@ class UserObserver extends Observer {
                 USER.avatar = mess.mess;
                 this.flushUser(USER);
                 break;
+            case USER_DOWNLINE://下线
             case USER_REMOVE://移除
             case USER_DISABLED://禁用
+                UserObserver.clear();
                 USER.is_active = 0;
                 this.flushUser(USER);
                 Util.loading(mess.mess, false, false);
@@ -2532,17 +2541,30 @@ class UserObserver extends Observer {
         return UserObserver.online_users.size; //算上本人
     }
 
+    static clear() {
+        UserObserver.online_users.clear();
+        UserObserver.users.clear();
+    }
+
     static getUsers(delete_me = true) {
+        let users = new Map();
+        let sort_list = [];
+        UserObserver.users.forEach((value, key) => {
+            users.set(key, value);
+        });
         if (delete_me) {
-            let users = new Map();
-            UserObserver.users.forEach((value, key) => {
-                users.set(key, value);
-            });
             users.delete(USER.user_id); //用副本操作，不影响原来的
-            return users;
-        } else {
-            return UserObserver.users;
         }
+        for (let user_id of UserObserver.online_users) {
+            if (users.has(user_id)) {
+                sort_list.push(users.get(user_id));
+                users.delete(user_id);
+            }
+        }
+        for (let [, user] of users) {
+            sort_list.push(user);
+        }
+        return sort_list;
     }
 
     static isExists(user_id) {
@@ -2768,7 +2790,8 @@ class PersonWindowObserver extends Observer {
                 break;
             case USER_LIST:
                 let users = UserObserver.getUsers();
-                for (let [id, user] of users) {
+                for (let user of users) {
+                    id = user.user_id;
                     singleWindow = new PersonWindow(id);
                     singleWindow.flushTitle(user, UserObserver.isOnline(id));
                 }
@@ -2904,18 +2927,18 @@ class ContactsWindowObserver extends Observer {
     }
 
     update(splSubject) {
-        let contactsWindow;
+        let contactsWindow = new ContactsWindow();;
         let mess = splSubject.getData();
         let users, user, user_id;
         switch (splSubject.type) {
             case USER_LIST://在线用户列表
-                contactsWindow = new ContactsWindow();
+            case USER_DOWNLINE:
+            case USER_REMOVE:
                 users = UserObserver.getUsers();
                 contactsWindow.flushList(users);
                 break;
             case USER_QUIT:
                 //刷新用户状态
-                contactsWindow = new ContactsWindow();
                 user = mess.user;
                 contactsWindow.flushUserStatus(user.user_id, 0);
                 break;
@@ -2923,10 +2946,9 @@ class ContactsWindowObserver extends Observer {
                 user = mess.user;
                 user_id = user.user_id;
                 if (user_id == USER.user_id) return;
-                contactsWindow = new ContactsWindow();
                 contactsWindow.flushUserStatus(user_id, 1);
                 if (ContactsWindow.isExists(user_id)) return;
-                contactsWindow.addUser(user);
+                contactsWindow.addUser(user, true);
                 break;
             case ERROR://出错
             case WARNING://警告
