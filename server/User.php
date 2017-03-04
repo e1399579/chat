@@ -26,7 +26,7 @@ class User {
         $user = array(
             'user_id' => $user_id,
             'username' => $name,
-            'password' => $password,
+            'password' => password_hash($password, PASSWORD_DEFAULT),
             'reg_time' => date('Y-m-d H:i:s'),
             'role_id' => 0,
             'is_active' => 1,

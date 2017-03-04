@@ -159,7 +159,7 @@ class Client implements IClient {
                     $this->sendMessage($key);
                     break;
                 }
-                if ($password != $user['password']) {
+                if (!password_verify($password, $user['password'])) {
                     $this->response = array(
                         'type' => self::USER_INCORRECT,
                         'mess' => '用户名或密码错误',
