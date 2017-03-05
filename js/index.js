@@ -129,7 +129,7 @@ let templates = new Map([
             </div>`],
     ['person_window',
         `<div id="%ID%" class="chat-personal z-index-normal">
-                <div class="text-center chat-title chat-title-color">
+                <div class="text-center chat-title chat-title-color box-shadow">
                     <div class="table-cell title-left text-left btn-back"></div>
                     <div class="table-cell title-center">
                         <span class="chat-status chat-status-online"></span>
@@ -219,7 +219,7 @@ let templates = new Map([
     ['tip',
         `<div class="text-center text-info">欢迎进入聊天室。文明上网，礼貌发言</div>`],
     ['image',
-        `<img class="img-responsive img-msg" src="%URL%" alt="%USERNAME%" title="点击图片预览" />`],
+        `<img class="img-responsive img-msg %MSG_PREVIEW%" src="%URL%" alt="%USERNAME%" title="点击图片预览" />`],
     ['music_message',
         `<i class="fa fa-music fa-3x music-color table-cell"></i>
         <div class="music-info table-cell" data-url="%MUSIC_URL%" title="点击播放/暂停" onclick="MusicWindow.playMusic(this, event)">
@@ -359,7 +359,7 @@ class ImageView {
     preview(container) {
         let html = "";
         let index = 0;
-        let images = container.find("img.img-msg");
+        let images = container.find("img.msg-preview");
         let total = images.length;
         this.container.html("");
         $.each(images, (i, n) => {
@@ -570,15 +570,17 @@ class MusicDecorator extends MessageDecorator {
 }
 
 class ImageDecorator extends MessageDecorator {
-    constructor(message, username) {
+    constructor(message, username, is_preview=0) {
         super(message);
         this.username = username;
+        this.is_preview = is_preview;
     }
 
     process(mess) {
         let html = this.message.process(mess);
-        let search = ["%URL%", "%USERNAME%"];
-        let replace = [CURRENT_URL + mess.mess, this.username];
+        let msg_preview = this.is_preview ? 'msg-preview' : '';
+        let search = ["%URL%", "%USERNAME%", "%MSG_PREVIEW%"];
+        let replace = [CURRENT_URL + mess.mess, this.username, msg_preview];
         let decorator_mess = templates.get("image").replaceMulti(search, replace);
         search = ["%MESSAGE%"];
         replace = [decorator_mess];
@@ -953,42 +955,32 @@ class ImageWindow {
 
         for (let file of files) {
             complete++;
-            if (file.size < this.compress_size) {
-                let reader = new FileReader();
-                reader.onload = (e) => {
-                    if (!this.image_regexp.test(file.type.split("/").pop())) {
-                        Util.toast("请选择图片上传");
+            //压缩图片
+            new html5ImgCompress(file, {
+                maxWidth: 1000,
+                maxHeight: 1000,
+                quality: 0.6,
+                before: (file) => {
+                },
+                done: (file, base64) => {
+                    if (base64.length > MAX_IMAGE) {
+                        Util.toast(file.name + "太大");
                     } else {
-                        callback(e.currentTarget.result);
+                        callback(base64);
                     }
                     completeCallBack("上传完毕，点击图片可以预览哦:-)");
-                };
-                reader.readAsDataURL(file);
-            } else {
-                //压缩图片
-                new html5ImgCompress(file, {
-                    before: function (file) {
-                    },
-                    done: function (file, base64) {
-                        if (base64.length > MAX_IMAGE) {
-                            Util.toast(file.name + "太大");
-                        } else {
-                            callback(base64);
-                        }
-                        completeCallBack("上传完毕，点击图片可以预览哦:-)");
-                    },
-                    fail: function (file) {
-                        Util.toast("图片压缩失败");
-                        completeCallBack();
-                    },
-                    complete: function (file) {
-                    },
-                    notSupport: function (file) {
-                        Util.toast("当浏览器不支持，换Chrome试试吧;-)");
-                        completeCallBack();
-                    }
-                });
-            }
+                },
+                fail: (file) => {
+                    Util.toast("图片压缩失败");
+                    completeCallBack();
+                },
+                complete: (file) => {
+                },
+                notSupport: (file) => {
+                    Util.toast("当浏览器不支持，换Chrome试试吧;-)");
+                    completeCallBack();
+                }
+            });
         }
     }
 
@@ -1743,17 +1735,18 @@ class SingleWindow {
         return this.name;
     }
 
-    bindBottom(elem) {
-        elem.bind("load", () => {
-            this.autoBottom();
-        });
-    }
-
     autoBottom() {
         let container = this.content_container;
         let speed = 100;
         let scrollTop = container[0].scrollHeight - container[0].offsetHeight;
         container.animate({scrollTop, speed});
+    }
+
+    imageBottom() {
+        let image = this.content_container.find("img.img-msg").last().get(0);
+        image.onload = (e) => {
+            this.autoBottom();
+        };
     }
 
     isShow() {
@@ -1863,32 +1856,12 @@ class SingleWindow {
         this.back_btn.text(`<${name}`);
     }
 
-    getTitleContainer() {
-        return this.title_container;
-    }
-
-    getMenuContainer() {
-        return this.menu_container;
-    }
-
     getContentContainer() {
         return this.content_container;
     }
 
-    getFeaturesContainer() {
-        return this.features_container;
-    }
-
     getBackBtn() {
         return this.back_btn;
-    }
-
-    getMessInput() {
-        return this.mess_input;
-    }
-
-    getMessSubmit() {
-        return this.mess_submit;
     }
 }
 
@@ -2109,26 +2082,6 @@ class MessageListWindow extends Box {
         return unread ? `${this.name}(${unread})` : this.name;
     }
 
-    getHeadContainer() {
-        return this.head_container;
-    }
-
-    getTitleContainer() {
-        return this.title_container;
-    }
-
-    getTimeContainer() {
-        return this.time_container;
-    }
-
-    getBadgeContainer() {
-        return this.badge_container;
-    }
-
-    getLastContainer() {
-        return this.last_container;
-    }
-
     clearUnread() {
         MessageListWindow.total -= this.unread;
         this.unread = 0;
@@ -2211,7 +2164,7 @@ class ContactsWindow extends Box {
         let username = user.username;
         let is_online = UserObserver.isOnline(user_id);
         let user_status = this.getUserStatus(is_online);
-        let avatar = user.avatar ? "." + user.avatar : "./images/chat.png";
+        let avatar = user.avatar ? CURRENT_URL + user.avatar : "./images/chat.png";
         let replace = [id, username, user_status, "", avatar];
         let html = templates.get(this.template_name).replaceMulti(this.search, replace);
         if (prepend)
@@ -2590,7 +2543,7 @@ class MessageListObserver extends Observer {
 
     update(splSubject) {
         let mess = splSubject.getData();
-        let id, user, singleWindow, template, window_id, decorator, content, template_id;
+        let id, user, singleWindow, decorator;
         switch (splSubject.type) {
             case MESSAGE_SELF://myself @other
                 user = mess.receiver;
@@ -2706,6 +2659,7 @@ class CommonWindowObserver extends Observer {
     update(splSubject) {
         let mess = splSubject.getData();
         let id, user, commonWindow, template, window_id, decorator, content, is_self, container;
+        let is_image = false;
         user = mess.sender || mess.user;
         id = '0';
         commonWindow = new CommonWindow(id);
@@ -2740,14 +2694,22 @@ class CommonWindowObserver extends Observer {
 
                 break;
             case IMAGE_COMMON://公共消息
+                commonWindow.flushTotal(UserObserver.total());
+                is_self = user.user_id == USER.user_id;
+                template = is_self ? templates.get("my_message") : templates.get("common_message");
+                decorator = new CommonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username, 1)));
+
+                container = commonWindow.getContentContainer();
+                commonWindow.imageUnlock();
+                is_image = true;
+                break;
             case EMOTION_COMMON:
                 commonWindow.flushTotal(UserObserver.total());
                 is_self = user.user_id == USER.user_id;
                 template = is_self ? templates.get("my_message") : templates.get("common_message");
                 decorator = new CommonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username)));
 
-                container = commonWindow.getContentContainer();
-                commonWindow.imageUnlock();
+                is_image = true;
                 break;
             case MUSIC_COMMON:
                 is_self = user.user_id == USER.user_id;
@@ -2764,7 +2726,11 @@ class CommonWindowObserver extends Observer {
             commonWindow.writeHistory(content);
         } else {
             commonWindow.write(content);
-            commonWindow.autoBottom();
+            if (is_image) {
+                commonWindow.imageBottom();
+            } else {
+                commonWindow.autoBottom();
+            }
         }
 
         if (container) {
@@ -2783,6 +2749,7 @@ class PersonWindowObserver extends Observer {
     update(splSubject) {
         let mess = splSubject.getData();
         let id, user, singleWindow, template, window_id, decorator, content, template_id, container;
+        let is_image = false;
         switch (splSubject.type) {
             case USER_ONLINE:
                 user = mess.user;
@@ -2817,6 +2784,17 @@ class PersonWindowObserver extends Observer {
 
                 break;
             case IMAGE_SELF://myself @other
+                user = mess.receiver;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                window_id = singleWindow.getWindowId();
+                template = templates.get("self_message");
+                decorator = new PersonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username, 1)));
+
+                container = singleWindow.getContentContainer();
+                singleWindow.imageUnlock();
+                is_image = true;
+                break;
             case EMOTION_SELF:
                 user = mess.receiver;
                 id = user.user_id;
@@ -2825,9 +2803,7 @@ class PersonWindowObserver extends Observer {
                 template = templates.get("self_message");
                 decorator = new PersonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username)));
 
-                container = singleWindow.getContentContainer();
-
-                singleWindow.imageUnlock();
+                is_image = true;
                 break;
             case MESSAGE_OTHER://other @me
                 user = mess.sender;
@@ -2837,9 +2813,21 @@ class PersonWindowObserver extends Observer {
                 template = templates.get("private_message");
                 decorator = new PersonBubbleDecorator(new AvatarDecorator(new ParseCodeDecorator(new TimeTextMessage(template, window_id, this.is_history))));
 
-                //TODO sound
+                audio.play();
                 break;
             case IMAGE_OTHER://other @me
+                user = mess.sender;
+                id = user.user_id;
+                singleWindow = new PersonWindow(id);
+                window_id = singleWindow.getWindowId();
+                template = templates.get("private_message");
+                decorator = new PersonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username, 1)));
+
+                container = singleWindow.getContentContainer();
+                singleWindow.imageUnlock();
+                is_image = true;
+                audio.play();
+                break;
             case EMOTION_OTHER:
                 user = mess.sender;
                 id = user.user_id;
@@ -2848,8 +2836,8 @@ class PersonWindowObserver extends Observer {
                 template = templates.get("private_message");
                 decorator = new PersonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username)));
 
-                container = singleWindow.getContentContainer();
-                singleWindow.imageUnlock();
+                is_image = true;
+                audio.play();
                 break;
             case MUSIC_SELF:
                 user = mess.receiver;
@@ -2866,6 +2854,8 @@ class PersonWindowObserver extends Observer {
                 window_id = singleWindow.getWindowId();
                 template = templates.get("private_message");
                 decorator = new PersonBubbleDecorator(new AvatarDecorator(new MusicDecorator(new TimeTextMessage(template, window_id, this.is_history))));
+
+                audio.play();
                 break;
             default:
                 return;
@@ -2876,17 +2866,20 @@ class PersonWindowObserver extends Observer {
             singleWindow.writeHistory(content);
         } else {
             singleWindow.write(content);
-            singleWindow.autoBottom();
+            if (is_image) {
+                singleWindow.imageBottom();
+            } else {
+                singleWindow.autoBottom();
+            }
         }
-        audio.play();
-
-        user = UserObserver.getUser(id);
-        let is_online = UserObserver.isOnline(id);
-        singleWindow.flushTitle(user, is_online);
 
         if (container) {
             imageView.preview(container);
         }
+
+        user = UserObserver.getUser(id);
+        let is_online = UserObserver.isOnline(id);
+        singleWindow.flushTitle(user, is_online);
     }
 }
 
@@ -3073,7 +3066,7 @@ class MessageHelper {
     }
 
     onClose(e) {
-        //TODO 联系人离线
+        //联系人离线
         if (!USER.is_active) return;
         let d = new Date();
         let date = 'Y-m-d H:i:s';
