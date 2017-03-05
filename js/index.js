@@ -291,7 +291,8 @@ function flushSize() {
     W = Math.min(window.innerWidth, window.screen.width);
 }
 flushSize();
-window.addEventListener("resize", flushSize);
+if (!('ontouchstart' in document.documentElement))
+    window.addEventListener("resize", flushSize);
 
 //主窗口
 class MainWindow {
