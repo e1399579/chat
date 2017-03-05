@@ -228,8 +228,8 @@ let templates = new Map([
         </div>`],
     ['contact_list_admin',
         `<div id="%ID%" class="contacts-item">
-            <div class="contacts-head text-center text-muted img-circle table-cell">
-                <img src="./images/chat.png">
+            <div class="head contacts-head text-center text-muted img-circle table-cell">
+                <img src="%AVATAR%">
             </div>
             <div class="contacts-content table-cell">
                 <div class="contacts-title">%USERNAME%</div>
@@ -241,8 +241,8 @@ let templates = new Map([
         </div>`],
     ['contact_list_user',
         `<div id="%ID%" class="contacts-item">
-            <div class="contacts-head text-center text-muted img-circle table-cell">
-                <img src="./images/chat.png">
+            <div class="head contacts-head text-center text-muted img-circle table-cell">
+                <img src="%AVATAR%">
             </div>
             <div class="contacts-content table-cell">
                 <div class="contacts-title">%USERNAME%</div>
@@ -2156,7 +2156,7 @@ class ContactsWindow extends Box {
         this.container = $(".contacts-list");
         this.template_name = (this.role_id > 0) ?
             "contact_list_admin" : "contact_list_user";
-        this.search = ["%ID%", "%USERNAME%", "%USER_STATUS%", "%SIGN%"];
+        this.search = ["%ID%", "%USERNAME%", "%USER_STATUS%", "%SIGN%", "%AVATAR%"];
         if (!ContactsWindow.total) {
             ContactsWindow.total = 0;
         }
@@ -2202,7 +2202,8 @@ class ContactsWindow extends Box {
         let username = user.username;
         let is_online = UserObserver.isOnline(user_id);
         let user_status = this.getUserStatus(is_online);
-        let replace = [id, username, user_status, ""];
+        let avatar = user.avatar ? "." + user.avatar : "./images/chat.png";
+        let replace = [id, username, user_status, "", avatar];
         let html = templates.get(this.template_name).replaceMulti(this.search, replace);
         if (prepend)
             this.container.prepend(html);
