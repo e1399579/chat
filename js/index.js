@@ -285,6 +285,14 @@ Date.prototype.getDateString = function () {
     return `${year}-${month}-${day}`;
 };
 
+let H, W;
+function flushSize() {
+    H = Math.min(window.innerHeight, window.screen.height);
+    W = Math.min(window.innerWidth, window.screen.width);
+}
+flushSize();
+window.addEventListener("resize", flushSize);
+
 //主窗口
 class MainWindow {
     constructor() {
@@ -714,10 +722,11 @@ class EmotionWindow {
 
     close(window) {
         if (this.container.hasClass("hidden")) return;
-        let height = window.height() + this.emotion_height;
+        let height = H;
         //窗口下降
         window.animate({height}, this.speed, "linear", () => {
             this.container.addClass("hidden");
+            window.css("height", "inherit");
         });
         this.container.animate({top: height}, this.speed);
     }
@@ -733,7 +742,7 @@ class EmotionWindow {
             if (this.container.hasClass("hidden")) {
                 //展开
                 this.container.removeClass("hidden");
-                let height = window.height() - this.emotion_height;
+                let height = H - this.emotion_height;
                 //窗口上升
                 window.animate({height}, this.speed);
                 this.container.animate({top: height}, this.speed);
