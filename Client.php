@@ -659,10 +659,8 @@ class Client implements IClient {
      * @link http://github.com/msgpack/msgpack-php
      */
     public function decode($str) {
-        /*if (function_exists('msgpack_unpack')) {
-            return msgpack_unpack($str);
-        }*/
-        return json_decode($str, true);
+        //return json_decode($str, true);
+        return msgpack_unpack($str);
     }
 
     /**
@@ -674,10 +672,8 @@ class Client implements IClient {
      * @link http://github.com/msgpack/msgpack-php
      */
     public function encode($data) {
-        /*if (function_exists('msgpack_pack')) {
-            return msgpack_pack($data);
-        }*/
-        return json_encode($data, JSON_UNESCAPED_UNICODE);
+        //return json_encode($data, JSON_UNESCAPED_UNICODE);
+        return msgpack_pack($data);
     }
 
     /**
