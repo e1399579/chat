@@ -545,7 +545,7 @@ class WsServer {
      * @return string
      */
     protected function frame(&$str) {
-        $protocol = chr('10000002');
+        $protocol = chr('10000001');
         $len = strlen($str);
         if ($len <= 125)
             return $protocol . chr($len) . $str; //8+7位
