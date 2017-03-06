@@ -101,7 +101,7 @@ audio.volume = 0;
 let music = document.createElement("audio");
 
 let socket = new WebSocket(SERVER_URL);
-//socket.binaryType = 'arraybuffer'; //设为二进制的原始缓冲区
+socket.binaryType = 'arraybuffer'; //设为二进制的原始缓冲区
 
 let templates = new Map([
     ['common_window',
@@ -348,8 +348,8 @@ class DataHelper {
     }
 
     static decode(str) {
-        return JSON.parse(str);
-        //return msgpack.decode(new Uint8Array(str)); //ArrayBuffer->Uint8Array
+        //return JSON.parse(str);
+        return msgpack.decode(new Uint8Array(str)); //ArrayBuffer->Uint8Array
     }
 }
 
@@ -3102,7 +3102,7 @@ class MessageHelper {
                     return;
                 }
                 socket = new WebSocket(SERVER_URL);
-                //socket.binaryType = 'arraybuffer';
+                socket.binaryType = 'arraybuffer';
                 MessageHelper.reconnect_times++;
             } catch (e) {
                 trace(e);

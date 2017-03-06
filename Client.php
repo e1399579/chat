@@ -672,8 +672,8 @@ class Client implements IClient {
      * @link http://github.com/msgpack/msgpack-php
      */
     public function encode($data) {
-        return json_encode($data, JSON_UNESCAPED_UNICODE);
-        //return msgpack_pack($data);
+        //return json_encode($data, JSON_UNESCAPED_UNICODE);
+        return msgpack_pack($data);
     }
 
     /**
