@@ -418,8 +418,8 @@ class WsServer {
                     break;
                 }
 
-                //浏览器关闭时，发送关闭连接控制帧[一帧，opcode 0x8=1000] 10001000 = 十进制136 = 十六进制\x88 = 八进制\210
-                if ("\210" == $buffer[0]) {
+                //浏览器关闭时，发送关闭连接控制帧[一帧，opcode 0x8=1000] 10001000 = 十六进制\x88 = 八进制\210
+                if (chr(0b10001000) == $buffer[0]) {
                     $params['is_closed'] = true;
                     break;
                 }
@@ -433,20 +433,20 @@ class WsServer {
 
             //一帧的结构：
             //FIN:1bit RSV:3bit opcode:4bit MASK:1bit Payload len:7bit Extended payload length:... Masking-key:4bit Payload Data:...
-            $FIN = ord($buffer[0]) & 128;//例：00000001 & 10000000 = 00000000 = 0 连续帧，10000001 & 10000000 = 10000000 = 128 一帧
+            $FIN = ord($buffer[0]) & 0b10000000;//例：00000001 & 10000000 = 00000000 = 0 连续帧，10000001 & 10000000 = 10000000 = 128 一帧
 
 //			echo 'BUFFER[0]:', sprintf('%08b', ord($buffer[0])), PHP_EOL;
 //			echo 'FIN:', $FIN, PHP_EOL;
 
             //0x0附加数据帧 0x1文本数据帧 0x2二进制数据帧 0x3-7无定义，保留 0x8连接关闭 0x9ping 0xApong 0xB-F无定义，保留
-            $opcode = ord($buffer[0]) & 15; //... & 1111
+            $opcode = ord($buffer[0]) & 0b1111;
 
 //			echo 'OPCODE:', sprintf('%08b', $opcode), ',', $opcode, PHP_EOL;
 
 //			$MASK = ord($buffer[1]) & 128; // & 10000000
 //			echo 'MASK:', sprintf('%08b', $MASK), ',' , $MASK, PHP_EOL;
 
-            $payload_len = ord($buffer[1]) & 127; // & 01111111
+            $payload_len = ord($buffer[1]) & 0b1111111; //127
 
 //			echo 'BUFFER[1]:', sprintf('%08b', ord($buffer[1])), PHP_EOL;
 //			echo 'PAYLOAD:', $payload_len, PHP_EOL;

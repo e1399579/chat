@@ -1044,7 +1044,7 @@ class MusicWindow {
             let index = Util.loading("正在处理，请稍候...", 3);
             let reader = new FileReader();
             let file = e.currentTarget.files[0];
-            reader.onload = (e) => {
+            reader.addEventListener('load', (e) => {
                 layer.close(index);
                 let name = file.name;
                 let type = file.type;
@@ -1060,7 +1060,7 @@ class MusicWindow {
                 this.upload(name, e.currentTarget.result);
                 layer.close(index);
                 Util.toast("上传音乐完毕");
-            };
+            });
             reader.readAsDataURL(file);
         });
     }
@@ -1748,9 +1748,9 @@ class SingleWindow {
 
     imageBottom() {
         let image = this.content_container.find("img.img-msg").last().get(0);
-        image.onload = (e) => {
+        image.addEventListener('load', (e) => {
             this.autoBottom();
-        };
+        });
     }
 
     isShow() {
@@ -1810,7 +1810,6 @@ class SingleWindow {
                 e.preventDefault();
                 this.send();
             }
-
         });
     }
 
@@ -2184,6 +2183,21 @@ class ContactsWindow extends Box {
         //移除按钮
         if (this.role_id > 0) {
             this.bindRemove(user);
+        }
+    }
+
+    /**
+     * 移动用户item
+     * @param user_id
+     * @param {number} sort 1 升序 0 降序
+     */
+    moveUser(user_id, sort=1) {
+        let id = this.getItemId(user_id);
+        let item = this.getItem(id);
+        if (sort) {
+            this.container.prepend(item);
+        } else {
+            this.container.append(item);
         }
     }
 
@@ -2947,15 +2961,20 @@ class ContactsWindowObserver extends Observer {
             case USER_QUIT:
                 //刷新用户状态
                 user = mess.user;
-                contactsWindow.flushUserStatus(user.user_id, 0);
+                user_id = user.user_id;
+                contactsWindow.flushUserStatus(user_id, 0);
+                contactsWindow.moveUser(user_id, 0);
                 break;
             case USER_ONLINE:
                 user = mess.user;
                 user_id = user.user_id;
                 if (user_id == USER.user_id) return;
                 contactsWindow.flushUserStatus(user_id, 1);
-                if (ContactsWindow.isExists(user_id)) return;
-                contactsWindow.addUser(user, true);
+                if (ContactsWindow.isExists(user_id)) {
+                    contactsWindow.moveUser(user_id, 1);
+                } else {
+                    contactsWindow.addUser(user, true);
+                }
                 break;
             case ERROR://出错
             case WARNING://警告
@@ -3089,11 +3108,9 @@ class MessageHelper {
                 }
                 if (socket.readyState == WebSocket.OPEN) {
                     window.clearInterval(timer);
-                    socket.onclose = messageHelper.onClose;
-
-                    socket.onerror = messageHelper.onError;
-
-                    socket.onmessage = messageHelper.onMessage;
+                    socket.addEventListener('message', messageHelper.onMessage);
+                    socket.addEventListener('close', messageHelper.onClose);
+                    socket.addEventListener('error', messageHelper.onError);
 
                     messageHelper.onOpen();
                     layer.close(index);
@@ -3121,16 +3138,17 @@ class MessageHelper {
         let singleWindow, list;
         switch (mess.type) {
             case HISTORY_MESSAGE_COMMON:
-                list = mess.mess.reverse();
-                for (let one of list) {
-                    MessageHelper.doOnMessage(one, 1);
-                }
+                list = mess.mess;
                 singleWindow = new CommonWindow(id);
                 if (list.length <= 0) {
                     singleWindow.flushQueryTime();
-                } else {
-                    singleWindow.setQueryTime(list[list.length - 1].timestamp);
+                    break;
                 }
+                list = list.reverse();
+                for (let one of list) {
+                    MessageHelper.doOnMessage(one, 1);
+                }
+                singleWindow.setQueryTime(list[list.length - 1].timestamp);
                 break;
             case HISTORY_MESSAGE_PERSONAL:
                 list = mess.mess.reverse();
@@ -3199,7 +3217,7 @@ class MessageHelper {
 }
 
 let messageHelper = new MessageHelper();
-socket.onopen = messageHelper.onOpen;
-socket.onmessage = messageHelper.onMessage;
-socket.onclose = messageHelper.onClose;
-socket.onerror = messageHelper.onError;
+socket.addEventListener('open', messageHelper.onOpen);
+socket.addEventListener('message', messageHelper.onMessage);
+socket.addEventListener('close', messageHelper.onClose);
+socket.addEventListener('error', messageHelper.onError);
