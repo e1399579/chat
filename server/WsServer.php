@@ -125,7 +125,7 @@ class WsServer {
                 }
 
                 if ($params['is_ping']) {
-                    $protocol = chr('10001010');//0x0A pong帧--1010
+                    $protocol = chr(0b10001010);//0x0A pong帧--1010
                     socket_write($socket, $protocol, strlen($protocol));
                     continue;
                 }
@@ -413,7 +413,7 @@ class WsServer {
                 }
 
                 //0x09 ping帧--1001
-                if (chr('10001001') == $buffer[0]) {
+                if (chr(0b10001001) == $buffer[0]) {
                     $params['is_ping'] = true;
                     break;
                 }
@@ -517,16 +517,16 @@ class WsServer {
     protected function frame2(&$str) {
         //参照协议，FIN(1)+RSV1(0)+RSV2(0)+RSV3(0)+opcode(0001)
         //opcode:0001表示文本数据帧，也可以直接写成十六进制"\x81"或者八进制"\201"
-        $protocol = chr('10000001');
+        $protocol = chr(0b10000001);
         $arr = str_split($str, 125);
         //只有一帧，即结束帧
         if (1 == count($arr))
             return $protocol . chr(strlen($arr[0])) . $arr[0];
 
         //多帧=起始帧+附加帧+结束帧
-        $start = chr('00000001');//起始帧
-        $additional = chr('00000000');//附加帧
-        $end = chr('10000000');//结束帧
+        $start = chr(0b00000001);//起始帧
+        $additional = chr(0b00000000);//附加帧
+        $end = chr(0b10000000);//结束帧
         $frame = $start . chr(125) . $arr[0];//第一帧
         array_shift($arr);
         $last = array_pop($arr);//最后的数据
@@ -545,7 +545,7 @@ class WsServer {
      * @return string
      */
     protected function frame(&$str) {
-        $protocol = chr('10000002');
+        $protocol = chr(0b10000010);
         $len = strlen($str);
         if ($len <= 125)
             return $protocol . chr($len) . $str; //8+7位
