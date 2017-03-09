@@ -351,6 +351,14 @@ class DataHelper {
         //return JSON.parse(str);
         return msgpack.decode(new Uint8Array(str)); //ArrayBuffer->Uint8Array
     }
+
+    static toObject(obj) {
+        let target = {};
+        for (let key in obj) {
+            target[key] = obj[key];
+        }
+        return target;
+    }
 }
 
 class ImageView {
@@ -1390,7 +1398,7 @@ class VideoWindow {
             peerConnection.onicecandidate = (e) => {
                 if (e.candidate) {
                     trace('peerConnection candidate: ' + e.candidate.candidate);
-                    Upload.sendMessage(VIDEO_PERSONAL_CANDIDATE, receiver_id, e.candidate);
+                    Upload.sendMessage(VIDEO_PERSONAL_CANDIDATE, receiver_id, DataHelper.toObject(e.candidate));
                 }
             };
 
@@ -1485,7 +1493,7 @@ class VideoWindow {
                     trace('createOffer setLocalDescription complete');
 
                     //发送SDP到远程
-                    Upload.sendMessage(VIDEO_PERSONAL_OFFER_DESC, receiver_id, desc);
+                    Upload.sendMessage(VIDEO_PERSONAL_OFFER_DESC, receiver_id, DataHelper.toObject(desc));
                 }, function (error) {
                     trace('createOffer setLocalDescription failed: ' + error.toString());
                 });
@@ -1517,6 +1525,7 @@ class VideoWindow {
     }
 
     desc(mess) {
+        trace(mess);
         let desc = mess.mess;
         let peerConnection = this.peerConnection[mess.sender_id];
 
@@ -1551,7 +1560,7 @@ class VideoWindow {
                     peerConnection.setLocalDescription(desc).then(() => {
                         trace('createAnswer setLocalDescription complete');
                         //回传SDP
-                        Upload.sendMessage(VIDEO_PERSONAL_ANSWER_DESC, receiver_id, desc);
+                        Upload.sendMessage(VIDEO_PERSONAL_ANSWER_DESC, receiver_id, DataHelper.toObject(desc));
                         this.is_connected = true;
                         this.startTime = this.getTimestamp();
                     }, (error) => {
@@ -1716,6 +1725,7 @@ class SingleWindow {
     }
 
     hidden() {
+        this.is_show = 0;
         this.window.addClass("slideOutLeft");
         window.setTimeout(() => {
             this.window.removeClass("slideOutLeft z-index-top").addClass("z-index-normal slideOutRight");
@@ -1912,10 +1922,12 @@ class PersonWindow extends SingleWindow {
         let id = $(btn).data("id");
         let singleWindow = new PersonWindow(id);
         let singleWindow2 = new CommonWindow('0');
-        singleWindow.showEvent(new MessageListWindow('0'));
+        let box = new MessageListWindow('0');
+        singleWindow.showEvent(box);
         singleWindow.display();
 
         singleWindow2.hidden();
+        singleWindow2.hideEvent(box);
     }
 }
 
@@ -2770,6 +2782,7 @@ class PersonWindowObserver extends Observer {
         let is_image = false;
         switch (splSubject.type) {
             case USER_ONLINE:
+            case USER_QUERY:
                 user = mess.user;
                 id = user.user_id;
                 singleWindow = new PersonWindow(id);
