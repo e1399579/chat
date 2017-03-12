@@ -729,12 +729,54 @@ class Client implements IClient {
             $this->daemon();
         }
     }
+
+    /**
+     * 自定义错误处理
+     * @param $errno
+     * @param $errstr
+     * @param $errfile
+     * @param $errline
+     * @return bool|void
+     */
+    public function errorHandler($errno, $errstr, $errfile, $errline) {
+        if (!(error_reporting() & $errno)) {
+            // This error code is not included in error_reporting
+            return;
+        }
+
+        switch ($errno) {
+            case E_USER_ERROR:
+                $content = "[$errno] $errstr" . PHP_EOL . " Fatal error on line $errline in file $errfile";
+                $this->log($content, 'ERROR');
+                exit(1);
+                break;
+
+            case E_USER_WARNING:
+                $content = "WARNING [$errno] $errstr";
+                $this->log($content);
+                break;
+
+            case E_USER_NOTICE:
+                $content = "NOTICE [$errno] $errstr";
+                $this->log($content);
+                break;
+
+            default:
+                $content = "Unknown error type: [$errno] $errstr";
+                $this->log($content);
+                break;
+        }
+
+        /* Don't execute PHP internal error handler */
+        return true;
+    }
 }
 
 try {
     //php Client.php 81
     $port = isset($argv[1]) ? $argv[1] + 0 : 81; //默认81(nginx)，如果是apache，则直接监听访问端口
     $client = new Client('127.0.0.1', $port);
+    set_error_handler(array($client, 'errorHandler'));
     $client->start();
 } catch (\Exception $e) {
     die($e);

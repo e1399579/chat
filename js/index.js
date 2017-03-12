@@ -229,7 +229,7 @@ let templates = new Map([
         </div>`],
     ['contact_list_admin',
         `<div id="%ID%" class="contacts-item">
-            <div class="head contacts-head text-center text-muted img-circle table-cell">
+            <div class="head contacts-head text-center text-muted table-cell">
                 <img src="%AVATAR%">
             </div>
             <div class="contacts-content table-cell">
@@ -242,7 +242,7 @@ let templates = new Map([
         </div>`],
     ['contact_list_user',
         `<div id="%ID%" class="contacts-item">
-            <div class="head contacts-head text-center text-muted img-circle table-cell">
+            <div class="head contacts-head text-center text-muted table-cell">
                 <img src="%AVATAR%">
             </div>
             <div class="contacts-content table-cell">
@@ -252,17 +252,17 @@ let templates = new Map([
         </div>`],
     ['message_list_item',
         `<div id="%ID%" class="message-item animated">
-            <div class="head text-center text-muted img-circle message-head table-cell">
+            <div class="head text-center text-muted message-head table-cell">
                 
             </div>
             <div class="message-content table-cell">
-                <div class="message-prop display-table">
-                    <span class="message-title table-cell"></span>
-                    <span class="message-time table-cell text-muted"></span>
+                <div class="message-prop">
+                    <span class="message-title"></span>
+                    <span class="message-time text-muted"></span>
                 </div>
                 <div class="message-new text-muted">
-                    <span class="message-last table-cell text-truncate"></span>
-                    <span class="hidden message-badge table-cell bg-info img-circle text-center text-truncate"></span>
+                    <span class="message-last text-truncate"></span>
+                    <span class="hidden message-badge bg-info text-center text-truncate"></span>
                 </div>
             </div>
         </div>`],
@@ -300,20 +300,23 @@ class MainWindow {
     constructor() {
         this.window = $(".main-box");
         this.navs = this.window.find(".box-nav li");
-        this.boxs = this.window.find("ul li");
     }
 
     init() {
-        let swipe = new Swipe(this.window.get(0), {
-            speed: 150,
-            callback: (e, pos, li) => {
-                this.navs.removeClass("box-active").eq(pos).addClass("box-active");
-            }
+        let swiper = new Swiper(this.window.get(0), {
+            wrapperClass: "swiper-wrapper",
+            scrollbar: '.swiper-scrollbar',
+            scrollbarHide: false,
+            scrollbarDraggable: false,
+            scrollbarSnapOnRelease: true,
+            slidesPerView: 'auto',
+            centeredSlides: true,
+            spaceBetween: 0,
+            grabCursor: true
         });
         this.navs.click(function () {
-            swipe.slide($(this).index(), 150);
+            swiper.slideTo($(this).index());
         });
-        this.boxs.removeClass("hidden");
     }
 }
 
@@ -363,90 +366,43 @@ class DataHelper {
 
 class ImageView {
     constructor() {
-        this.container = $("#img-container");
-        this.slider = $("#slider");
-        this.backdrop = $("#backdrop");
+        this.container = $(".pswp").get(0);
+        this.items = new Map();
     }
 
-    preview(container) {
-        let html = "";
-        let index = 0;
-        let images = container.find("img.msg-preview");
-        let total = images.length;
-        this.container.html("");
-        $.each(images, (i, n) => {
-            let sequence = i + 1;
-            html +=
-                `<li>
-                    <div class="pinch-zoom">
-                        <img src="${n.src}" onclick="event.stopPropagation();" />
-						</div>
-						<div class="description">${n.alt} (${sequence}/${total})</div>
-                </li>`;
-        });
-        this.container.append(html);
-        this.container.ready(() => {
-            //手指滑动
-            let swipe = new Swipe(this.slider.get(0), {
-                speed: 400,
-                startSlide: index
-            });
+    preview(singleWindow, is_history=0) {
+        let images = singleWindow.getImages();
+        let window_id = singleWindow.getWindowId();
+        let image = is_history ? images.first().get(0) : images.last().get(0);
+        let item = {
+            src: image.src,
+            msrc: image.src,
+            title: image.alt,
+        };
+        let items = this.items.has(window_id) ? this.items.get(window_id) : this.items.set(window_id, []).get(window_id);
 
-            //手指缩放
-            $("div.pinch-zoom").each(function () {
-                new RTP.PinchZoom($(this), {
-                    tapZoomFactor: 2,
-                    zoomOutFactor: 1.3,
-                    animationDuration: 300,
-                    animationInterval: 5,
-                    maxZoom: 4,
-                    minZoom: .5,
-                    lockDragAxis: false,
-                    use2d: true
-                });
-            });
+        //图片大小不一样，载入速度不同，先确定索引
+        if (is_history) {
+            items.unshift(item);
+        } else {
+            items.push(item);
+        }
 
-            this.slider.click(() => {
-                this.hide();
-            });
-
-
-            let max = total - 1;
-            let start = swipe.getPos();
-
-            //滑动滚轮切换
-            this.container.get(0).onmousewheel = function (e) {
-                let ee = e || window.event;
-                let target = ee.delta ? ee.delta : ee.wheelDelta;
-                if (target < 0) {
-                    start++;
-                    start = Math.min(start, max);
-                } else if (target > 0) {
-                    start--;
-                    start = Math.max(start, 0);
-                }
-                swipe.slide(start, 400);
-            };
-
-            images.each((i, n) => {
-                $(n).click((e) => {
-                    this.show();
-                    swipe.slide(i, 0);
-                });
+        //再更新宽度、高度，对象是引用传值，数组中的数据则会如期望的修改
+        image.addEventListener("load", (e) => {
+            item.w = image.naturalWidth;
+            item.h = image.naturalHeight;
+            image.addEventListener("click", (e) => {
+                let options = {
+                    index: singleWindow.getImages().index(image),
+                    showHideOpacity: true,
+                    getThumbBoundsFn: false,
+                    mouseUsed: true
+                };
+                let gallery = new PhotoSwipe(this.container, PhotoSwipeUI_Default, items, options);
+                gallery.init();
             });
         });
-
-        images = ""; //释放内存
-    }
-
-    show() {
-        this.backdrop.fadeIn();
-        this.slider.removeClass("hidden bounceOutUp").addClass("animated bounceInDown");
-    }
-
-    hide() {
-        this.slider.removeClass("bounceInDown").addClass("animated bounceOutUp");
-        this.backdrop.fadeOut();
     }
 }
 let imageView = new ImageView();
@@ -660,11 +616,8 @@ class EmotionWindow {
     constructor() {
         this.total = 0;//表情总页数
         this.emotion_html = "";
-        this.position_html = "";
-        this.container = $("#emotion");
-        this.dots = [];
+        this.container = $(".emotion");
         this.emotion_height = 0;
-        this.bottom = 80;
         this.speed = 150;
         this.config = [
             {name: "ywz", suffix: '.gif', cols: 4, rows: 2, len: 24, start: 1},
@@ -672,29 +625,22 @@ class EmotionWindow {
         ];
         this.type = EMOTION_COMMON;
         this.receiver_id = '0';
+        this.active_class = "emotion-active";
     }
 
     init() {
         this.build();
-
-        this.dots = this.container.children("ol").children("li");
         this.emotion_height = this.container.height();
 
-        //导航滑动、样式
-        let swipe = new Swipe(document.getElementById('emotion'), {
-            speed: 200,
-            callback: (e, pos, li) => {
-                this.dots.removeClass("active").eq(pos).addClass("active");
-            }
-        });
-        this.dots.click(function () {
-            swipe.slide($(this).index(), 500);
+        let swiper = new Swiper(this.container.get(0), {
+            pagination: ".swiper-pagination",
+            paginationClickable: true
         });
         this.bindMessage();
     }
 
     build() {
-        this.container.html("<ul></ul><ol></ol>");
+        this.container.html(`<div class="swiper-wrapper"></div><div class="swiper-pagination"></div>`);
         //表情元素
         for (let config of this.config) {
             let name = config.name;
@@ -707,39 +653,43 @@ class EmotionWindow {
             this.total += pages;
             //外层每页li
             for (let j = 0; j < pages; j++) {
-                let li = '<li><table class="emotion-table">';
+                let li = `<div class="swiper-slide ${name}">`;
                 //每行tr
                 for (let k = 0; k < rows; k++) {
-                    li += '<tr class="' + name + '">';
+                    li += '<div class="' + name + ' emotion-row">';
                     for (let l = 0; l < cols; l++) {
                         if (current > len) break;//退出td
-                        li += '<td><img src="./images/emotion/' + name + '/' + current + suffix +
-                            '" alt="' + current + '" title="' + name + '_' + current + suffix + '"></td>';
+                        li += '<div><img src="./images/emotion/' + name + '/' + current + suffix +
+                            '" alt="' + current + '" title="' + name + '_' + current + suffix + '"></div>';
                         current++;
                     }
-                    li += '</tr>';
+                    li += '</div>';
                 }
-                li += '</table></li>';
+                li += '</div>';
                 this.emotion_html += li;
             }
         }
-        this.container.children("ul").html(this.emotion_html);
+        this.container.children(".swiper-wrapper").html(this.emotion_html);
+    }
 
-        //导航元素
-        this.position_html += '<li class="active"></li>';
-        for (let m = 0; m < this.total - 1; m++) {
-            this.position_html += '<li></li>';
-        }
-        this.position_html += '</li>';
-        this.container.children("ol").html(this.position_html);
+    isOpen() {
+        return this.container.hasClass(this.active_class);
+    }
+
+    active() {
+        this.container.addClass(this.active_class);
+    }
+
+    disable() {
+        this.container.removeClass(this.active_class);
     }
 
     close(window) {
-        if (this.container.hasClass("hidden")) return;
+        if (!this.isOpen()) return;
         let height = H;
         //窗口下降
         window.animate({height}, this.speed, "linear", () => {
-            this.container.addClass("hidden");
+            this.disable();
             window.css("height", "inherit");
         });
         this.container.animate({top: height}, this.speed);
@@ -753,9 +703,9 @@ class EmotionWindow {
 
     bindToggle(elem, window) {
         elem.bind("click", () => {
-            if (this.container.hasClass("hidden")) {
+            if (!this.isOpen()) {
                 //展开
-                this.container.removeClass("hidden");
+                this.active();
                 let height = H - this.emotion_height;
                 //窗口上升
                 window.animate({height}, this.speed);
@@ -1525,7 +1475,7 @@ class VideoWindow {
     }
 
     desc(mess) {
-        trace(mess);
+        trace(mess.mess);
         let desc = mess.mess;
         let peerConnection = this.peerConnection[mess.sender_id];
 
@@ -1630,10 +1580,6 @@ class SingleWindow {
         this.video_type = VIDEO_COMMON_REQUEST;
         this.notify_type = VIDEO_COMMON_NOTIFY;
         this.history_type = HISTORY_MESSAGE_COMMON;
-    }
-
-    getId() {
-        return this.id;
     }
 
     getWindowId() {
@@ -1869,12 +1815,12 @@ class SingleWindow {
         this.back_btn.text(`<${name}`);
     }
 
-    getContentContainer() {
-        return this.content_container;
-    }
-
     getBackBtn() {
         return this.back_btn;
+    }
+
+    getImages() {
+        return this.content_container.find("img.msg-preview");
     }
 }
 
@@ -2110,9 +2056,10 @@ class MessageListWindow extends Box {
     flushTitle(user, mess) {
         let message = mess.message ? mess.message : '';
         let html = user.avatar ? '<img src="./' + user.avatar + '" />' : '<img src="./images/chat.png" />';
+        let time = (new Date(mess.timestamp * 1000)).getTimeString();
         this.head_container.html(html);
         this.title_container.text(user.username);
-        this.time_container.text(mess.time);
+        this.time_container.text(time);
         this.last_container.text(message.substr(0, 20));
     }
 
@@ -2688,7 +2635,8 @@ class CommonWindowObserver extends Observer {
 
     update(splSubject) {
         let mess = splSubject.getData();
-        let id, user, commonWindow, template, window_id, decorator, content, is_self, container;
+        let id, user, commonWindow, template, window_id, decorator, content, is_self;
+        let is_preview = false;
         let is_image = false;
         user = mess.sender || mess.user;
         id = '0';
@@ -2729,8 +2677,7 @@ class CommonWindowObserver extends Observer {
                 template = is_self ? templates.get("my_message") : templates.get("common_message");
                 decorator = new CommonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username, 1)));
 
-                container = commonWindow.getContentContainer();
-                commonWindow.imageUnlock();
+                is_preview = true;
                 is_image = true;
                 break;
             case EMOTION_COMMON:
@@ -2763,8 +2710,9 @@ class CommonWindowObserver extends Observer {
             }
         }
 
-        if (container) {
-            imageView.preview(container);
+        if (is_preview) {
+            commonWindow.imageUnlock();
+            imageView.preview(commonWindow, this.is_history);
         }
     }
 }
@@ -2778,8 +2726,9 @@ class PersonWindowObserver extends Observer {
 
     update(splSubject) {
         let mess = splSubject.getData();
-        let id, user, singleWindow, template, window_id, decorator, content, template_id, container;
+        let id, user, singleWindow, template, window_id, decorator, content;
         let is_image = false;
+        let is_preview = false;
         switch (splSubject.type) {
             case USER_ONLINE:
             case USER_QUERY:
@@ -2822,8 +2771,7 @@ class PersonWindowObserver extends Observer {
                 template = templates.get("self_message");
                 decorator = new PersonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username, 1)));
 
-                container = singleWindow.getContentContainer();
-                singleWindow.imageUnlock();
+                is_preview = true;
                 is_image = true;
                 break;
             case EMOTION_SELF:
@@ -2854,8 +2802,7 @@ class PersonWindowObserver extends Observer {
                 template = templates.get("private_message");
                 decorator = new PersonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username, 1)));
 
-                container = singleWindow.getContentContainer();
-                singleWindow.imageUnlock();
+                is_preview = true;
                 is_image = true;
                 audio.play();
                 break;
@@ -2904,8 +2851,9 @@ class PersonWindowObserver extends Observer {
             }
         }
 
-        if (container) {
-            imageView.preview(container);
+        if (is_preview) {
+            singleWindow.imageUnlock();
+            imageView.preview(singleWindow, this.is_history);
         }
 
         user = UserObserver.getUser(id);

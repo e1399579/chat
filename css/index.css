@@ -4,27 +4,7 @@ body {
     overflow: hidden;
 }
 
-.chat-room-content {
-    border-radius: 0;
-    box-shadow: none;
-    margin: 0;
-    padding: 10px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    width: 100%;
-    font-size: 16px !important;
-    color: #333;
-    background: #EEE;
-}
-
-.chat-title {
-    height: 60px;
-    line-height: 60px;
-    font-size: 18px;
-    display: table;
-    width: 100%;
-}
-
+/*菜单*/
 .menu {
     line-height: 40px;
     background: #FFF;
@@ -58,15 +38,17 @@ body {
     color: #434646;
 }
 
-#mess {
+.mess-input {
     height: 38px;
     max-height: 228px !important;
     overflow: auto;
 }
 
+/*气泡*/
 .head, .head img {
     width: 50px;
     height: 50px;
+    border-radius: 50%;
 }
 
 .head {
@@ -159,6 +141,7 @@ body {
     width: 100%;
 }
 
+/*音乐*/
 .music-color {
     color: #5C3BB5;
 }
@@ -192,53 +175,9 @@ body {
     overflow: hidden;
 }
 
-/*********************touch**************************/
-
-#slider {
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    right: 0;
-    z-index: 14;
-    text-align: center;
-}
-
-#img-container {
-    display: table !important;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-}
-
-#img-container li {
-    display: table-cell !important;
-    vertical-align: middle !important;
-    overflow: hidden;
-}
-
-#img-container li .description {
-    background: black;
-    color: white;
-}
-
-div.pinch-zoom {
-    position: relative !important;
-}
-
 ul, ol {
     margin: 0;
     padding: 0;
-}
-
-div.pinch-zoom,
-div.pinch-zoom img {
-    max-width: 100%;
-    max-height: inherit;
-    -webkit-user-drag: none;
-    z-index: 15;
 }
 
 #backdrop {
@@ -264,56 +203,21 @@ div.pinch-zoom img {
     background: white;
 }
 
-.emotion ul {
-    height: 150px !important;
-}
-
-.emotion ul li {
-    width: 100%;
-}
-
-.emotion-table td {
+.emotion .emotion-row div {
     width: 25%;
     vertical-align: middle;
-}
-
-.emotion-table {
-    width: 100%;
+    display: inline-block;
     text-align: center;
 }
 
-.emotion-table .ywz td {
-    padding: 0;
-}
-
-.emotion-table .ywz td img, .emotion-table .ymj td img {
+.emotion .emotion-row img {
     max-width: 100%;
     cursor: pointer;
     height: 75px !important;
 }
 
-.emotion ol {
-    width: 100%;
-    height: 14px;
-    text-align: center;
-    line-height: 14px;
-    font-size: 0;
-}
-
-.emotion ol li {
-    list-style: none;
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 8px;
-    background: #ddd;
-    margin: 0 3px;
-    cursor: pointer;
-    vertical-align: middle;
-}
-
-.emotion ol li.active {
-    background: #64b5e8;
+.emotion .swiper-pagination {
+    bottom: 0;
 }
 
 /*********************多窗口*******************/
@@ -340,31 +244,33 @@ div.pinch-zoom img {
     display: none !important;
 }
 
-#contacts {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 100%;
-    overflow-x: hidden;
-    overflow-y: auto;
-    background: white;
-    opacity: 1 !important;
-}
-
-#online {
-    position: absolute;
-    top: 61px;
-    bottom: 1px;
-    width: 100%;
-    overflow-y: auto;
-}
-
 .z-index-normal {
     z-index: 2;
 }
 
 .z-index-top {
     z-index: 3;
+}
+
+.chat-room-content {
+    border-radius: 0;
+    box-shadow: none;
+    margin: 0;
+    padding: 10px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    width: 100%;
+    font-size: 16px !important;
+    color: #333;
+    background: #EEE;
+}
+
+.chat-title {
+    height: 60px;
+    line-height: 60px;
+    font-size: 18px;
+    display: table;
+    width: 100%;
 }
 
 .chat-box {
@@ -590,6 +496,7 @@ input[type="range"]::-webkit-slider-thumb {
     box-shadow: 0 0 1px rgba(255, 255, 255, .5);
 }
 
+/*视频*/
 .video-box {
     position: fixed;
     top: 0;
@@ -634,37 +541,22 @@ input[type="range"]::-webkit-slider-thumb {
     padding: 0 6px !important;
 }
 
-.main-box {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: white;
-}
-
-.main-box ul {
-    position: absolute;
-    top: 60px;
-    bottom: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-}
-
-.main-box ul li {
-    vertical-align: top !important;
-}
-
+/*消息列表*/
 .message-item {
-    padding: 5px 10px;
+    padding: 5px 0;
     border-bottom: 1px solid #999;
     display: table;
     width: 100%;
 }
 
+.message-head {
+    padding-left: 10px;
+    border-radius: 0;
+}
+
 .message-content {
     vertical-align: top;
-    padding-left: 10px;
+    padding: 0 10px;
 }
 
 .message-title {
@@ -672,13 +564,12 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .message-time {
-    width: 20px;
     font-size: 14px;
+    display: inline-block;
+    float: right;
 }
 
 .message-new {
-    display: table;
-    width: 100%;
     font-size: 14px;
 }
 
@@ -687,7 +578,10 @@ input[type="range"]::-webkit-slider-thumb {
 }
 
 .message-badge {
-    width: 22px;
+    display: inline-block;
+    float: right;
+    width: 21px;
+    border-radius: 50%;
 }
 
 .title-left, .title-right {
@@ -702,32 +596,17 @@ input[type="range"]::-webkit-slider-thumb {
     display: inline-block;
 }
 
-.box-nav {
-    position: absolute;
-    top: 0;
-    height: 56px;
-    width: 100%;
-    line-height: 56px;
-}
-
-.box-active {
-    border-bottom-color: white !important;
-}
-
-.box-nav li {
-    width: 33.33%;
-    border-bottom: 4px solid #275CA2;
-}
-
-.box-shadow {
-    box-shadow: 0 0 5px 1px gray !important;
-}
-
+/*联系人列表*/
 .contacts-item {
-    padding: 5px 10px;
+    padding: 5px 0;
     border-bottom: 1px solid #999;
     display: table;
     width: 100%;
+}
+
+.contacts-head {
+    padding-left: 10px;
+    border-radius: 0;
 }
 
 .contacts-head, .contacts-head img {
@@ -737,7 +616,7 @@ input[type="range"]::-webkit-slider-thumb {
 
 .contacts-content {
     vertical-align: middle;
-    padding-left: 10px;
+    padding: 0 10px;
     line-height: 1.5;
 }
 
@@ -757,6 +636,7 @@ input[type="range"]::-webkit-slider-thumb {
     width: 45%;
 }
 
+/*settings*/
 .my-background {
     height: 200px;
     background: #EEE;
@@ -771,4 +651,53 @@ input[type="range"]::-webkit-slider-thumb {
 
 .my-zone .username {
     font-size: 20px;
+}
+
+/*导航窗口*/
+.main-box {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+}
+
+.main-box .swiper-wrapper {
+    position: absolute;
+    top: 60px !important;
+    bottom: 0;
+}
+
+.main-box .swiper-scrollbar {
+    position: absolute;
+    top: 56px;
+    left: 0 !important;
+    width: 100% !important;
+    height: 4px !important;
+    background-color: rgba(0, 0, 0, 0);
+}
+
+.main-box .swiper-scrollbar-drag {
+    background-color: rgba(255, 255, 255, 1);
+}
+
+.main-box .swiper-slide {
+    overflow-y: auto;
+}
+
+.box-nav {
+    position: absolute;
+    top: 0;
+    height: 60px;
+    width: 100%;
+    line-height: 60px;
+}
+
+.box-nav li {
+    width: 33.33%;
+}
+
+.box-shadow {
+    box-shadow: 0 0 5px 1px gray !important;
 }

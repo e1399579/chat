@@ -7,28 +7,15 @@
     <meta name="apple-mobile-web-app-capable" content="yes"/>
     <title>WebSocket聊天室</title>
     <link rel="shortcut icon" type="image/x-icon" href="./images/favicon.ico" media="screen"/>
-    <!--<link rel="stylesheet" href="http://cdn.bootcss.com/bootstrap/4.0.0-alpha/css/bootstrap.min.css">
-    <link rel="stylesheet" href="http://cdn.bootcss.com/font-awesome/4.6.3/css/font-awesome.min.css">-->
     <link rel="stylesheet" href="./css/bootstrap.min.css">
     <link rel="stylesheet" href="./css/font-awesome.min.css">
     <link rel="stylesheet" href="./css/animate.min.css">
-    <link rel="stylesheet" href="./css/index.css?v=0.31">
+    <link rel="stylesheet" href="./css/photoswipe.css?v=0.31">
+    <link rel="stylesheet" href="./css/default-skin/default-skin.css?v=0.31">
+    <link rel="stylesheet" href="./css/swiper.min.css?v=0.31">
+    <link rel="stylesheet" href="./css/index.css?v=0.33">
 </head>
 <body>
-
-<!--联系人-->
-<div id="contacts" class="modal-content hidden">
-    <div class="modal-header">
-        <button type="button" class="close" onclick="im.closeContacts();">&times;</button>
-        <h5 class="modal-title">
-            在线 <span class="text-danger total">0</span>
-            <span class="text-info text-font"> 点击联系人@TA</span>
-        </h5>
-    </div>
-    <div id="online">
-        <!--用户容器-->
-    </div>
-</div>
 
 <!--私聊窗口-->
 <div class="chat-box hidden">
@@ -41,9 +28,6 @@
 </div>
 
 <!--菜单-->
-<!--<button type="button" class="btn btn-success-outline upload-avatar">
-    <i class="fa fa-image fa-2x" aria-hidden="true"></i>
-</button>-->
 <div class="menu z-index-top hidden" id="menu">
     <div class="menu-row">
         <button type="button" class="btn btn-success-outline upload-image">
@@ -86,13 +70,76 @@
 </div>
 
 <!--图片预览-->
-<div id="slider" class="hidden">
-    <ul id="img-container"></ul>
+<div class="pswp" tabindex="-1" role="dialog" aria-hidden="true">
+
+    <!-- Background of PhotoSwipe.
+         It's a separate element as animating opacity is faster than rgba(). -->
+    <div class="pswp__bg"></div>
+
+    <!-- Slides wrapper with overflow:hidden. -->
+    <div class="pswp__scroll-wrap">
+
+        <!-- Container that holds slides.
+            PhotoSwipe keeps only 3 of them in the DOM to save memory.
+            Don't modify these 3 pswp__item elements, data is added later on. -->
+        <div class="pswp__container">
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+            <div class="pswp__item"></div>
+        </div>
+
+        <!-- Default (PhotoSwipeUI_Default) interface on top of sliding area. Can be changed. -->
+        <div class="pswp__ui pswp__ui--hidden">
+
+            <div class="pswp__top-bar">
+
+                <!--  Controls are self-explanatory. Order can be changed. -->
+
+                <div class="pswp__counter"></div>
+
+                <button class="pswp__button pswp__button--close" title="Close (Esc)"></button>
+
+                <button class="pswp__button pswp__button--share" title="Share"></button>
+
+                <button class="pswp__button pswp__button--fs" title="Toggle fullscreen"></button>
+
+                <button class="pswp__button pswp__button--zoom" title="Zoom in/out"></button>
+
+                <!-- Preloader demo http://codepen.io/dimsemenov/pen/yyBWoR -->
+                <!-- element will get class pswp__preloader--active when preloader is running -->
+                <div class="pswp__preloader">
+                    <div class="pswp__preloader__icn">
+                        <div class="pswp__preloader__cut">
+                            <div class="pswp__preloader__donut"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pswp__share-modal pswp__share-modal--hidden pswp__single-tap">
+                <div class="pswp__share-tooltip"></div>
+            </div>
+
+            <button class="pswp__button pswp__button--arrow--left" title="Previous (arrow left)">
+            </button>
+
+            <button class="pswp__button pswp__button--arrow--right" title="Next (arrow right)">
+            </button>
+
+            <div class="pswp__caption">
+                <div class="pswp__caption__center"></div>
+            </div>
+
+        </div>
+
+    </div>
+
 </div>
 <div id="backdrop"></div>
 
 <!--表情-->
-<div class="emotion z-index-normal hidden" id="emotion">
+<div class="swiper-container emotion z-index-normal">
+
 </div>
 
 <!--头像上传-->
@@ -123,36 +170,36 @@
     <button type="button" class="close video-close">&times;</button>
 </div>
 
-<!--消息列表-->
-<div class="main-box z-index-top">
-    <ul>
-        <li class="message-list hidden"></li>
-        <li class="contacts-list hidden"></li>
-        <li class="my-zone hidden">
-            <div class="my-background"><img class="img-circle my-head upload-avatar" src="./images/chat.png"/></div>
-            <div class="username"></div>
-        </li>
-    </ul>
+<!--导航窗口-->
+<div class="swiper-container swiper-container-horizontal main-box z-index-top">
     <ol class="box-nav box-shadow display-table text-center chat-title-color">
         <li class="box-active table-cell">对话</li>
         <li class="table-cell">联系人</li>
         <li class="table-cell">我的</li>
     </ol>
+    <div class="swiper-scrollbar"></div>
+    <div class="swiper-wrapper">
+        <div class="swiper-slide message-list"></div>
+        <div class="swiper-slide contacts-list"></div>
+        <div class="swiper-slide my-zone">
+            <div class="my-background"><img class="img-circle my-head upload-avatar" src="./images/chat.png"/></div>
+            <div class="username"></div>
+        </div>
+    </div>
 </div>
 
-<!--<script type="text/javascript" src="http://cdn.bootcss.com/jquery/2.2.1/jquery.min.js"></script>
-<script type="text/javascript" src="http://cdn.bootcss.com/bootstrap/4.0.0-alpha/js/bootstrap.min.js"></script>-->
 <script type="text/javascript" src="./js/jquery-2.2.2.min.js"></script>
 <script type="text/javascript" src="./js/bootstrap.min.js"></script>
 <script type="text/javascript" src="./js/layer_mobile/layer.js"></script>
-<script type="text/javascript" src="./js/pinchzoom.min.js"></script>
-<script type="text/javascript" src="./js/swipe.js?v=0.1"></script>
+<script type="text/javascript" src="./js/photoswipe.min.js?v=0.1"></script>
+<script type="text/javascript" src="./js/photoswipe-ui-default.min.js?v=0.1"></script>
+<script type="text/javascript" src="./js/swiper.min.js?v=0.1"></script>
 <script type="text/javascript" src="./js/paste.js?v=0.1"></script>
 <script type="text/javascript" src="./js/exif.js"></script>
 <script type="text/javascript" src="./js/LjkUpload.js?v=0.1"></script>
 <script type="text/javascript" src="./js/html5ImgCompress/html5ImgCompress.min.js"></script>
 <script type="text/javascript" src="./js/adapter.js"></script>
 <script type="text/javascript" src="./js/msgpack.min.js"></script>
-<script type="text/javascript" src="./js/index.js?v=1.36"></script>
+<script type="text/javascript" src="./js/index.js?v=1.38"></script>
 </body>
 </html>
