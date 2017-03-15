@@ -195,11 +195,11 @@ ul, ol {
 /********************表情**********************/
 
 .emotion {
-    position: fixed;
-    top: 100%;
+    width: 100%;
     height: 164px;
+    position: absolute;
+    top: 100%;
     left: 0;
-    right: 0;
     background: white;
 }
 
@@ -274,7 +274,7 @@ ul, ol {
 }
 
 .chat-box {
-    position: fixed;
+    position: absolute;
     top: 0;
     bottom: 0;
     left: 0;
@@ -283,7 +283,7 @@ ul, ol {
 }
 
 .chat-personal, .chat-room-box {
-    position: fixed;
+    position: absolute;
     top: 0;
     left: 0;
     right: 0;
@@ -653,7 +653,7 @@ input[type="range"]::-webkit-slider-thumb {
 
 /*导航窗口*/
 .main-box {
-    position: fixed;
+    position: absolute;
     top: 0;
     bottom: 0;
     left: 0;
