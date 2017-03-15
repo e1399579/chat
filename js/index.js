@@ -292,7 +292,7 @@ function flushSize() {
     W = Math.min(window.innerWidth, window.screen.width);
 }
 flushSize();
-if (!('ontouchstart' in document.documentElement))
+//if (!('ontouchstart' in document.documentElement))
     window.addEventListener("resize", flushSize);
 
 //主窗口
@@ -636,6 +636,7 @@ class EmotionWindow {
             pagination: ".swiper-pagination",
             paginationClickable: true
         });
+        this.container.addClass("hidden");
         this.bindMessage();
     }
 
@@ -691,6 +692,7 @@ class EmotionWindow {
         window.animate({height}, this.speed, "linear", () => {
             this.disable();
             window.css("height", "inherit");
+            this.container.addClass("hidden");
         });
         this.container.animate({top: height}, this.speed);
     }
@@ -709,7 +711,7 @@ class EmotionWindow {
                 let height = H - this.emotion_height;
                 //窗口上升
                 window.animate({height}, this.speed);
-                this.container.animate({top: height}, this.speed);
+                this.container.removeClass("hidden").animate({top: height}, this.speed);
             } else {
                 //折叠
                 this.close(window);
@@ -1628,7 +1630,7 @@ class SingleWindow {
             //视频聊天
             this.bindVideo();
 
-            //粘贴图片
+            //粘贴图片、刷新尺寸
             this.bindInput();
 
             //键盘发送
@@ -1750,6 +1752,14 @@ class SingleWindow {
             Upload.sendMessage(this.image_type, this.id, image);
         }).on("pasteImageStart", () => {
             loading = Util.loading("处理中...");
+        });
+
+        //手机键盘打开时，高度会变化，防止窗口展开表情后无法恢复
+        this.mess_input.bind("focus", () => {
+            window.removeEventListener("resize", flushSize);
+        });
+        this.mess_input.bind("blur", () => {
+            window.addEventListener("resize", flushSize);
         });
     }
 
