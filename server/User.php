@@ -102,22 +102,22 @@ class User {
         return $this->redis->hMset($hKey, $info);
     }
 
-    public function getCommonMessageKey($timestamp) {
-        return 'message:common:' . date('Y-m-d', $timestamp);
+    public function getCommonMessageKey($common_id) {
+        return 'message:common_id:' . $common_id;
     }
 
-    public function addCommonMessage($timestamp, $message) {
-        $key = $this->getCommonMessageKey($timestamp);
+    public function addCommonMessage($common_id, $timestamp, $message) {
+        $key = $this->getCommonMessageKey($common_id);
         return $this->redis->zAdd($key, $timestamp, $message);
     }
 
-    public function getPersonalMessageKey($users, $timestamp) {
+    public function getPersonalMessageKey($users) {
         sort($users);
-        return 'message:users:[' . implode(',', $users) . ']:' . date('Y-m-d', $timestamp);
+        return 'message:users:[' . implode(',', $users) . ']';
     }
 
     public function addPersonalMessage(array $users, $timestamp, $message) {
-        $key = $this->getPersonalMessageKey($users, $timestamp);
+        $key = $this->getPersonalMessageKey($users);
         return $this->redis->zAdd($key, $timestamp, $message);
     }
 
@@ -131,13 +131,13 @@ class User {
         return $this->redis->zRange($key, $start, $end);
     }
 
-    public function getPrevCommonMessage($timestamp, $size = 10) {
-        $key = $this->getCommonMessageKey($timestamp);
+    public function getPrevCommonMessage($common_id, $timestamp, $size = 10) {
+        $key = $this->getCommonMessageKey($common_id);
         return $this->getPrevMessage($key, $timestamp, $size);
     }
 
     public function getPrevPersonalMessage(array $users, $timestamp, $size = 10) {
-        $key = $this->getPersonalMessageKey($users, $timestamp);
+        $key = $this->getPersonalMessageKey($users);
         return $this->getPrevMessage($key, $timestamp, $size);
     }
 

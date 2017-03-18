@@ -1246,7 +1246,9 @@ class VideoWindow {
     }
 
     end(mess) {
-        layer.closeAll();
+        if (this.count > 1) {
+            Util.toast(mess.sender.username + "退出聊天");
+        }
         this.close(mess.sender_id);
     }
 
@@ -1815,6 +1817,13 @@ class SingleWindow {
         return this.query_time;
     }
 
+    delQueryBtn() {
+        Util.toast("已经没有更多了");
+        let height = Number.parseFloat(this.title_container.height());
+        this.content_container.css("top", `${height}px`);
+        this.query_history_btn.remove();
+    }
+
     bindVideo() {
         this.video_btn.bind("click", () => {
             videoWindow.confirm(this.video_type, this.id, this.is_multi);
@@ -2219,34 +2228,34 @@ class AvatarWindow {
             this.hide();
         });
 
-        let ljkUpload = new LjkUpload(this.container);
+        let avatar = new Avatar(this.container);
         let $file_btn = $(".upload-select-btn"),     //文件选择按钮
             $move_image = $(".move-image"),    //裁剪框
             $range = $("#range");               //滑块
 
-        ljkUpload.tip = function (msg) {
+        avatar.tip = function (msg) {
             layer.open({
                 content: msg
                 , skin: 'msg'
                 , time: 3
             });
         };
-        ljkUpload.loading = function (msg) {
+        avatar.loading = function (msg) {
             return layer.open({
                 type: 2,
                 content: msg
             });
         };
-        ljkUpload.delete = function (loading) {
+        avatar.delete = function (loading) {
             layer.close(loading);
         };
 
         //拖拽
-        ljkUpload.moveImage({
+        avatar.moveImage({
             ele: $move_image
         });
         //预览
-        ljkUpload.showImage({
+        avatar.showImage({
             fileSelectBtn: $file_btn,
             fileBtn: $("aside input[type='file']"),
             showEle: $move_image,
@@ -2254,19 +2263,19 @@ class AvatarWindow {
             maxSize: 1024 * 10            //文件最大限制  KB   默认1M
         });
         //缩放
-        ljkUpload.rangeToScale({
+        avatar.rangeToScale({
             range: $range,
             ele: $move_image
         });
         //裁剪
-        ljkUpload.clipImage({
+        avatar.clipImage({
             clipSuccess: function (src) {       //clipSuccess  裁剪成功 返回 base64图片
-                let index = ljkUpload.loading("上传中，请稍候");
+                let index = avatar.loading("上传中，请稍候");
                 let html = '<img src="' + src + '" />';
                 $(".showImage").html(html);
 
                 Upload.sendMessage(USER_AVATAR_UPLOAD, 0, src);
-                ljkUpload.delete(index);
+                avatar.delete(index);
             }
         });
     }
@@ -3112,7 +3121,8 @@ class MessageHelper {
                 list = mess.mess;
                 singleWindow = new CommonWindow(id);
                 if (list.length <= 0) {
-                    singleWindow.flushQueryTime();
+                    //singleWindow.flushQueryTime();
+                    singleWindow.delQueryBtn();
                     break;
                 }
                 list = list.reverse();
@@ -3128,7 +3138,8 @@ class MessageHelper {
                 }
                 singleWindow = new PersonWindow(id);
                 if (list.length <= 0) {
-                    singleWindow.flushQueryTime();
+                    //singleWindow.flushQueryTime();
+                    singleWindow.delQueryBtn();
                 } else {
                     singleWindow.setQueryTime(list[list.length - 1].timestamp);
                 }

@@ -4,6 +4,13 @@ body {
     overflow: hidden;
 }
 
+.animated {
+    -webkit-animation-duration: .5s;
+    animation-duration: .5s;
+    -webkit-animation-fill-mode: both;
+    animation-fill-mode: both
+}
+
 /*菜单*/
 .menu {
     line-height: 40px;
@@ -510,7 +517,7 @@ input[type="range"]::-webkit-slider-thumb {
 .video-multi {
     display: inline-block;
     width: 50%;
-    height: 25%;
+    height: 50%;
     background: #222;
 }
 
@@ -545,6 +552,10 @@ input[type="range"]::-webkit-slider-thumb {
     border-bottom: 1px solid #999;
     display: table;
     width: 100%;
+}
+
+.message-item:hover {
+    background: #eee;
 }
 
 .message-head {
@@ -600,6 +611,10 @@ input[type="range"]::-webkit-slider-thumb {
     border-bottom: 1px solid #999;
     display: table;
     width: 100%;
+}
+
+.contacts-item:hover {
+    background: #eee;
 }
 
 .contacts-head {

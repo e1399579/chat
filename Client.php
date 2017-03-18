@@ -345,7 +345,9 @@ class Client implements IClient {
                 break;
             case self::HISTORY_MESSAGE_COMMON:
                 $timestamp = empty($this->request['mess']) ? $this->timestamp : $this->request['mess'];
-                $mess = $this->user->getPrevCommonMessage($timestamp);
+                //TODO 验证用户是否在群组内
+                $common_id = $this->request['receiver_id'];
+                $mess = $this->user->getPrevCommonMessage($common_id, $timestamp);
                 foreach ($mess as &$row) {
                     $row = $this->decode($row);
                 }
@@ -429,7 +431,7 @@ class Client implements IClient {
             'mess' => isset($this->response['mess']) ? $this->response['mess'] : $this->request['mess'],
             'timestamp' => $this->timestamp,
         ), $extra);
-        $is_store and $this->user->addCommonMessage($this->timestamp, $this->encode($this->response));
+        $is_store and $this->user->addCommonMessage($this->request['receiver_id'], $this->timestamp, $this->encode($this->response));
 
         $this->sendAllMessage();
     }
