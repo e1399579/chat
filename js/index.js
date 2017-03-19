@@ -92,7 +92,8 @@ const CURRENT_URL = (end == -1) ? href + '/' : href.substring(0, end) + '/'; //�
 const PORT = 8080;
 const PROTOCOL = window.location.protocol == 'https:' ? 'wss://' : 'ws://';
 const SERVER_URL = PROTOCOL + window.location.host + ':' + PORT;
-const SHOW_TIME_DURING = 300;
+const SHOW_TIME_DURING = 300; //聊天窗口中显示时间的间隔
+const ANIMATE_DURING = 500; //聊天窗切换动画时长
 const FIRST_TIMESTAMP = (new Date()).getTime() / 1000;
 
 let audio = document.createElement("audio");
@@ -1671,7 +1672,7 @@ class SingleWindow {
         this.window.removeClass("slideInRight").addClass("animated slideOutRight");
         window.setTimeout(() => {
             this.window.removeClass("z-index-top").addClass("z-index-normal");
-        }, 1000);
+        }, ANIMATE_DURING);
     }
 
     hidden() {
@@ -1679,7 +1680,7 @@ class SingleWindow {
         this.window.addClass("slideOutLeft");
         window.setTimeout(() => {
             this.window.removeClass("slideOutLeft z-index-top").addClass("z-index-normal slideOutRight");
-        }, 1000);
+        }, ANIMATE_DURING);
     }
 
     showEvent(box) {
@@ -1950,7 +1951,7 @@ class Box {
         this.window.removeClass("slideInLeft").addClass("animated slideOutLeft");
         window.setTimeout(() => {
             this.window.removeClass("z-index-top").addClass("z-index-normal");
-        }, 1000);
+        }, ANIMATE_DURING);
     }
 
     hideEvent() {
