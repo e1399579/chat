@@ -2,10 +2,10 @@ function getCookie(name) {
     let nameEQ = name + "=";
     let ca = document.cookie.split(';');    //把cookie分割成组
     for (let c of ca) {
-        while (c.charAt(0) == ' ') {          //判断一下字符串有没有前导空格
+        while (c.charAt(0) === ' ') {          //判断一下字符串有没有前导空格
             c = c.substring(1, c.length);      //有的话，从第二位开始取
         }
-        if (c.indexOf(nameEQ) == 0) {       //如果含有我们要的name
+        if (c.indexOf(nameEQ) === 0) {       //如果含有我们要的name
             return unescape(c.substring(nameEQ.length, c.length));    //解码并截取我们要值
         }
     }
@@ -88,9 +88,9 @@ const MAX_LIMITS = 100; //断线最大重连次数
 const MATCH_URL = '((https?|ftp|file):\/\/[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|])'; //匹配URL
 let href = window.location.href; //当前的域名
 let end = href.lastIndexOf('/');
-const CURRENT_URL = (end == -1) ? href + '/' : href.substring(0, end) + '/'; //删除index.html?之类的字符
+const CURRENT_URL = (end === -1) ? href : href.substring(0, end); //删除index.html?之类的字符
 const PORT = 8080;
-const PROTOCOL = window.location.protocol == 'https:' ? 'wss://' : 'ws://';
+const PROTOCOL = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
 const SERVER_URL = PROTOCOL + window.location.host + ':' + PORT;
 const SHOW_TIME_DURING = 300; //聊天窗口中显示时间的间隔
 const ANIMATE_DURING = 500; //聊天窗切换动画时长
@@ -334,8 +334,8 @@ class Util {
     }
 
     static loading(content, time, shadeClose) {
-        if (typeof time == "undefined") time = false;
-        if (typeof shadeClose == "undefined") shadeClose = true;
+        if (typeof time === "undefined") time = false;
+        if (typeof shadeClose === "undefined") shadeClose = true;
         return layer.open({
             type: 2
             , content: content
@@ -498,7 +498,7 @@ class AvatarDecorator extends MessageDecorator {
 
     process(mess) {
         let html = this.message.process(mess);
-        let avatar = mess.sender.avatar ? '<img src="./' + mess.sender.avatar + '" />' : '<img src="./images/chat.png" />';
+        let avatar = mess.sender.avatar ? '<img src="' + mess.sender.avatar + '" />' : '<img src="./images/chat.png" />';
         let search = ["%AVATAR%"];
         let replace = [avatar];
         return html.replaceMulti(search, replace);
@@ -590,7 +590,7 @@ class TimeTextMessage extends MessageContext {
         if (Math.abs(mess.timestamp - TimeTextMessage.time.get(this.flag)) > SHOW_TIME_DURING) {
             let date = new Date(mess.timestamp * 1000);
             let date_str = date.getDateString();
-            let is_today = date_str == (new Date()).getDateString();
+            let is_today = date_str === (new Date()).getDateString();
             let str = is_today ? date.getTimeString() : `${date_str} ${date.getTimeString()}`;
             html = templates.get("time_message").replace(/%TIME%/g, str);
             TimeTextMessage.time.set(this.flag, mess.timestamp);
@@ -901,7 +901,7 @@ class ImageWindow {
         let len = files.length;
         if (len > MAX_UPLOAD) {
             return Util.toast("目前最多只能上传" + MAX_UPLOAD + "张图片");
-        } else if (0 == len) {
+        } else if (0 === len) {
             return;
         }
         this.is_locked = true;
@@ -998,7 +998,7 @@ class MusicWindow {
         });
         input.bind("change", (e) => {
             e.stopPropagation();
-            if (0 == e.currentTarget.files.length) {
+            if (0 === e.currentTarget.files.length) {
                 return Util.toast("请选择一首音乐");
             }
 
@@ -1031,7 +1031,7 @@ class MusicWindow {
         let url = href + $(btn).attr("data-url");
         let progress = $(btn).children("progress");
         let music_during = $(btn).children(".music-during");
-        if (music.src != url) {
+        if (music.src !== url) {
             clearInterval(MusicWindow.music_timer);
             music.pause();
             music.src = url;
@@ -1197,7 +1197,7 @@ class VideoWindow {
 
     request(mess, is_multi) {
         let username = mess.sender.username;
-        if (mess.sender_id == USER.user_id)
+        if (mess.sender_id === USER.user_id)
             return;
         let content = is_multi ? username + "邀请您多人视频聊天，是否允许？" : username + "请求和您视频聊天，是否允许？";
         this.is_multi = is_multi;
@@ -1362,7 +1362,7 @@ class VideoWindow {
                 trace('peerConnection ICE state change event: ', e, e.currentTarget);
 
                 //异常退出，则销毁视频
-                if (e.currentTarget.iceConnectionState == "failed") {
+                if (e.currentTarget.iceConnectionState === "failed") {
                     this.close(receiver_id);
                     Util.toast(username + "异常退出");
                 }
@@ -1379,7 +1379,7 @@ class VideoWindow {
                 peerConnection.addStream(this.local_stream);
                 if (isCaller)
                     this.caller(receiver_id);
-                if (typeof completeCallBack == "function") {
+                if (typeof completeCallBack === "function") {
                     completeCallBack();
                 }
                 return;
@@ -1412,7 +1412,7 @@ class VideoWindow {
                     this.local_video.srcObject = stream;
                     this.user_stream[receiver_id] = stream;
 
-                    if (typeof completeCallBack == "function") {
+                    if (typeof completeCallBack === "function") {
                         completeCallBack();
                     }
                 })
@@ -1541,7 +1541,7 @@ class VideoWindow {
         if (this.count <= 1)
             return;
         for (let key of Object.keys(this.user_video)) {
-            if (key == receiver_id)
+            if (key === receiver_id)
                 continue;
             let mess = {
                 user_id: receiver_id
@@ -1578,6 +1578,7 @@ class SingleWindow {
         this.id = id;
         this.is_show = 0;
         this.is_multi = true;
+        this.timer = 0;
         this.message_type = MESSAGE_COMMON;
         this.emotion_type = EMOTION_COMMON;
         this.image_type = IMAGE_COMMON;
@@ -1701,10 +1702,13 @@ class SingleWindow {
     }
 
     autoBottom() {
-        let container = this.content_container;
-        let speed = 100;
-        let scrollTop = container[0].scrollHeight - container[0].offsetHeight;
-        container.animate({scrollTop, speed});
+        window.clearTimeout(this.timer);
+        this.timer = window.setTimeout(() => {
+            let container = this.content_container;
+            let speed = 100;
+            let scrollTop = container[0].scrollHeight - container[0].offsetHeight;
+            container.animate({scrollTop, speed});
+        }, 200);
     }
 
     imageBottom() {
@@ -1769,12 +1773,12 @@ class SingleWindow {
     bindKeyboard() {
         this.mess_input.bind("keydown", (e) => {
             //ctrl+Enter键换行
-            if (e.ctrlKey && e.keyCode == 13) {
+            if (e.ctrlKey && e.keyCode === 13) {
                 this.mess_input.val(this.mess_input.val() + "\n");
                 return;
             }
             //Enter键发送
-            if (e.keyCode == 13) {
+            if (e.keyCode === 13) {
                 //阻止默认换行
                 e.preventDefault();
                 this.send();
@@ -1801,7 +1805,7 @@ class SingleWindow {
         date.setTime(this.getQueryTime() * 1000);
         let curr_date = date.toDateString(); //当前日期
         let time = date.getHours() + date.getMinutes() + date.getSeconds();
-        let second = (0 == time) ? 86400 : 0; //如果不是整点，则查截止到今天的，否则是前一天的
+        let second = (0 === time) ? 86400 : 0; //如果不是整点，则查截止到今天的，否则是前一天的
         let query_time = Date.parse(curr_date) / 1000 - second;
         this.setQueryTime(query_time);
 
@@ -2075,7 +2079,7 @@ class MessageListWindow extends Box {
 
     flushTitle(user, mess) {
         let message = mess.message ? mess.message : '';
-        let html = user.avatar ? '<img src="./' + user.avatar + '" />' : '<img src="./images/chat.png" />';
+        let html = user.avatar ? '<img src="' + user.avatar + '" />' : '<img src="./images/chat.png" />';
         let time = (new Date(mess.timestamp * 1000)).getTimeString();
         this.head_container.html(html);
         this.title_container.text(user.username);
@@ -2447,7 +2451,7 @@ class UserObserver extends Observer {
 
     getUserIds() {
         let ids = JSON.parse(this.storage.getItem("user_ids"));
-        if (ids == null) {
+        if (ids === null) {
             ids = [];
             this.storage.setItem("user_ids", JSON.stringify(ids));
         }
@@ -2636,7 +2640,7 @@ class MessageListObserver extends Observer {
         let messageList = new MessageListWindow(id, (messageListWindow) => {
             messageListWindow.bindClick(singleWindow);
         });
-        if (id == '0') user = {username: "大厅"};
+        if (id === '0') user = {username: "大厅"};
         messageList.flushTitle(user, mess);
         if (!singleWindow.isShow()) {
             messageList.flushItemNum();
@@ -2662,10 +2666,11 @@ class CommonWindowObserver extends Observer {
         id = '0';
         commonWindow = new CommonWindow(id);
         window_id = commonWindow.getWindowId();
+        is_self = user.user_id === USER.user_id;
         switch (splSubject.type) {
             case USER_ONLINE://欢迎消息
                 commonWindow.flushTitle(user, UserObserver.total());
-                if (USER.user_id == user.user_id) return;
+                if (is_self) return;
                 template = templates.get("welcome_message");
                 decorator = new WelcomeDecorator(new TimeTextMessage(template, window_id, this.is_history));
 
@@ -2686,14 +2691,12 @@ class CommonWindowObserver extends Observer {
                 break;
             case MESSAGE_COMMON://公共消息
                 commonWindow.flushTotal(UserObserver.total());
-                is_self = user.user_id == USER.user_id;
                 template = is_self ? templates.get("my_message") : templates.get("common_message");
                 decorator = new CommonBubbleDecorator(new AvatarDecorator(new ParseCodeDecorator(new TimeTextMessage(template, window_id, this.is_history))));
 
                 break;
             case IMAGE_COMMON://公共消息
                 commonWindow.flushTotal(UserObserver.total());
-                is_self = user.user_id == USER.user_id;
                 template = is_self ? templates.get("my_message") : templates.get("common_message");
                 decorator = new CommonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username, 1)));
 
@@ -2702,14 +2705,12 @@ class CommonWindowObserver extends Observer {
                 break;
             case EMOTION_COMMON:
                 commonWindow.flushTotal(UserObserver.total());
-                is_self = user.user_id == USER.user_id;
                 template = is_self ? templates.get("my_message") : templates.get("common_message");
                 decorator = new CommonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username)));
 
                 is_image = true;
                 break;
             case MUSIC_COMMON:
-                is_self = user.user_id == USER.user_id;
                 template = is_self ? templates.get("my_message") : templates.get("common_message");
                 decorator = new CommonBubbleDecorator(new AvatarDecorator(new MusicDecorator(new TimeTextMessage(template, window_id, this.is_history))));
                 break;
@@ -2949,7 +2950,7 @@ class ContactsWindowObserver extends Observer {
             case USER_ONLINE:
                 user = mess.user;
                 user_id = user.user_id;
-                if (user_id == USER.user_id) return;
+                if (user_id === USER.user_id) return;
                 contactsWindow.flushUserStatus(user_id, 1);
                 if (ContactsWindow.isExists(user_id)) {
                     contactsWindow.moveUser(user_id, 1);
@@ -3061,7 +3062,7 @@ class MessageHelper {
     }
 
     onOpen() {
-        if (typeof USER == 'object') {
+        if (typeof USER === 'object') {
             Upload.sendMessage(USER_LOGIN);
         } else {
             let window = new LoginWindow();
@@ -3087,7 +3088,7 @@ class MessageHelper {
                     layer.close(index);
                     return Util.toast("无法连接到服务器，请稍候再试");
                 }
-                if (socket.readyState == WebSocket.OPEN) {
+                if (socket.readyState === WebSocket.OPEN) {
                     window.clearInterval(timer);
                     socket.addEventListener('message', messageHelper.onMessage);
                     socket.addEventListener('close', messageHelper.onClose);
@@ -3167,7 +3168,7 @@ class MessageHelper {
             res = mess.sender = UserObserver.getUser(mess.sender_id);
         }
 
-        if (mess.hasOwnProperty("receiver_id") && mess.receiver_id != '0') {
+        if (mess.hasOwnProperty("receiver_id") && mess.receiver_id !== '0') {
             res = mess.receiver = UserObserver.getUser(mess.receiver_id);
         }
 

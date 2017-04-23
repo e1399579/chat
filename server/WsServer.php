@@ -5,7 +5,7 @@ error_reporting(E_ALL);//调试时为E_ALL
 set_time_limit(0);
 ob_implicit_flush();//调试时打开
 
-class WsServer {
+class WsServer implements IServer {
     const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
     protected $master;//主机
     protected $sockets = array();//所有的服务数组

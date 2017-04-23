@@ -7,6 +7,7 @@ function autoload($class) {
 spl_autoload_register('autoload');
 
 use server\IClient;
+use server\IServer;
 use server\WsServer;
 use server\User;
 
@@ -92,10 +93,10 @@ class Client implements IClient {
         self::MUSIC_PERSONAL => array(self::MUSIC_SELF, self::MUSIC_OTHER),
     );
 
-    public function __construct($address, $port) {
-        $this->server = new WsServer($address, $port);
+    public function __construct(IServer $server, User $user) {
+        $this->server = $server;
         $this->server->attach($this);
-        $this->user = new User();
+        $this->user = $user;
     }
 
     public function onOpen($key, $headers) {
@@ -775,9 +776,15 @@ class Client implements IClient {
 }
 
 try {
-    //php Client.php 81
-    $port = isset($argv[1]) ? $argv[1] + 0 : 81; //默认81(nginx)，如果是apache，则直接监听访问端口
-    $client = new Client('127.0.0.1', $port);
+    // nginx需要通过反向代理将开放端口8080映射到php监听端口81
+    // apache不需要代理，直接监听开放端口8080即可
+    // windows+apache cmd:php Client.php 8080
+    // linux+nginx bash:nohup php Client.php
+    $address = '127.0.0.1';
+    $port = isset($argv[1]) ? $argv[1] + 0 : 81;
+    $server = new WsServer($address, $port);
+    $user = new User();
+    $client = new Client($server, $user);
     set_error_handler(array($client, 'errorHandler'));
     $client->start();
 } catch (\Exception $e) {
