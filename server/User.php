@@ -122,8 +122,8 @@ class User {
     }
 
     public function getPrevMessage($key, $timestamp, $size = 10) {
-        //0-score之间的数量
-        $end = $this->redis->zCount($key, 0, $timestamp) - 1;
+        //score之前的数量
+        $end = $this->redis->zCount($key, '-inf', $timestamp) - 1;
         if ($end < 0)
             return array();
         $start = $end - $size + 1; //包含start，所有要少一个下标

@@ -1107,7 +1107,7 @@ class VideoWindow {
         };
         this.servers = {
             iceServers: [
-                {urls: "turn:ridersam@123.206.83.227", credential: 1399579, username: ""},
+                {urls: "turn:chat.ridersam.cn:5349", credential: "1399579", username: "ridersam"},
                 {urls: "stun:stun1.l.google.com:19302"},
                 {urls: "stun:stun2.l.google.com:19302"},
                 {urls: "stun:stun3.l.google.com:19302"},
@@ -2666,7 +2666,7 @@ class CommonWindowObserver extends Observer {
         id = '0';
         commonWindow = new CommonWindow(id);
         window_id = commonWindow.getWindowId();
-        is_self = user.user_id === USER.user_id;
+        is_self = user && (user.user_id === USER.user_id);
         switch (splSubject.type) {
             case USER_ONLINE://欢迎消息
                 commonWindow.flushTitle(user, UserObserver.total());

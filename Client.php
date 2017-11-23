@@ -10,6 +10,7 @@ use server\IClient;
 use server\IServer;
 use server\WsServer;
 use server\User;
+use server\DaemonCommand;
 
 class Client implements IClient {
     private $server;//WebSocket
@@ -712,27 +713,6 @@ class Client implements IClient {
         return $this->log($content, $flag);
     }
 
-    public function daemon() {
-        if (($pid1 = pcntl_fork()) === 0) {
-            posix_setsid();
-            if (($pid2 = pcntl_fork()) === 0) {
-                $this->server->run();
-            } else {
-                die();
-            }
-        } else {
-            pcntl_wait($status);//等待子进程中断，防止子进程成为僵尸进程。
-        }
-    }
-
-    public function start() {
-        if (PHP_OS == 'WINNT') {
-            $this->server->run();
-        } else {
-            $this->daemon();
-        }
-    }
-
     /**
      * 自定义错误处理
      * @param $errno
@@ -786,7 +766,15 @@ try {
     $user = new User();
     $client = new Client($server, $user);
     set_error_handler(array($client, 'errorHandler'));
-    $client->start();
+
+    if (PHP_OS == 'WINNT') {
+        $server->run();
+    } else {
+        $daemon = new DaemonCommand(true, 'root', __DIR__ . '/DaemonCommand.log');
+        $daemon->daemonize();
+        $daemon->addJob(array($server, 'run'));
+        $daemon->start(1);
+    }
 } catch (\Exception $e) {
     die($e);
 }

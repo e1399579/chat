@@ -401,7 +401,7 @@ class WsServer implements IServer {
             'is_exception' => false,
         );
         $is_first = true;
-        //echo 'IN:', PHP_EOL;
+//        echo 'IN:', PHP_EOL;
 
         do {
             $buffer = '';
@@ -432,8 +432,8 @@ class WsServer implements IServer {
             $is_first = false;
 
             //一帧的结构：
-            //FIN:1bit RSV:3bit opcode:4bit MASK:1bit Payload len:7bit Extended payload length:... Masking-key:4bit Payload Data:...
-            $FIN = ord($buffer[0]) & 0b10000000;//例：00000001 & 10000000 = 00000000 = 0 连续帧，10000001 & 10000000 = 10000000 = 128 一帧
+            // |FIN:1bit RSV:3bit opcode:4bit | MASK:1bit Payload len:7bit | Extended payload length:16/64bit | Masking-key:4byte | Payload Data:...
+            $FIN = ord($buffer[0]) >> 7; //0 连续帧，1 一帧
 
 //			echo 'BUFFER[0]:', sprintf('%08b', ord($buffer[0])), PHP_EOL;
 //			echo 'FIN:', $FIN, PHP_EOL;
@@ -441,10 +441,10 @@ class WsServer implements IServer {
             //0x0附加数据帧 0x1文本数据帧 0x2二进制数据帧 0x3-7无定义，保留 0x8连接关闭 0x9ping 0xApong 0xB-F无定义，保留
             $opcode = ord($buffer[0]) & 0b1111;
 
-//			echo 'OPCODE:', sprintf('%08b', $opcode), ',', $opcode, PHP_EOL;
+//			echo 'OPCODE:', sprintf('%04b', $opcode), ',', $opcode, PHP_EOL;
 
-//			$MASK = ord($buffer[1]) & 128; // & 10000000
-//			echo 'MASK:', sprintf('%08b', $MASK), ',' , $MASK, PHP_EOL;
+			$MASK = ord($buffer[1]) >> 7; // 1掩码
+//			echo 'MASK:', $MASK, PHP_EOL;
 
             $payload_len = ord($buffer[1]) & 0b1111111; //127
 
@@ -457,9 +457,10 @@ class WsServer implements IServer {
             //Payload len(7bit)==126 Payload Data Length=Extend payload length(16bit)<2^16 65535
             //Payload len(7bit)==127 Payload Data Length=Extend payload length(64bit)<2^64 PHP_INT_MAX(64位系统)
             //网络字节序--大端序 big endian byte order
+            //一次读取payload length和Masking-key，方便计算
             switch ($payload_len) {
                 case 126: //<2^16 65536
-                    $read_length = 6;
+                    $read_length = 6; // 16bit+4byte=2+4
                     $len = 0 + socket_recv($socket, $buffer, $read_length, 0);
                     $payload_length_data = substr($buffer, 0, 2);
                     $unpack = unpack('n', $payload_length_data); //16bit 字节序
@@ -467,7 +468,7 @@ class WsServer implements IServer {
                     $masks = substr($buffer, 2, 4);
                     break;
                 case 127: //<2^64
-                    $read_length = 12;
+                    $read_length = 12; // 64bit+4byte=8+4
                     $len = 0 + socket_recv($socket, $buffer, $read_length, 0);
                     $payload_length_data = substr($buffer, 0, 8);
                     $unpack = unpack('J', $payload_length_data); //64bit 字节序
@@ -475,12 +476,12 @@ class WsServer implements IServer {
                     $masks = substr($buffer, 8, 4);
                     break;
                 default: //<=125
-                    $read_length = 4;
+                    $read_length = 4; // 4byte
                     $len = 0 + socket_recv($socket, $buffer, $read_length, 0);
                     $payload_length_data = '';
                     $unpack = array();
                     $length = $payload_len;
-                    $masks = substr($buffer, 0, 4);
+                    $masks = $buffer;
                     break;
             }
 
@@ -497,15 +498,31 @@ class WsServer implements IServer {
 //			echo 'LENGTH:', $length, PHP_EOL;
 //			var_dump($unpack);
 
-            socket_recv($socket, $data, $length, MSG_WAITALL); //这里用阻塞模式，接收指定长度的数据
+            //$finished_len = socket_recv($socket, $data, $length, MSG_WAITALL); //这里用阻塞模式，接收指定长度的数据
+            $data = '';
+            $finished_len = 0;
+            do {
+                // 每次都尝试以最大长度来读取，实际长度以接收到的为准
+                $bytes = socket_recv($socket, $buff, $length, MSG_WAITALL);
+                if (false === $bytes) {
+                    $params['is_exception'] = true;
+                    break 2;
+                }
+                $data .= $buff;
+                $length -= $bytes;
+                $finished_len += $bytes;
+            } while ($length > 0);
+            unset($buff);
+
+//            echo 'FINISHED LENGTH:', $finished_len, PHP_EOL;
 
             //根据掩码解析数据，处理每个字节，比较费时
             for ($index = 0, $n = strlen($data); $index < $n; ++$index) {
                 $decoded .= $data[$index] ^ $masks[$index % 4];
             }
             unset($buffer, $data); //销毁临时变量(可能很大)，释放内存
-        } while (0 == $FIN); //连续帧
-        //echo 'END.', PHP_EOL, PHP_EOL;
+        } while (0 === $FIN); //连续帧
+//        echo 'END.', PHP_EOL, PHP_EOL;
         return $decoded;
     }
 
