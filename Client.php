@@ -760,9 +760,13 @@ try {
     // apache不需要代理，直接监听开放端口8080即可
     // windows+apache cmd:php Client.php 8080
     // linux+nginx bash:nohup php Client.php
-    $address = '127.0.0.1';
-    $port = isset($argv[1]) ? $argv[1] + 0 : 81;
-    $server = new WsServer($address, $port);
+    $port = isset($argv[1]) ? $argv[1] + 0 : 8080;
+    $ssl = array(
+        'local_cert'  => '/usr/local/nginx/conf/1_chat.ridersam.cn_cert.crt',
+        'local_pk'    => '/usr/local/nginx/conf/2_chat.ridersam.cn.key',
+        'verify_peer' => false,
+    );
+    $server = new WsServer($port, $ssl);
     $user = new User();
     $client = new Client($server, $user);
     set_error_handler(array($client, 'errorHandler'));

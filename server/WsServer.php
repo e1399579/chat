@@ -19,27 +19,26 @@ class WsServer implements IServer {
     protected $memory_limit; //最大内存限制:byte
     protected $debug = false;
 
-    public function __construct($address, $port) {
+    public function __construct($port, $ssl = array()) {
         $this->memory_limit = intval(ini_get('memory_limit')) * 1024 * 1024;
         $this->storage = new \SplObjectStorage();
-        //产生一个socket
-        $this->master = socket_create(AF_INET, SOCK_STREAM, SOL_TCP)
-        or die('socket_create() failed:' . $this->getError($this->master));
 
-        //设置socket选项
-        $this->setSocketOption($this->master);
+        stream_context_set_default(array(
+            'ssl' => $ssl,
+            'socket' => array(
+                'so_reuseport' => 1,
+                'backlog' => $this->backlog,
+            ),
+        ));
+        $wrapper = empty($ssl) ? 'tcp' : 'tlsv1.2';
+        $this->master = stream_socket_server("{$wrapper}://0.0.0.0:{$port}", $errno, $errstr,
+            STREAM_SERVER_BIND | STREAM_SERVER_LISTEN);
 
-        //把socket绑定在一个IP地址和端口上
-        socket_bind($this->master, $address, $port)
-        or die('socket_bind() failed:' . $this->getError($this->master));
-
-        //监听由指定socket的所有连接
-        socket_listen($this->master, $this->backlog)
-        or die('socket_listen() failed:' . $this->getError($this->master));
+        $this->setSocketOption(socket_import_stream($this->master));
 
         $this->sockets[] = $this->master;
         $this->debug('Server Started : ' . date('Y-m-d H:i:s'));
-        $this->debug('Listening on   : ' . $address . ' port ' . $port);
+        $this->debug('Listening on   : 0.0.0.0 port ' . $port);
         $this->debug('Master socket  : ' . $this->master);
     }
 
@@ -57,7 +56,7 @@ class WsServer implements IServer {
         ));*/
         socket_set_option($socket, SOL_SOCKET, SO_SNDBUF, PHP_INT_MAX); //发送缓冲
         socket_set_option($socket, SOL_SOCKET, SO_RCVBUF, PHP_INT_MAX); //接收缓冲
-        socket_set_option($socket, SOL_SOCKET, SO_DONTROUTE, 1);
+        socket_set_option($socket, SOL_SOCKET, SO_DONTROUTE, 0); // 报告传出消息是否绕过标准路由设施：1只能在本机IP使用，0无限制
         $timeout = array('sec' => $this->timeout, 'usec' => 0);
         socket_set_option($socket, SOL_SOCKET, SO_RCVTIMEO, $timeout); //发送超时
         socket_set_option($socket, SOL_SOCKET, SO_SNDTIMEO, $timeout); //接收超时
@@ -108,7 +107,7 @@ class WsServer implements IServer {
              * f.编码为二进制(网络字节序)消息，返回给客户端文本(opcode=0001)/二进制(opcode=0010)数据
              * g.重复执行d-f步，当所有客户端都关闭时，则会进入a步
              */
-            socket_select($read, $write, $except, NULL);
+            stream_select($read, $write, $except, NULL);
 
             if (isset($read[0])) {
                 //有主机socket，意味着有新的连接
@@ -126,7 +125,7 @@ class WsServer implements IServer {
 
                 if ($params['is_ping']) {
                     $protocol = chr(0b10001010);//0x0A pong帧--1010
-                    socket_write($socket, $protocol, strlen($protocol));
+                    fwrite($socket, $protocol);
                     continue;
                 }
 
@@ -138,7 +137,7 @@ class WsServer implements IServer {
                 }
 
                 if (!isset($msg[0])) {
-                    if (($no = socket_last_error($socket)) > 0) {
+                    if (($no = socket_last_error(socket_import_stream($socket))) > 0) {
                         $this->log("$key#socket ERROR:" . socket_strerror($no), 'ERROR');
                         $this->disConnect($key);
 
@@ -177,7 +176,7 @@ class WsServer implements IServer {
         $socket = $this->sockets[$index];
         $msg = $this->frame($msg);
         $len = strlen($msg);
-        $res = socket_write($socket, $msg, $len);
+        $res = fwrite($socket, $msg);
         if (false === $res) {
             $this->disConnect($index);
 
@@ -199,7 +198,7 @@ class WsServer implements IServer {
         while (list($key, $socket) = each($this->sockets)) {
             if (isset($this->handshake[$key])) {
                 $len = strlen($msg);
-                $res = socket_write($socket, $msg, $len);
+                $res = fwrite($socket, $msg);
                 if (false === $res) {
                     $this->disConnect($key);
 
@@ -215,12 +214,12 @@ class WsServer implements IServer {
      * 新的连接
      */
     protected function connect() {
-        $client = socket_accept($this->master);
+        $client = stream_socket_accept($this->master);
         if (false === $client) {
             $this->log('socket_accept() failed:' . $this->getError($this->master), 'ERROR');
             return false;
         }
-        $this->setSocketOption($client);
+        $this->setSocketOption(socket_import_stream($client));
 
         $this->debug($client . ' CONNECTED!');
 
@@ -230,7 +229,8 @@ class WsServer implements IServer {
         $key = key($this->sockets); //新的服务索引
         reset($this->sockets); //复位
         //服务端与客户端握手，无阻塞读取
-        $len = 0 + socket_recv($client, $buffer, 2048, 0); //如果header头信息较多，可以调大此值
+        $buffer = fread($client, 2048); //如果header头信息较多，可以调大此值
+        $len = strlen($buffer);
         if (0 == $len) {
             unset($this->sockets[$key]); //未完成握手，不用通知客户端
             $handshake = false;
@@ -254,7 +254,7 @@ class WsServer implements IServer {
      * @param int $index 服务下标
      */
     public function disConnect($index) {
-        isset($this->sockets[$index]) and socket_close($this->sockets[$index]);
+        isset($this->sockets[$index]) and fclose($this->sockets[$index]);
         $this->debug($index . ' DISCONNECTED!');
         $this->tearDown($index);
     }
@@ -288,7 +288,7 @@ class WsServer implements IServer {
             "Connection: Upgrade\r\n" .
             "Sec-WebSocket-Accept: " . $this->calcKey($key) . "\r\n\r\n";  //必须以两个空行结尾
         $this->debug($upgrade);
-        $bytes = socket_write($socket, $upgrade, strlen($upgrade));
+        $bytes = fwrite($socket, $upgrade);
         if (false === $bytes) {
             $this->log('Handshake failed!' . $this->getError($socket), 'ERROR');
             return false;
@@ -404,8 +404,8 @@ class WsServer implements IServer {
 //        echo 'IN:', PHP_EOL;
 
         do {
-            $buffer = '';
-            $len = 0 + socket_recv($socket, $buffer, 2, 0);
+            $buffer = fread($socket, 2);
+            $len = strlen($buffer);
             if ($is_first) {
                 if (!isset($buffer[0])) {
                     $params['is_closed'] = true;
@@ -461,7 +461,8 @@ class WsServer implements IServer {
             switch ($payload_len) {
                 case 126: //<2^16 65536
                     $read_length = 6; // 16bit+4byte=2+4
-                    $len = 0 + socket_recv($socket, $buffer, $read_length, 0);
+                    $buffer = fread($socket, $read_length);
+                    $len = strlen($buffer);
                     $payload_length_data = substr($buffer, 0, 2);
                     $unpack = unpack('n', $payload_length_data); //16bit 字节序
                     $length = current($unpack);
@@ -469,7 +470,8 @@ class WsServer implements IServer {
                     break;
                 case 127: //<2^64
                     $read_length = 12; // 64bit+4byte=8+4
-                    $len = 0 + socket_recv($socket, $buffer, $read_length, 0);
+                    $buffer = fread($socket, $read_length);
+                    $len = strlen($buffer);
                     $payload_length_data = substr($buffer, 0, 8);
                     $unpack = unpack('J', $payload_length_data); //64bit 字节序
                     $length = current($unpack);
@@ -477,7 +479,8 @@ class WsServer implements IServer {
                     break;
                 default: //<=125
                     $read_length = 4; // 4byte
-                    $len = 0 + socket_recv($socket, $buffer, $read_length, 0);
+                    $buffer = fread($socket, $read_length);
+                    $len = strlen($buffer);
                     $payload_length_data = '';
                     $unpack = array();
                     $length = $payload_len;
@@ -503,7 +506,8 @@ class WsServer implements IServer {
             $finished_len = 0;
             do {
                 // 每次都尝试以最大长度来读取，实际长度以接收到的为准
-                $bytes = socket_recv($socket, $buff, $length, MSG_WAITALL);
+                $buff = fread($socket, $length);
+                $bytes = strlen($buff);
                 if (false === $bytes) {
                     $params['is_exception'] = true;
                     break 2;
@@ -578,7 +582,7 @@ class WsServer implements IServer {
      * @return string
      */
     protected function getError($socket) {
-        return socket_strerror(socket_last_error($socket));
+        return socket_strerror(socket_last_error(socket_import_stream($socket)));
     }
 
     /**
