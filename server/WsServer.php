@@ -20,6 +20,8 @@ class WsServer implements IServer {
     protected $debug = false;
 
     public function __construct($port, $ssl = array()) {
+        $this->checkEnvironment();
+
         $this->memory_limit = intval(ini_get('memory_limit')) * 1024 * 1024;
         $this->storage = new \SplObjectStorage();
 
@@ -31,15 +33,26 @@ class WsServer implements IServer {
             ),
         ));
         $wrapper = empty($ssl) ? 'tcp' : 'tlsv1.2';
-        $this->master = stream_socket_server("{$wrapper}://0.0.0.0:{$port}", $errno, $errstr,
+        $local_socket = "{$wrapper}://0.0.0.0:{$port}";
+        $this->master = stream_socket_server($local_socket, $errno, $errstr,
             STREAM_SERVER_BIND | STREAM_SERVER_LISTEN);
 
         $this->setSocketOption(socket_import_stream($this->master));
 
         $this->sockets[] = $this->master;
         $this->debug('Server Started : ' . date('Y-m-d H:i:s'));
-        $this->debug('Listening on   : 0.0.0.0 port ' . $port);
+        $this->debug('Listening on   : '. $local_socket);
         $this->debug('Master socket  : ' . $this->master);
+    }
+
+    public function checkEnvironment() {
+        if (php_sapi_name() !== 'cli') {
+            throw new \RuntimeException('Only run in command line');
+        }
+
+        if (!extension_loaded('libevent')) {
+            throw new \RuntimeException("Please install libevent extension firstly");
+        }
     }
 
     /**
@@ -279,6 +292,10 @@ class WsServer implements IServer {
         $this->debug('Requesting handshake...');
         $this->debug($buffer);
         $this->headers = $this->getHeaders($buffer);
+        $peer_name = stream_socket_get_name($socket, true);
+        $peer_info = explode(':', $peer_name, 2);
+        $this->headers['REMOTE_ADDR'] = $peer_info[0];
+        // TODO 请求信息校验
         $key = isset($this->headers['Sec-WebSocket-Key']) ? $this->headers['Sec-WebSocket-Key'] : '';
         $this->debug("Handshaking...");
         $upgrade =
@@ -324,7 +341,7 @@ class WsServer implements IServer {
         unset($headers[0]);
         $res = array();
         foreach ($headers as $row) {
-            $arr = explode(':', $row);
+            $arr = explode(':', $row, 2);
             isset($arr[1]) and $res[trim($arr[0])] = trim($arr[1]);
         }
         return $res;
@@ -599,6 +616,7 @@ class WsServer implements IServer {
         $filename = sprintf('%s/socket.%s@%s.log', $dir, $flag, date('H'));
         is_array($content) and $content = json_encode($content, JSON_UNESCAPED_UNICODE);
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+        array_shift($trace);
         $content = '[' . date('Y-m-d H:i:s') . '] ' . $content . PHP_EOL . json_encode($trace, JSON_UNESCAPED_UNICODE) . PHP_EOL . PHP_EOL;
         $fp = fopen($filename, 'a');
         $res = fwrite($fp, $content);

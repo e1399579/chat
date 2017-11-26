@@ -102,8 +102,7 @@ class Client implements IClient {
 
     public function onOpen($key, $headers) {
         $this->serviceAgent[$key] = isset($headers['User-Agent']) ? $headers['User-Agent'] : '';
-        $this->serviceIp[$key] = isset($headers['X-Real-IP']) ? $headers['X-Real-IP'] :
-            (isset($headers['Host']) ? $headers['Host'] : '');
+        $this->serviceIp[$key] = $headers['REMOTE_ADDR'];
         $this->debug(var_export($headers, true));
     }
 
@@ -696,6 +695,7 @@ class Client implements IClient {
         $filename = sprintf('%s/client.%s@%s.log', $dir, $flag, date('H'));
         is_array($content) and $content = json_encode($content, JSON_UNESCAPED_UNICODE);
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
+        array_shift($trace);
         $content = '[' . date('Y-m-d H:i:s') . '] ' . $content . PHP_EOL . json_encode($trace, JSON_UNESCAPED_UNICODE)
             . PHP_EOL . PHP_EOL;
         $fp = fopen($filename, 'a');
