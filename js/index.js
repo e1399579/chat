@@ -627,17 +627,18 @@ class EmotionWindow {
         this.type = EMOTION_COMMON;
         this.receiver_id = '0';
         this.active_class = "emotion-active";
+        this.is_init = false;
+        this.build();
     }
 
     init() {
-        this.build();
+        this.container.children(".swiper-wrapper").html(this.emotion_html);
         this.emotion_height = this.container.height();
 
         let swiper = new Swiper(this.container.get(0), {
             pagination: ".swiper-pagination",
             paginationClickable: true
         });
-        this.container.addClass("hidden");
         this.bindMessage();
     }
 
@@ -671,7 +672,6 @@ class EmotionWindow {
                 this.emotion_html += li;
             }
         }
-        this.container.children(".swiper-wrapper").html(this.emotion_html);
     }
 
     isOpen() {
@@ -706,6 +706,11 @@ class EmotionWindow {
 
     bindToggle(elem, window) {
         elem.bind("click", () => {
+            // 先不加载表情，等点击的时候再加载
+            if (!this.is_init) {
+                this.init();
+                this.is_init = true;
+            }
             if (!this.isOpen()) {
                 //展开
                 this.active();
@@ -736,7 +741,6 @@ class EmotionWindow {
     }
 }
 let emotion = new EmotionWindow();
-emotion.init();
 
 class MenuWindow {
     constructor() {
