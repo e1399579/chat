@@ -3,14 +3,14 @@ namespace server;
 
 class User {
     public $redis;
-    public $userSet = 'user';//用户ID集合
+    public $userSet = 'user';//在线用户ID集合
     public $fileStore = 'file:md5'; //文件库:md5 => path
 
     public function __construct() {
         $this->redis = new \Redis();
-        $res = $this->redis->pconnect('127.0.0.1', 6379);
+        $res = $this->redis->connect('127.0.0.1', 6379);
         if (false == $res)
-            throw new \Exception('连接REDIS失败！');
+            throw new \RuntimeException('连接REDIS失败！');
         $this->redis->select(15);
     }
 
@@ -88,7 +88,15 @@ class User {
      * @return int
      */
     public function logout($user_id) {
-        //return $this->redis->sRem($this->userSet, $user_id);
+        return $this->redis->sRem($this->userSet, $user_id);
+    }
+
+    /**
+     * 清空在线用户
+     * @return int
+     */
+    public function flushOnline() {
+        return $this->redis->del($this->userSet);
     }
 
     /**

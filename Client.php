@@ -11,9 +11,13 @@ use server\IServer;
 use server\WsServer;
 use server\User;
 use server\DaemonCommand;
+use server\Logger;
 
 class Client implements IClient {
     private $server;//WebSocket
+    /**
+     * @var User
+     */
     private $user;//用户
     public $userService = array();//user_id=>socket key
     public $serviceUser = array();//socket key=>user_id
@@ -28,6 +32,10 @@ class Client implements IClient {
     private $response = array();
     private $timestamp;
     private $request_type;
+    /**
+     * @var Logger
+     */
+    protected $logger;
 
     const MESSAGE_COMMON = 100;//公共消息
     const MESSAGE_SELF = 101;//本人消息
@@ -94,10 +102,14 @@ class Client implements IClient {
         self::MUSIC_PERSONAL => array(self::MUSIC_SELF, self::MUSIC_OTHER),
     );
 
-    public function __construct(IServer $server, User $user) {
+    public function __construct(IServer $server) {
         $this->server = $server;
         $this->server->attach($this);
-        $this->user = $user;
+
+        $path = './logs/client';
+        $this->logger = Logger::getInstance($path);
+
+        set_error_handler(array($this, 'errorHandler'));
     }
 
     public function onOpen($key, $headers) {
@@ -111,7 +123,7 @@ class Client implements IClient {
         $this->request = $this->decode($message);
         $this->timestamp = microtime(true);
         if (!isset($this->request['type'])) {
-            $this->log(sprintf('数据不完整，共 %s bytes', strlen($message)), 'ERROR');
+            $this->logger->error(sprintf('数据不完整，共 %s bytes', strlen($message)));
             $this->response = array(
                 'type' => self::ERROR,
                 'mess' => '读取消息出错',
@@ -500,9 +512,9 @@ class Client implements IClient {
         $this->onClose($key);
         if (isset($this->serviceUser[$key])) {
             $user_id = $this->serviceUser[$key];
-            $this->log('user_id:' . $user_id . ' service error:' . $err, 'ERROR');
+            $this->logger->error('user_id:' . $user_id . ' service error:' . $err);
         } else {
-            $this->log("service#{$key} ERROR:$err");
+            $this->logger->error("service#{$key} ERROR:$err");
         }
     }
 
@@ -610,7 +622,7 @@ class Client implements IClient {
      */
     public function flushUsers($key) {
         $users = array();
-        foreach ($this->serviceUser as $user_id) {
+        foreach ($this->user->getOnlineUsers() as $user_id) {
             $users[] = $this->user->getUserById($user_id);
         }
         $this->response = array(
@@ -679,38 +691,12 @@ class Client implements IClient {
         return msgpack_pack($data);
     }
 
-    /**
-     * 记录日志
-     *
-     * @param string $content
-     * @param string $flag
-     *
-     * @return int
-     */
-    public function log($content, $flag = 'INFO') {
-        $dir = sprintf('%s/logs/%s', __DIR__, date('Y-m-d'));
-        if (!is_dir($dir)) {
-            mkdir($dir, 0777, true);
-        }
-        $filename = sprintf('%s/client.%s@%s.log', $dir, $flag, date('H'));
-        is_array($content) and $content = json_encode($content, JSON_UNESCAPED_UNICODE);
-        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
-        array_shift($trace);
-        $content = '[' . date('Y-m-d H:i:s') . '] ' . $content . PHP_EOL . json_encode($trace, JSON_UNESCAPED_UNICODE)
-            . PHP_EOL . PHP_EOL;
-        $fp = fopen($filename, 'a');
-        $res = fwrite($fp, $content);
-        fclose($fp);
-
-        return $res;
-    }
-
-    public function debug($content, $flag = 'INFO') {
+    public function debug($content) {
         if (!$this->debug) {
             return true;
         }
 
-        return $this->log($content, $flag);
+        return $this->logger->info($content);
     }
 
     /**
@@ -730,28 +716,49 @@ class Client implements IClient {
         switch ($errno) {
             case E_USER_ERROR:
                 $content = "[$errno] $errstr" . PHP_EOL . " Fatal error on line $errline in file $errfile";
-                $this->log($content, 'ERROR');
+                $this->logger->error($content);
                 exit(1);
                 break;
 
             case E_USER_WARNING:
                 $content = "WARNING [$errno] $errstr";
-                $this->log($content);
+                $this->logger->info($content);
                 break;
 
             case E_USER_NOTICE:
                 $content = "NOTICE [$errno] $errstr";
-                $this->log($content);
+                $this->logger->info($content);
                 break;
 
             default:
                 $content = "Unknown error type: [$errno] $errstr";
-                $this->log($content);
+                $this->logger->info($content);
                 break;
         }
 
         /* Don't execute PHP internal error handler */
         return true;
+    }
+
+    public function run($num) {
+        if (PHP_OS == 'WINNT') {
+            $this->server->run();
+        } else {
+            $daemon = new DaemonCommand(true, 'root', __DIR__ . '/DaemonCommand.log');
+            $daemon->daemonize();
+
+            $daemon->addJob(function () {
+                $this->user = new User();
+                $this->server->run();
+            });
+            $daemon->addMasterJob(function() use ($num) {
+                (new User())->flushOnline();
+                $this->server->initWorks($num);
+                $this->server->attachMessage();
+            });
+
+            $daemon->start($num);
+        }
     }
 }
 
@@ -767,18 +774,8 @@ try {
         'verify_peer' => false,
     );
     $server = new WsServer($port, $ssl);
-    $user = new User();
-    $client = new Client($server, $user);
-    set_error_handler(array($client, 'errorHandler'));
-
-    if (PHP_OS == 'WINNT') {
-        $server->run();
-    } else {
-        $daemon = new DaemonCommand(true, 'root', __DIR__ . '/DaemonCommand.log');
-        $daemon->daemonize();
-        $daemon->addJob(array($server, 'run'));
-        $daemon->start(1);
-    }
+    $client = new Client($server);
+    $client->run(4);
 } catch (\Exception $e) {
     die($e);
 }

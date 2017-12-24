@@ -18,10 +18,20 @@ class WsServer implements IServer {
     protected $headers = array(); //请求头
     protected $memory_limit; //最大内存限制:byte
     protected $debug = false;
+    /**
+     * @var Logger
+     */
+    protected $logger;
+    protected $master_queue;
+    protected $worker_queues;
+    protected $shared_memory_key;
+    protected $shared_memory_var;
 
     public function __construct($port, $ssl = array()) {
         $this->checkEnvironment();
 
+        $path = './logs/socket';
+        $this->logger = Logger::getInstance($path);
         $this->memory_limit = intval(ini_get('memory_limit')) * 1024 * 1024;
         $this->storage = new \SplObjectStorage();
 
@@ -40,6 +50,12 @@ class WsServer implements IServer {
         $this->setSocketOption(socket_import_stream($this->master));
 
         $this->sockets[] = $this->master;
+
+        $key = ftok(__FILE__, 'm');
+        $this->master_queue = msg_get_queue($key, 0666);
+        $this->shared_memory_key = ftok(__FILE__, 'k');
+        $this->shared_memory_var = ftok(__FILE__, 'v');
+
         $this->debug('Server Started : ' . date('Y-m-d H:i:s'));
         $this->debug('Listening on   : '. $local_socket);
         $this->debug('Master socket  : ' . $this->master);
@@ -107,6 +123,19 @@ class WsServer implements IServer {
      * 开始运行
      */
     public function run() {
+        $scheduler = new Scheduler();
+
+        $scheduler->newTask($this->ioPoll());
+        $scheduler->newTask($this->waitMessage());
+
+        $scheduler->run();
+    }
+
+    /**
+     * 监听事件
+     * @return \Generator
+     */
+    protected function ioPoll() {
         do {
             $read = $this->sockets;
             /**
@@ -151,7 +180,7 @@ class WsServer implements IServer {
 
                 if (!isset($msg[0])) {
                     if (($no = socket_last_error(socket_import_stream($socket))) > 0) {
-                        $this->log("$key#socket ERROR:" . socket_strerror($no), 'ERROR');
+                        $this->logger->error("$key#socket ERROR:" . socket_strerror($no));
                         $this->disConnect($key);
 
                         $this->notify('onClose', array($key));
@@ -159,7 +188,7 @@ class WsServer implements IServer {
                     continue;
                 }
 
-                isset($msg[$this->max_log_length]) or $this->log('<' . $msg);//数据太大时不写日志
+                isset($msg[$this->max_log_length]) or $this->logger->info('<' . $msg);//数据太大时不写日志
                 if ($msg == 'PING') continue;//Firefox
 
                 $this->notify('onMessage', array($key, $msg));
@@ -169,11 +198,13 @@ class WsServer implements IServer {
 
             //出错的统一通知
             foreach ($this->invalid_sockets as $key => $err) {
-                $this->log("socket#{$key} ERROR:{$err}", 'ERROR');
+                $this->logger->error("socket#{$key} ERROR:{$err}");
                 $this->notify('onError', array($key, $err));
             }
 
             $this->invalid_sockets = array(); //释放内存
+
+            yield;
         } while (true);
     }
 
@@ -185,7 +216,7 @@ class WsServer implements IServer {
      */
     public function send($index, $msg) {
         if (!isset($this->sockets[$index])) return;
-        isset($msg[$this->max_log_length]) or $this->log('>' . $msg);
+        isset($msg[$this->max_log_length]) or $this->logger->info('>' . $msg);
         $socket = $this->sockets[$index];
         $msg = $this->frame($msg);
         $len = strlen($msg);
@@ -195,7 +226,20 @@ class WsServer implements IServer {
 
             $this->invalid_sockets[$index] = 'socket_write() fail!Broken pipe';
         } else {
-            $this->log('!' . $len . ' bytes sent');
+            $this->logger->info('!' . $len . ' bytes sent');
+        }
+    }
+
+    public function sendAll($msg) {
+        $shm_id = shm_attach($this->shared_memory_key, strlen($msg) + 100, 0666);
+
+        if (false !== $shm_id) {
+            $sem_id = sem_get(ftok(__FILE__, 'a'));
+            sem_acquire($sem_id);
+            shm_put_var($shm_id, $this->shared_memory_var, [$msg]);
+            sem_release($sem_id);
+
+            msg_send($this->master_queue, 1, 'doSendAll');
         }
     }
 
@@ -203,8 +247,8 @@ class WsServer implements IServer {
      * 给所有完成握手的客户端发送消息
      * @param string $msg
      */
-    public function sendAll($msg) {
-        isset($msg[$this->max_log_length]) or $this->log('*' . $msg);
+    public function doSendAll($msg) {
+        isset($msg[$this->max_log_length]) or $this->logger->info('*' . $msg);
         $msg = $this->frame($msg);
         reset($this->sockets); //将数组的内部指针指向第一个单元
         isset($this->sockets[0]) and next($this->sockets);
@@ -217,7 +261,7 @@ class WsServer implements IServer {
 
                     $this->invalid_sockets[$key] = 'socket_write() fail!Broken pipe';
                 } else {
-                    $this->log('*' . $len . ' bytes sent');
+                    $this->logger->info('*' . $len . ' bytes sent');
                 }
             }
         }
@@ -229,7 +273,7 @@ class WsServer implements IServer {
     protected function connect() {
         $client = stream_socket_accept($this->master);
         if (false === $client) {
-            $this->log('socket_accept() failed:' . $this->getError($this->master), 'ERROR');
+            $this->logger->error('socket_accept() failed:' . $this->getError($this->master));
             return false;
         }
         $this->setSocketOption(socket_import_stream($client));
@@ -307,7 +351,7 @@ class WsServer implements IServer {
         $this->debug($upgrade);
         $bytes = fwrite($socket, $upgrade);
         if (false === $bytes) {
-            $this->log('Handshake failed!' . $this->getError($socket), 'ERROR');
+            $this->logger->error('Handshake failed!' . $this->getError($socket));
             return false;
         } else {
             $this->handshake[$index] = true;
@@ -602,31 +646,53 @@ class WsServer implements IServer {
         return socket_strerror(socket_last_error(socket_import_stream($socket)));
     }
 
-    /**
-     * 记录日志
-     * @param string $content
-     * @param string $flag
-     * @return int
-     */
-    public function log($content, $flag = 'INFO') {
-        $dir = sprintf('%s/../logs/%s', __DIR__, date('Y-m-d'));
-        if (!is_dir($dir)) {
-            mkdir($dir, 0777, true);
-        }
-        $filename = sprintf('%s/socket.%s@%s.log', $dir, $flag, date('H'));
-        is_array($content) and $content = json_encode($content, JSON_UNESCAPED_UNICODE);
-        $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
-        array_shift($trace);
-        $content = '[' . date('Y-m-d H:i:s') . '] ' . $content . PHP_EOL . json_encode($trace, JSON_UNESCAPED_UNICODE) . PHP_EOL . PHP_EOL;
-        $fp = fopen($filename, 'a');
-        $res = fwrite($fp, $content);
-        fclose($fp);
-        return $res;
+    public function debug($content) {
+        if (!$this->debug) return true;
+        return $this->logger->info($content);
     }
 
-    public function debug($content, $flag = 'INFO') {
-        if (!$this->debug) return true;
-        return $this->log($content, $flag);
+    public function attachMessage() {
+        while (true) {
+            // 主进程：阻塞接收消息
+            msg_receive($this->master_queue, 0, $msgtype, 65535, $message);
+
+            $this->notifyWorks($msgtype, $message);
+        }
+    }
+
+    protected function notifyWorks($msgtype, $message) {
+        foreach ($this->worker_queues as $worker_queue) {
+            msg_send($worker_queue, $msgtype, $message);
+        }
+    }
+
+    /**
+     * 等待队列消息
+     * @return \Generator
+     */
+    protected function waitMessage() {
+        $pid = posix_getpid();
+        $queue = msg_get_queue($pid, 0666);
+        while (true) {
+            // 子进程：无阻塞接收消息
+            msg_receive($queue, 1, $msgtype, 65535, $message, true, MSG_IPC_NOWAIT);
+
+            $shm_id = shm_attach($this->shared_memory_key);
+            if (false !== $shm_id) {
+                $params = shm_get_var($shm_id, $this->shared_memory_var);
+                call_user_func_array(array($this, $message), $params);
+                shm_remove($shm_id);
+            }
+
+            yield;
+        }
+    }
+
+    public function initWorks($num) {
+        $pid = posix_getpid();
+        for ($i = 1; $i <= $num; ++ $i) {
+            $this->worker_queues[] = msg_get_queue($pid + $i, 0666);
+        }
     }
 }
 

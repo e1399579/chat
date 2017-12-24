@@ -10,6 +10,7 @@ class DaemonCommand {
     private $pid_file = "";
     private $workers_count = 0;
     private $jobs = array();
+    private $master_job;
 
     public function __construct($is_singleton = false, $user = 'nobody', $output = '/dev/null') {
 
@@ -21,12 +22,12 @@ class DaemonCommand {
 
     /**
      * 检查环境是否支持pcntl
-     * @throws \Exception
+     * @throws \RuntimeException
      */
     public function checkPcntl() {
         if (!function_exists('pcntl_signal')) {
             $message = 'PHP does not appear to be compiled with the PCNTL extension.  This is necessary for daemonization';
-            throw new \Exception($message);
+            throw new \RuntimeException($message);
         }
     }
 
@@ -50,7 +51,7 @@ class DaemonCommand {
         //父进程和子进程都会执行下面代码
         if (-1 === $pid) {
             //错误处理：创建子进程失败时返回-1.
-            throw new \Exception('could not fork');
+            throw new \RuntimeException('could not fork');
         } else {
             if ($pid) {
                 //父进程会得到子进程号，所以这里是父进程执行的逻辑
@@ -59,16 +60,14 @@ class DaemonCommand {
                 //子进程得到的$pid为0, 所以这里是子进程执行的逻辑
                 //设置新会话组长，脱离终端
                 if (-1 === posix_setsid()) {
-                    throw new \Exception('posix_setsid fail');
+                    throw new \RuntimeException('posix_setsid fail');
                 }
 
                 $pid = pcntl_fork();
                 if (-1 === $pid) {
-                    throw new \Exception('could not fork');
-                } else {
-                    if ($pid) {
-                        exit(0);
-                    }
+                    throw new \RuntimeException('could not fork');
+                } else if ($pid) {
+                    exit(0);
                 }
 
                 $this->setUser($this->user) or die("cannot change owner");
@@ -148,16 +147,15 @@ class DaemonCommand {
     /**
      * 开始运行
      * @param int $count
-     * @throws \Exception
+     * @throws \RuntimeException
      */
     public function start($count = 1) {
         $count = max(1, $count);
         $this->_log("daemon process is running now");
         while ($this->workers_count < $count) {
-            //pcntl_signal_dispatch();
             $pid = pcntl_fork();
             if (-1 === $pid) {
-                throw new \Exception('could not fork');
+                throw new \RuntimeException('could not fork');
             } else {
                 if ($pid) {
                     $this->workers_count++;
@@ -172,13 +170,12 @@ class DaemonCommand {
         }
 
         while (true) {
+            call_user_func_array($this->master_job['callback'], $this->master_job['params']);
             pcntl_signal_dispatch();
             $pid = pcntl_wait($status, WUNTRACED);
             pcntl_signal_dispatch();
-            if ($pid > 0) {
-                // 正常退出，清理
-                $this->masterQuit();
-            }
+            // 正常退出，清理
+            $this->masterQuit();
 
             break;
         }
@@ -202,15 +199,17 @@ class DaemonCommand {
      * 添加工作实例
      * @param $callback
      * @param array $params
-     * @throws \Exception
+     * @throws \RuntimeException
      */
-    public function addJob($callback, $params = array()) {
-
-        if (!is_callable($callback)) {
-            throw new \Exception("运行失败");
-        }
-
+    public function addJob(callable $callback, $params = array()) {
         $this->jobs[] = array(
+            'callback' => $callback,
+            'params' => $params,
+        );
+    }
+
+    public function addMasterJob(callable $callback, $params = array()) {
+        $this->master_job = array(
             'callback' => $callback,
             'params' => $params,
         );
