@@ -24,8 +24,6 @@ class WsServer implements IServer {
     protected $logger;
     protected $master_queue;
     protected $worker_queues;
-    protected $shared_memory_key;
-    protected $shared_memory_var;
 
     public function __construct($port, $ssl = array()) {
         $this->checkEnvironment();
@@ -53,8 +51,6 @@ class WsServer implements IServer {
 
         $key = ftok(__FILE__, 'm');
         $this->master_queue = msg_get_queue($key, 0666);
-        $this->shared_memory_key = ftok(__FILE__, 'k');
-        $this->shared_memory_var = ftok(__FILE__, 'v');
 
         $this->debug('Server Started : ' . date('Y-m-d H:i:s'));
         $this->debug('Listening on   : '. $local_socket);
@@ -231,16 +227,10 @@ class WsServer implements IServer {
     }
 
     public function sendAll($msg) {
-        $shm_id = shm_attach($this->shared_memory_key, strlen($msg) + 100, 0666);
-
-        if (false !== $shm_id) {
-            $sem_id = sem_get(ftok(__FILE__, 'a'));
-            sem_acquire($sem_id);
-            shm_put_var($shm_id, $this->shared_memory_var, [$msg]);
-            sem_release($sem_id);
-
-            msg_send($this->master_queue, 1, 'doSendAll');
-        }
+        msg_send($this->master_queue, 1, [
+            'callback' => 'doSendAll',
+            'params' => [$msg],
+        ]);
     }
 
     /**
@@ -675,13 +665,14 @@ class WsServer implements IServer {
         $queue = msg_get_queue($pid, 0666);
         while (true) {
             // 子进程：无阻塞接收消息
-            msg_receive($queue, 1, $msgtype, 65535, $message, true, MSG_IPC_NOWAIT);
+            $stat = msg_stat_queue($queue);
+            $num = $stat['msg_qnum'];
+            for ($i = 0; $i < $num; ++$i) {
+                msg_receive($queue, 1, $msgtype, 65535, $message, true, MSG_IPC_NOWAIT);
 
-            $shm_id = shm_attach($this->shared_memory_key);
-            if (false !== $shm_id) {
-                $params = shm_get_var($shm_id, $this->shared_memory_var);
-                call_user_func_array(array($this, $message), $params);
-                shm_remove($shm_id);
+                $callback = $message['callback'];
+                $params = $message['params'];
+                call_user_func_array(array($this, $callback), $params);
             }
 
             yield;
