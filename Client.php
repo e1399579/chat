@@ -468,6 +468,20 @@ class Client implements IClient {
             $this->response['type'] = $this->types[$this->request_type][1];//转换成他人
             $index = $this->userService[$receiver_id];
             $this->sendMessage($index);//给接收者发送消息
+        } elseif ($this->user->isOnline($receiver_id)) {
+            $info = $this->user->getUserById($receiver_id, array('key'));
+            if (empty($info['key'])) {
+                $this->response['type'] = self::MESSAGE_SELF;
+                $this->response['mess'] = '发送失败';
+                $this->sendMessage($key);
+            } else {
+                $this->response['type'] = $this->types[$this->request_type][0];//转换成本人
+                $this->sendMessage($key);//给当前客户端发送消息
+
+                $this->response['type'] = $this->types[$this->request_type][1];//转换成他人
+                $index = $info['key'];
+                $this->sendMessage($index);//给接收者发送消息
+            }
         } else {
             //用户已经离线
             $this->response['type'] = self::MESSAGE_SELF;
@@ -489,6 +503,16 @@ class Client implements IClient {
         if (isset($this->userService[$receiver_id])) {
             $index = $this->userService[$receiver_id];
             $this->sendMessage($index);
+        } elseif ($this->user->isOnline($receiver_id)) {
+            $info = $this->user->getUserById($receiver_id, array('key'));
+            if (empty($info['key'])) {
+                $this->response['type'] = self::MESSAGE_SELF;
+                $this->response['mess'] = '邀请失败';
+                $this->sendMessage($key);
+            } else {
+                $index = $info['key'];
+                $this->sendMessage($index);
+            }
         } else {
             $this->response['type'] = self::VIDEO_PERSONAL_OFFLINE;
             $this->response['mess'] = '对方已经离线...';
@@ -525,7 +549,9 @@ class Client implements IClient {
             $this->tearDown($user_id, $key);//注销用户服务
 
             $user = $this->user->getUserById($user_id, array('user_id', 'username'));
-            $this->user->logout($user_id);
+            $this->user->logout($user_id, array(
+                'key' => 0,
+            ));
             $this->response = array(
                 'type' => self::USER_QUIT,
                 'user' => $user,
@@ -576,7 +602,7 @@ class Client implements IClient {
         $this->userService[$user_id] = $key;//user_id=>socket key，通过用户ID找到服务索引
         $this->serviceUser[$key] = $user_id;//socket key=>user_id，通过服务索引找到用户ID
 
-        $this->user->login($user_id);
+        $this->user->login($user_id, compact('key'));
         $this->response = array(
             'type' => self::USER_ONLINE,
             'user' => $user,
@@ -742,19 +768,18 @@ class Client implements IClient {
 
     public function run($num) {
         if (PHP_OS == 'WINNT') {
-            $this->server->run();
+            $this->server->run(0, null);
         } else {
-            $daemon = new DaemonCommand(true, 'root', __DIR__ . '/DaemonCommand.log');
+            $daemon = new DaemonCommand(true, 'root', __DIR__ . '/fork.log');
             $daemon->daemonize();
 
-            $daemon->addJob(function () {
+            $daemon->addJob(function ($pid, $socket) {
                 $this->user = new User();
-                $this->server->run();
+                $this->server->run($pid, $socket);
             });
-            $daemon->addMasterJob(function() use ($num) {
+            $daemon->addMasterJob(function($pid_list, $socket_list) {
                 (new User())->flushOnline();
-                $this->server->initWorks($num);
-                $this->server->attachMessage();
+                $this->server->forwardMessage($pid_list, $socket_list);
             });
 
             $daemon->start($num);

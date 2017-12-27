@@ -76,9 +76,11 @@ class User {
     /**
      * 登录/添加用户
      * @param $user_id
+     * @param $info
      * @return int
      */
-    public function login($user_id) {
+    public function login($user_id, $info = array()) {
+        $this->update($user_id, $info);
         return $this->redis->sAdd($this->userSet, $user_id);
     }
 
@@ -87,7 +89,8 @@ class User {
      * @param $user_id
      * @return int
      */
-    public function logout($user_id) {
+    public function logout($user_id, $info = array()) {
+        $this->update($user_id, $info);
         return $this->redis->sRem($this->userSet, $user_id);
     }
 
@@ -97,6 +100,10 @@ class User {
      */
     public function flushOnline() {
         return $this->redis->del($this->userSet);
+    }
+
+    public function isOnline($user_id) {
+        return $this->redis->sIsMember($this->userSet, $user_id);
     }
 
     /**

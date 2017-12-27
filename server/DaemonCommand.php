@@ -152,17 +152,25 @@ class DaemonCommand {
     public function start($count = 1) {
         $count = max(1, $count);
         $this->_log("daemon process is running now");
+        $pid_list = array();
+        $socket_list = array();
         while ($this->workers_count < $count) {
+            $sockets = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
             $pid = pcntl_fork();
             if (-1 === $pid) {
                 throw new \RuntimeException('could not fork');
             } else {
                 if ($pid) {
                     $this->workers_count++;
+                    $pid_list[] = $pid;
+                    fclose($sockets[1]);
+                    $socket_list[] = $sockets[0];
                 } else {
+                    fclose($sockets[0]);
                     $this->resetOutput();
                     foreach ($this->jobs as $job) {
-                        call_user_func_array($job['callback'], $job['params']);
+                        $pid = posix_getpid();
+                        call_user_func_array($job, [$pid, $sockets[1]]);
                     }
                     exit(250);
                 }
@@ -170,7 +178,7 @@ class DaemonCommand {
         }
 
         while (true) {
-            call_user_func_array($this->master_job['callback'], $this->master_job['params']);
+            call_user_func_array($this->master_job, [$pid_list, $socket_list]);
             pcntl_signal_dispatch();
             $pid = pcntl_wait($status, WUNTRACED);
             pcntl_signal_dispatch();
@@ -198,21 +206,13 @@ class DaemonCommand {
     /**
      * 添加工作实例
      * @param $callback
-     * @param array $params
-     * @throws \RuntimeException
      */
-    public function addJob(callable $callback, $params = array()) {
-        $this->jobs[] = array(
-            'callback' => $callback,
-            'params' => $params,
-        );
+    public function addJob(callable $callback) {
+        $this->jobs[] = $callback;
     }
 
-    public function addMasterJob(callable $callback, $params = array()) {
-        $this->master_job = array(
-            'callback' => $callback,
-            'params' => $params,
-        );
+    public function addMasterJob(callable $callback) {
+        $this->master_job = $callback;
     }
 
     /**

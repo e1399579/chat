@@ -22,10 +22,10 @@ class WsServer implements IServer {
      * @var Logger
      */
     protected $logger;
-    protected $master_queue;
-    protected $worker_queues;
+    protected $slave;
+    protected $pid;
 
-    public function __construct($port, $ssl = array()) {
+    public function __construct($port, $ssl = array(), $worker_num = 4) {
         $this->checkEnvironment();
 
         $path = './logs/socket';
@@ -48,9 +48,6 @@ class WsServer implements IServer {
         $this->setSocketOption(socket_import_stream($this->master));
 
         $this->sockets[] = $this->master;
-
-        $key = ftok(__FILE__, 'm');
-        $this->master_queue = msg_get_queue($key, 0666);
 
         $this->debug('Server Started : ' . date('Y-m-d H:i:s'));
         $this->debug('Listening on   : '. $local_socket);
@@ -118,18 +115,17 @@ class WsServer implements IServer {
     /**
      * 开始运行
      */
-    public function run() {
-        $scheduler = new Scheduler();
+    public function run($pid, $socket) {
+        $this->pid = $pid;
+        if (!is_null($socket)) {
+            $this->sockets[] = $this->slave = $socket;
+        }
 
-        $scheduler->newTask($this->ioPoll());
-        $scheduler->newTask($this->waitMessage());
-
-        $scheduler->run();
+        $this->ioPoll();
     }
 
     /**
      * 监听事件
-     * @return \Generator
      */
     protected function ioPoll() {
         do {
@@ -153,6 +149,14 @@ class WsServer implements IServer {
 
                 unset($read[0]);
             }
+            if (isset($read[1]) && !is_null($this->slave)) {
+                // IPC消息
+                $arr = $this->unSerializeIPC($read[1]);
+                call_user_func_array(array($this, $arr['callback']), $arr['params']);
+
+                unset($read[1]);
+            }
+
             //遍历客户端服务
             foreach ($read as $key => $socket) {
                 $params = array();
@@ -170,7 +174,7 @@ class WsServer implements IServer {
                 if ($params['is_closed']) {
                     $this->disConnect($key);
 
-                    $this->notify('onClose', array($key));
+                    $this->notify('onClose', array($this->encodeKey($key)));
                     continue;
                 }
 
@@ -179,7 +183,7 @@ class WsServer implements IServer {
                         $this->logger->error("$key#socket ERROR:" . socket_strerror($no));
                         $this->disConnect($key);
 
-                        $this->notify('onClose', array($key));
+                        $this->notify('onClose', array($this->encodeKey($key)));
                     }
                     continue;
                 }
@@ -187,7 +191,7 @@ class WsServer implements IServer {
                 isset($msg[$this->max_log_length]) or $this->logger->info('<' . $msg);//数据太大时不写日志
                 if ($msg == 'PING') continue;//Firefox
 
-                $this->notify('onMessage', array($key, $msg));
+                $this->notify('onMessage', array($this->encodeKey($key), $msg));
 
                 unset($msg);//图片数据很大，清空临时数据，释放内存
             }
@@ -195,23 +199,48 @@ class WsServer implements IServer {
             //出错的统一通知
             foreach ($this->invalid_sockets as $key => $err) {
                 $this->logger->error("socket#{$key} ERROR:{$err}");
-                $this->notify('onError', array($key, $err));
+                $this->notify('onError', array($this->encodeKey($key), $err));
             }
 
             $this->invalid_sockets = array(); //释放内存
-
-            yield;
         } while (true);
     }
 
 
     /**
      * 发送消息
-     * @param int $index socket index
+     * @param int $key socket index
      * @param string $msg 消息
      */
-    public function send($index, $msg) {
-        if (!isset($this->sockets[$index])) return;
+    public function send($key, $msg) {
+        list($pid, $index) = $this->decodeKey($key);
+        if ($pid != $this->pid) {
+            $this->logger->info('开始转发', array(
+                'pid' => $this->pid,
+                'key' => $key,
+            ));
+            // 转发
+            $data = [
+                'callback' => 'sendToOther',
+                'params' => [$pid, $index, $msg],
+            ];
+            fwrite($this->slave, $this->serializeIPC($data));
+        } else {
+            $this->doSend($index, $msg);
+        }
+    }
+
+    protected function sendToOther($pid, $index, $msg) {
+        if ($pid == $this->pid) {
+            $this->doSend($index, $msg);
+        }
+    }
+
+    protected function doSend($index, &$msg) {
+        if (!isset($this->sockets[$index])) {
+            return;
+        }
+
         isset($msg[$this->max_log_length]) or $this->logger->info('>' . $msg);
         $socket = $this->sockets[$index];
         $msg = $this->frame($msg);
@@ -227,10 +256,11 @@ class WsServer implements IServer {
     }
 
     public function sendAll($msg) {
-        msg_send($this->master_queue, 1, [
+        $data = [
             'callback' => 'doSendAll',
             'params' => [$msg],
-        ]);
+        ];
+        fwrite($this->slave, $this->serializeIPC($data));
     }
 
     /**
@@ -240,9 +270,8 @@ class WsServer implements IServer {
     public function doSendAll($msg) {
         isset($msg[$this->max_log_length]) or $this->logger->info('*' . $msg);
         $msg = $this->frame($msg);
-        reset($this->sockets); //将数组的内部指针指向第一个单元
-        isset($this->sockets[0]) and next($this->sockets);
-        while (list($key, $socket) = each($this->sockets)) {
+        foreach ($this->sockets as $key => $socket) {
+            if ($key < 2) continue; // 排除master和slave
             if (isset($this->handshake[$key])) {
                 $len = strlen($msg);
                 $res = fwrite($socket, $msg);
@@ -286,7 +315,7 @@ class WsServer implements IServer {
             unset($buffer);
 
             if ($handshake) {
-                $this->notify('onOpen', array($key, $this->headers)); //握手成功，通知客户端连接已经建立
+                $this->notify('onOpen', array($this->encodeKey($key), $this->headers)); //握手成功，通知客户端连接已经建立
             } else {
                 $this->disConnect($key); //关闭连接
             }
@@ -641,49 +670,62 @@ class WsServer implements IServer {
         return $this->logger->info($content);
     }
 
-    public function attachMessage() {
+    public function forwardMessage($pid_list, $socket_list) {
         while (true) {
             // 主进程：阻塞接收消息
-            msg_receive($this->master_queue, 0, $msgtype, 65535, $message);
+            $read = $socket_list;
+            stream_select($read, $write, $except, null);
 
-            $this->notifyWorks($msgtype, $message);
-        }
-    }
+            foreach ($read as $item) {
+                $head = $this->getSerializeIPCHead($item);
+                $message = $head['string'] . stream_get_contents($item, $head['len']);
 
-    protected function notifyWorks($msgtype, $message) {
-        foreach ($this->worker_queues as $worker_queue) {
-            msg_send($worker_queue, $msgtype, $message);
-        }
-    }
-
-    /**
-     * 等待队列消息
-     * @return \Generator
-     */
-    protected function waitMessage() {
-        $pid = posix_getpid();
-        $queue = msg_get_queue($pid, 0666);
-        while (true) {
-            // 子进程：无阻塞接收消息
-            $stat = msg_stat_queue($queue);
-            $num = $stat['msg_qnum'];
-            for ($i = 0; $i < $num; ++$i) {
-                msg_receive($queue, 1, $msgtype, 65535, $message, true, MSG_IPC_NOWAIT);
-
-                $callback = $message['callback'];
-                $params = $message['params'];
-                call_user_func_array(array($this, $callback), $params);
+                // 通知子进程
+                foreach ($socket_list as $socket) {
+                    fwrite($socket, $message);
+                }
+                unset($message);
             }
-
-            yield;
         }
     }
 
-    public function initWorks($num) {
-        $pid = posix_getpid();
-        for ($i = 1; $i <= $num; ++ $i) {
-            $this->worker_queues[] = msg_get_queue($pid + $i, 0666);
+    protected function serializeIPC(&$data) {
+        $data = serialize($data);
+        $len = strlen($data);
+        $head = pack('J', $len);
+
+        return $head . $data;
+    }
+
+    protected function getSerializeIPCHead(&$socket) {
+        $head = fread($socket, 8);
+        if (strlen($head) < 8) {
+            return array(
+                'len' => 0,
+                'string' => '',
+            );
         }
+
+        $len = current(unpack('J', $head));
+        return array(
+            'len' => $len,
+            'string' => $head,
+        );
+    }
+
+    protected function unSerializeIPC(&$socket) {
+        $head = $this->getSerializeIPCHead($socket);
+        $len = $head['len'];
+
+        return unserialize(stream_get_contents($socket, $len));
+    }
+
+    protected function encodeKey($key) {
+        return $this->pid . ':' . $key;
+    }
+
+    protected function decodeKey($key) {
+        return explode(':', $key, 2);
     }
 }
 
