@@ -177,16 +177,20 @@ class DaemonCommand {
             }
         }
 
-        while (true) {
-            call_user_func_array($this->master_job, [$pid_list, $socket_list]);
-            pcntl_signal_dispatch();
-            $pid = pcntl_wait($status, WUNTRACED);
-            pcntl_signal_dispatch();
-            // 正常退出，清理
-            $this->masterQuit();
+        $this->addMasterJob(call_user_func_array($this->master_job, [$pid_list, $socket_list]));
+        while(count($pid_list) > 0) {
+            foreach($pid_list as $key => $pid) {
+                //$res = pcntl_waitpid($pid, $status, WUNTRACED);
+                $res = pcntl_waitpid($pid, $status, WNOHANG);
 
-            break;
+                // If the process has already exited
+                if($res == -1 || $res > 0)
+                    unset($pid_list[$key]);
+            }
+
+            sleep(5);
         }
+        $this->masterQuit();
     }
 
     /**

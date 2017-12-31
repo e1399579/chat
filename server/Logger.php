@@ -33,8 +33,15 @@ class Logger {
         $context_str = json_encode($context, JSON_UNESCAPED_UNICODE);
         $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
         array_shift($trace);
-        array_shift($trace);
-        $curr = json_encode(current($trace), JSON_UNESCAPED_UNICODE);
+        $current = current($trace);
+        $next = next($trace);
+        $record = array(
+            'file' => isset($current['file']) ? $current['file'] : null,
+            'line' => isset($current['line']) ? $current['line'] : null,
+            'class' => isset($next['class']) ? $next['class'] : null,
+            'function' => isset($next['function']) ? $next['function'] : null,
+        );
+        $curr = json_encode($record, JSON_UNESCAPED_UNICODE);
         $content = '[' . date('Y-m-d H:i:s') . '] ' . $message . ' ' . $context_str . PHP_EOL . $curr . PHP_EOL . PHP_EOL;
         return $content;
     }

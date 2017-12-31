@@ -788,10 +788,7 @@ class Client implements IClient {
 }
 
 try {
-    // nginx需要通过反向代理将开放端口8080映射到php监听端口81
-    // apache不需要代理，直接监听开放端口8080即可
-    // windows+apache cmd:php Client.php 8080
-    // linux+nginx bash:nohup php Client.php
+    // php Client.php
     $port = isset($argv[1]) ? $argv[1] + 0 : 8080;
     $ssl = array(
         'local_cert'  => '/usr/local/nginx/conf/1_chat.ridersam.cn_cert.crt',
