@@ -244,7 +244,7 @@ class Client implements IClient {
                     'timestamp' => $this->timestamp,
                 );
                 $this->sendMessage($key);//发给禁用的用户
-                $this->server->disConnect($key);//断开连接
+                $this->server->close($key);//断开连接
 
                 $this->tearDown($receiver_id, $key);//注销用户服务
 
@@ -549,9 +549,6 @@ class Client implements IClient {
             $this->tearDown($user_id, $key);//注销用户服务
 
             $user = $this->user->getUserById($user_id, array('user_id', 'username'));
-            $this->user->logout($user_id, array(
-                'key' => 0,
-            ));
             $this->response = array(
                 'type' => self::USER_QUIT,
                 'user' => $user,
@@ -588,29 +585,42 @@ class Client implements IClient {
                 'timestamp' => $this->timestamp,
             );
             $this->sendMessage($index); //给他发送通知
-            $this->server->disConnect($index);//断开连接
+            $this->server->close($index);//断开连接
             $this->tearDown($user_id, $index);//注销用户服务
+        } elseif ($this->user->isOnline($user_id)) {
+            $info = $this->user->getUserById($user_id, array('key'));
+            if (!empty($info['key'])) {
+                $index = $info['key'];
+                $this->response = array(
+                    'type' => self::USER_DOWNLINE,
+                    'mess' => '您已下线',
+                    'timestamp' => $this->timestamp,
+                );
+                $this->sendMessage($index); //给他发送通知
+                $this->server->close($index);//断开连接
+                $this->tearDown($user_id, $index);//注销用户服务
+            }
+        } else {
+            $this->response = array(
+                'type' => self::USER_LOGIN,
+                'user' => $user,
+                'timestamp' => $this->timestamp,
+            );
+            $this->sendMessage($key); //通知当前用户，已经登录
+            //绑定用户ID与SOCKET
+            $this->userService[$user_id] = $key;//user_id=>socket key，通过用户ID找到服务索引
+            $this->serviceUser[$key] = $user_id;//socket key=>user_id，通过服务索引找到用户ID
+
+            $this->user->login($user_id, compact('key'));
+            $this->response = array(
+                'type' => self::USER_ONLINE,
+                'user' => $user,
+                'timestamp' => $this->timestamp,
+            );
+            $this->sendAllMessage(); //欢迎消息
+
+            $this->flushUsers($key); //刷新在线用户列表
         }
-
-        $this->response = array(
-            'type' => self::USER_LOGIN,
-            'user' => $user,
-            'timestamp' => $this->timestamp,
-        );
-        $this->sendMessage($key); //通知当前用户，已经登录
-        //绑定用户ID与SOCKET
-        $this->userService[$user_id] = $key;//user_id=>socket key，通过用户ID找到服务索引
-        $this->serviceUser[$key] = $user_id;//socket key=>user_id，通过服务索引找到用户ID
-
-        $this->user->login($user_id, compact('key'));
-        $this->response = array(
-            'type' => self::USER_ONLINE,
-            'user' => $user,
-            'timestamp' => $this->timestamp,
-        );
-        $this->sendAllMessage(); //欢迎消息
-
-        $this->flushUsers($key); //刷新在线用户列表
     }
 
     public function register($key) {
@@ -628,7 +638,7 @@ class Client implements IClient {
             'timestamp' => $this->timestamp,
         );
         $this->sendMessage($key);
-        $this->server->disConnect($key);//断开连接
+        $this->server->close($key);//断开连接
 
         $user_id = $user['user_id'];
         $this->tearDown($user_id, $key);//注销用户服务
@@ -668,6 +678,9 @@ class Client implements IClient {
     public function tearDown($user_id, $key) {
         unset($this->userService[$user_id]);//注销服务
         unset($this->serviceUser[$key]);//注销用户
+        $this->user->logout($user_id, array(
+            'key' => '',
+        ));
     }
 
     public function base64ToFile(&$base64, $flag = 'message') {
@@ -699,7 +712,7 @@ class Client implements IClient {
      * @return mixed
      * @link http://github.com/msgpack/msgpack-php
      */
-    public function decode($str) {
+    public function decode(&$str) {
         //return json_decode($str, true);
         return msgpack_unpack($str);
     }
@@ -712,7 +725,7 @@ class Client implements IClient {
      * @return string
      * @link http://github.com/msgpack/msgpack-php
      */
-    public function encode($data) {
+    public function encode(&$data) {
         //return json_encode($data, JSON_UNESCAPED_UNICODE);
         return msgpack_pack($data);
     }

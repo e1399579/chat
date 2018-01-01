@@ -35,14 +35,17 @@ class Logger {
         array_shift($trace);
         $current = current($trace);
         $next = next($trace);
+        $pid = function_exists('posix_getpid') ? posix_getpid() : null;
         $record = array(
             'file' => isset($current['file']) ? $current['file'] : null,
             'line' => isset($current['line']) ? $current['line'] : null,
             'class' => isset($next['class']) ? $next['class'] : null,
             'function' => isset($next['function']) ? $next['function'] : null,
+            'pid' => $pid,
         );
+        $now = (new \DateTime())->format('Y-m-d H:i:s.u');
         $curr = json_encode($record, JSON_UNESCAPED_UNICODE);
-        $content = '[' . date('Y-m-d H:i:s') . '] ' . $message . ' ' . $context_str . PHP_EOL . $curr . PHP_EOL . PHP_EOL;
+        $content = '[' . $now . '] ' . $message . ' ' . $context_str . PHP_EOL . $curr . PHP_EOL . PHP_EOL;
         return $content;
     }
 

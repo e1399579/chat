@@ -18,19 +18,19 @@ interface IServer {
     public function detach(IClient $client);
 
     /**
-     * 断开连接
-     * @param $index
+     * 关闭连接
+     * @param $key
      * @return void
      */
-    public function disConnect($index);
+    public function close($key);
 
     /**
      * 发送消息
-     * @param $index
+     * @param $key
      * @param $msg
      * @return void
      */
-    public function send($index, $msg);
+    public function send($key, $msg);
 
     /**
      * 给所有完成握手的客户端发送消息

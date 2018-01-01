@@ -87,6 +87,7 @@ class User {
     /**
      * 退出/删除用户
      * @param $user_id
+     * @param $info
      * @return int
      */
     public function logout($user_id, $info = array()) {

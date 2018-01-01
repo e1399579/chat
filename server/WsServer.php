@@ -16,7 +16,6 @@ class WsServer implements IServer {
     protected $storage;//业务处理对象存储容器
     protected $timeout = 3; //读取/发送超时
     protected $max_log_length = 1024; //消息记录在日志的最大长度
-    protected $invalid_sockets = array(); //无效的socket:key => error
     protected $headers = array(); //请求头
     protected $memory_limit; //最大内存限制:byte
     protected $debug = false;
@@ -57,11 +56,6 @@ class WsServer implements IServer {
             );
         }
 
-        $this->base = new \EventBase();
-        if (!$this->base) {
-            die("Couldn't open event base\n");
-        }
-
         stream_context_set_default(array(
             'ssl' => $ssl,
             'socket' => array(
@@ -75,20 +69,7 @@ class WsServer implements IServer {
             STREAM_SERVER_BIND | STREAM_SERVER_LISTEN);
         stream_socket_enable_crypto($this->master, false);
 
-        $this->setSocketOption(socket_import_stream($this->master));
-
-        $this->listener = new \EventListener(
-            $this->base,
-            array($this, "acceptConnect"),
-            $this->ctx,
-            \EventListener::OPT_CLOSE_ON_FREE | \EventListener::OPT_REUSEABLE,
-            $this->backlog,
-            $this->master
-        );
-        if (!$this->listener) {
-            die("Couldn't create listener\n");
-        }
-        $this->listener->setErrorCallback(array($this, "acceptError"));
+        $this->setSocketOption($this->master);
 
         $this->debug('Server Started : ' . date('Y-m-d H:i:s'));
         $this->debug('Listening on   : '. $local_socket);
@@ -101,19 +82,19 @@ class WsServer implements IServer {
      * @return void
      */
     protected function setSocketOption($socket) {
-        socket_set_option($socket, SOL_SOCKET, SO_REUSEADDR, 1); //使用本地地址
-        socket_set_option($socket, SOL_SOCKET, SO_KEEPALIVE, 1); //保持连接
-        /*socket_set_option($socket, SOL_SOCKET, SO_LINGER, array(
+        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_REUSEADDR, 1); //重用本地地址
+        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_KEEPALIVE, 1); //保持连接
+        /*\EventUtil::setSocketOption($socket, SOL_SOCKET, SO_LINGER, array(
             'l_onoff' => 1,
             'l_linger' => 1,
         ));*/
-        socket_set_option($socket, SOL_SOCKET, SO_SNDBUF, PHP_INT_MAX); //发送缓冲
-        socket_set_option($socket, SOL_SOCKET, SO_RCVBUF, PHP_INT_MAX); //接收缓冲
-        socket_set_option($socket, SOL_SOCKET, SO_DONTROUTE, 0); // 报告传出消息是否绕过标准路由设施：1只能在本机IP使用，0无限制
+        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_SNDBUF, PHP_INT_MAX); //发送缓冲
+        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_RCVBUF, PHP_INT_MAX); //接收缓冲
+        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_DONTROUTE, 0); // 报告传出消息是否绕过标准路由设施：1只能在本机IP使用，0无限制
         $timeout = array('sec' => $this->timeout, 'usec' => 0);
-        socket_set_option($socket, SOL_SOCKET, SO_RCVTIMEO, $timeout); //发送超时
-        socket_set_option($socket, SOL_SOCKET, SO_SNDTIMEO, $timeout); //接收超时
-        socket_set_option($socket, SOL_SOCKET, TCP_NODELAY, 1); //取消Nagle算法
+        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_RCVTIMEO, $timeout); //发送超时
+        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_SNDTIMEO, $timeout); //接收超时
+        \EventUtil::setSocketOption($socket, SOL_SOCKET, TCP_NODELAY, 1); //取消Nagle算法
     }
 
     public function checkEnvironment() {
@@ -124,6 +105,12 @@ class WsServer implements IServer {
         if (!extension_loaded('libevent')) {
             throw new \RuntimeException("Please install libevent extension firstly");
         }
+    }
+
+    protected function setEventOption($event_buffer_event) {
+        $event_buffer_event->enable(\Event::READ);
+        $event_buffer_event->setWatermark(\Event::READ, 0, 0xffffff);
+        $event_buffer_event->setPriority(0);
     }
 
     public function acceptError($listener, $arg) {
@@ -142,7 +129,22 @@ class WsServer implements IServer {
      * @param $ctx
      */
     public function acceptConnect($listener, $fd, $address, $ctx) {
-        $event_buffer_event = \EventBufferEvent::sslSocket($this->base, $fd, $ctx, \EventBufferEvent::SSL_ACCEPTING);
+        $this->setSocketOption($fd);
+        if ($ctx) {
+            $event_buffer_event = \EventBufferEvent::sslSocket(
+                $this->base,
+                $fd,
+                $ctx,
+                \EventBufferEvent::SSL_ACCEPTING,
+                \EventBufferEvent::OPT_CLOSE_ON_FREE
+            );
+        } else {
+            $event_buffer_event = new \EventBufferEvent(
+                $this->base,
+                $fd,
+                \EventBufferEvent::OPT_CLOSE_ON_FREE
+            );
+        }
 
         if (!$event_buffer_event) {
             $this->base->exit(NULL);
@@ -153,8 +155,7 @@ class WsServer implements IServer {
         $this->event_buffer_events[$index] = $event_buffer_event;
         $arg = compact('index', 'address', 'fd');
 
-        $event_buffer_event->enable(\Event::READ);
-        $event_buffer_event->setWatermark(\Event::READ, 0, 0xffffff);
+        $this->setEventOption($event_buffer_event);
         $event_buffer_event->setCallbacks(
             array($this, "readCallback"),
             NULL,
@@ -192,11 +193,15 @@ class WsServer implements IServer {
             }
 
             if (!isset($msg[0])) {
-                if ($err = $bev->sslError()) {
-                    $this->logger->error("{$index}#socket ERROR:" . $err);
-                    $this->disConnect($index);
+                if (\EventUtil::getLastSocketErrno()) {
+                    $error = $this->getError();
+                    $this->logger->error("{$index}#socket ERROR:" . $error);
 
-                    $this->notify('onClose', array($this->encodeKey($index)));
+                    $this->disConnect($index);
+                    $this->notify('onError', array(
+                        $this->encodeKey($index),
+                        $error,
+                    ));
                 }
                 return;
             }
@@ -228,15 +233,17 @@ class WsServer implements IServer {
      * @param $arg
      */
     public function eventCallback($bev, $events, $arg) {
+        $index = $arg['index'];
         if ($events & \EventBufferEvent::ERROR) {
             // Fetch errors from the SSL error stack
             while ($err = $bev->sslError()) {
-                $this->logger->error("EventBufferEvent error:" . $err);
+                $this->logger->error("{$index}# {$err}");
             }
         }
 
         if ($events & (\EventBufferEvent::EOF | \EventBufferEvent::ERROR)) {
-            $bev->free();
+            $this->disConnect($index);
+            $this->notify('onClose', array($this->encodeKey($index)));
         }
     }
 
@@ -275,7 +282,25 @@ class WsServer implements IServer {
     public function run($pid, $socket) {
         $this->pid = $pid;
 
+        $this->base = new \EventBase();
+        if (!$this->base) {
+            die("Couldn't open event base\n");
+        }
+        $this->listener = new \EventListener(
+            $this->base,
+            array($this, "acceptConnect"),
+            $this->ctx,
+            \EventListener::OPT_CLOSE_ON_FREE | \EventListener::OPT_REUSEABLE,
+            $this->backlog,
+            $this->master
+        );
+        if (!$this->listener) {
+            die("Couldn't create listener\n");
+        }
+        $this->listener->setErrorCallback(array($this, "acceptError"));
+
         if (!is_null($socket)) {
+            $this->setSocketOption($socket);
             $index = $this->max_index++;
             $this->slave = $socket;
             $this->event_buffer_events[$index] = $event_buffer_event = new \EventBufferEvent(
@@ -283,8 +308,7 @@ class WsServer implements IServer {
                 $socket
             );
             $arg = compact('index');
-            $event_buffer_event->enable(\Event::READ);
-            $event_buffer_event->setWatermark(\Event::READ, 0, 0xffffff);
+            $this->setEventOption($event_buffer_event);
             $event_buffer_event->setCallbacks(
                 function ($bev, $arg) {
                     // IPC消息
@@ -294,7 +318,20 @@ class WsServer implements IServer {
                     call_user_func_array(array($this, $arr['callback']), $arr['params']);
                 },
                 NULL,
-                array($this, "eventCallback"),
+                function ($bev, $events, $arg) {
+                    $index = $arg['index'];
+                    if ($events & \EventBufferEvent::ERROR) {
+                        // Fetch errors from the SSL error stack
+                        while ($err = $bev->sslError()) {
+                            $this->logger->error("Sub process {$err}");
+                        }
+                    }
+
+                    if ($events & (\EventBufferEvent::EOF | \EventBufferEvent::ERROR)) {
+                        $bev->free();
+                        unset($this->event_buffer_events[$index]);
+                    }
+                },
                 $arg
             );
         }
@@ -337,14 +374,19 @@ class WsServer implements IServer {
         }
 
         isset($msg[$this->max_log_length]) or $this->logger->info('>' . $msg);
-        $socket = $this->event_buffer_events[$index];
+        $event_buffer_event = $this->event_buffer_events[$index];
         $msg = $this->frame($msg);
         $len = strlen($msg);
-        $res = $socket->write($msg);
+        $res = $event_buffer_event->write($msg);
         if (false === $res) {
-            $this->disConnect($index);
+            $error = $this->getError();
+            $this->logger->error("{$index}# write error:" . $error);
 
-            $this->invalid_sockets[$index] = 'socket_write() fail!Broken pipe';
+            $this->disConnect($index);
+            $this->notify('onError', array(
+                $this->encodeKey($index),
+                $error,
+            ));
         } else {
             $this->logger->info('!' . $len . ' bytes sent');
         }
@@ -367,18 +409,23 @@ class WsServer implements IServer {
      * @param string $msg
      */
     public function doSendAll($msg) {
-        isset($msg[$this->max_log_length]) or $this->logger->info('*' . $msg);
+        isset($msg[$this->max_log_length]) or $this->logger->info('*>' . $msg);
         $msg = $this->frame($msg);
         foreach ($this->event_buffer_events as $index => $event_buffer_event) {
             if (isset($this->handshake[$index])) {
                 $len = strlen($msg);
                 $res = $event_buffer_event->write($msg);
                 if (false === $res) {
-                    $this->disConnect($index);
+                    $error = $this->getError();
+                    $this->logger->error("{$index}# write error:" . $error);
 
-                    $this->invalid_sockets[$index] = 'socket_write() fail!Broken pipe';
+                    $this->disConnect($index);
+                    $this->notify('onError', array(
+                        $this->encodeKey($index),
+                        $error,
+                    ));
                 } else {
-                    $this->logger->info('*' . $len . ' bytes sent');
+                    $this->logger->info('*!' . $len . ' bytes sent');
                 }
             }
         }
@@ -388,19 +435,35 @@ class WsServer implements IServer {
      * 断开连接
      * @param int $index 服务下标
      */
-    public function disConnect($index) {
+    protected function disConnect($index) {
         isset($this->event_buffer_events[$index]) and ($this->event_buffer_events[$index])->free();
         $this->debug($index . ' DISCONNECTED!');
-        $this->tearDown($index);
-    }
-
-    /**
-     * 注销服务
-     * @param $index
-     */
-    protected function tearDown($index) {
         unset($this->event_buffer_events[$index]);
         unset($this->handshake[$index]);
+    }
+
+    public function close($key) {
+        list($pid, $index) = $this->decodeKey($key);
+        if ($pid != $this->pid) {
+            $this->logger->info('IPC转发', array(
+                'pid' => $this->pid,
+                'key' => $key,
+            ));
+            // 转发
+            $data = [
+                'callback' => 'closeOther',
+                'params' => [$pid, $index],
+            ];
+            fwrite($this->slave, $this->serializeIPC($data));
+        } else {
+            $this->disConnect($index);
+        }
+    }
+
+    protected function closeOther($pid, $index) {
+        if ($pid == $this->pid) {
+            $this->disConnect($index);
+        }
     }
 
     /**
@@ -720,7 +783,7 @@ class WsServer implements IServer {
      * @param resource $socket
      * @return string
      */
-    protected function getError($socket) {
+    protected function getError($socket = null) {
         return \EventUtil::getLastSocketError($socket);
     }
 
@@ -730,6 +793,10 @@ class WsServer implements IServer {
     }
 
     public function forwardMessage($pid_list, $socket_list) {
+        foreach ($socket_list as $socket) {
+            $this->setSocketOption($socket);
+        }
+
         while (true) {
             // 主进程：阻塞接收消息
             $read = $socket_list;
