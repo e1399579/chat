@@ -356,7 +356,7 @@ class WsServer implements IServer {
                 'callback' => 'sendToOther',
                 'params' => [$pid, $index, $msg],
             ];
-            fwrite($this->slave, $this->serializeIPC($data));
+            fwrite($this->slave, $this->serializeIPC($data, $pid));
         } else {
             $this->doSend($index, $msg);
         }
@@ -400,7 +400,7 @@ class WsServer implements IServer {
                 'callback' => 'doSendAll',
                 'params' => [$msg],
             ];
-            fwrite($this->slave, $this->serializeIPC($data));
+            fwrite($this->slave, $this->serializeIPC($data, 0));
         }
     }
 
@@ -454,7 +454,7 @@ class WsServer implements IServer {
                 'callback' => 'closeOther',
                 'params' => [$pid, $index],
             ];
-            fwrite($this->slave, $this->serializeIPC($data));
+            fwrite($this->slave, $this->serializeIPC($data, $pid));
         } else {
             $this->disConnect($index);
         }
@@ -793,8 +793,10 @@ class WsServer implements IServer {
     }
 
     public function forwardMessage($pid_list, $socket_list) {
-        foreach ($socket_list as $socket) {
+        $resource = array();
+        foreach ($socket_list as $key => $socket) {
             $this->setSocketOption($socket);
+            $resource[$pid_list[$key]] = $socket;
         }
 
         while (true) {
@@ -803,23 +805,30 @@ class WsServer implements IServer {
             stream_select($read, $write, $except, null);
 
             foreach ($read as $item) {
-                $head = fread($item, 8);
-                $head = $this->getSerializeIPCHead($head);
+                $protocol = fread($item, 10);
+                $pid = current(unpack('n', substr($protocol, 0, 2)));
+                $head = $this->getSerializeIPCHead(substr($protocol, 2, 8));
                 $message = $head['string'] . stream_get_contents($item, $head['len']);
 
                 // 通知子进程
-                foreach ($socket_list as $socket) {
-                    fwrite($socket, $message);
+                if (isset($resource[$pid])) {
+                    fwrite($resource[$pid], $message);
+                } else {
+                    foreach ($socket_list as $socket) {
+                        fwrite($socket, $message);
+                    }
                 }
+
                 unset($message);
             }
         }
     }
 
-    protected function serializeIPC(&$data) {
+    protected function serializeIPC(&$data, $pid) {
         $data = serialize($data);
         $len = strlen($data);
-        $head = pack('J', $len);
+        $pid_head = pack('n', $pid);
+        $head = $pid_head . pack('J', $len);
 
         return $head . $data;
     }
