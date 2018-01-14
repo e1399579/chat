@@ -164,9 +164,11 @@ class DaemonCommand {
                     $this->workers_count++;
                     $pid_list[] = $pid;
                     fclose($sockets[1]);
+                    stream_set_blocking($sockets[0], 0);
                     $socket_list[] = $sockets[0];
                 } else {
                     fclose($sockets[0]);
+                    stream_set_blocking($sockets[1], 0);
                     $this->resetOutput();
                     foreach ($this->jobs as $job) {
                         $pid = posix_getpid();

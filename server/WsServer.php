@@ -12,9 +12,9 @@ class WsServer implements IServer {
 
     protected $master;//主机
     protected $handshake = array();//服务握手标志
-    protected $backlog = -1;//最大的积压连接数
+    protected $backlog = 0;//最大的积压连接数
     protected $storage;//业务处理对象存储容器
-    protected $timeout = 3; //读取/发送超时
+    protected $timeout = 0; //读取/发送超时
     protected $max_log_length = 1024; //消息记录在日志的最大长度
     protected $headers = array(); //请求头
     protected $memory_limit; //最大内存限制:byte
@@ -109,7 +109,7 @@ class WsServer implements IServer {
 
     protected function setEventOption($event_buffer_event) {
         $event_buffer_event->enable(\Event::READ);
-        $event_buffer_event->setWatermark(\Event::READ, 0, 0xffffff);
+        $event_buffer_event->setWatermark(\Event::READ, 0, 0);
         $event_buffer_event->setPriority(0);
     }
 
@@ -300,43 +300,52 @@ class WsServer implements IServer {
         $this->listener->setErrorCallback(array($this, "acceptError"));
 
         if (!is_null($socket)) {
-            $this->setSocketOption($socket);
-            $index = $this->max_index++;
             $this->slave = $socket;
-            $this->event_buffer_events[$index] = $event_buffer_event = new \EventBufferEvent(
+            $event_buffer_event = new \EventBufferEvent(
                 $this->base,
-                $socket
+                $socket,
+                \EventBufferEvent::OPT_CLOSE_ON_FREE
             );
+
+            if (!$event_buffer_event) {
+                $this->base->exit(NULL);
+                throw new \RuntimeException('Failed creating buffer');
+            }
+
+            $index = $this->max_index++;
+            $this->event_buffer_events[$index] = $event_buffer_event;
             $arg = compact('index');
+
             $this->setEventOption($event_buffer_event);
             $event_buffer_event->setCallbacks(
-                function ($bev, $arg) {
-                    // IPC消息
-                    $arr = $this->unSerializeIPC($bev);
-                    $this->logger->info('IPC回调：' . $arr['callback']);
-
-                    call_user_func_array(array($this, $arr['callback']), $arr['params']);
-                },
+                array($this, 'slaveReadCallback'),
                 NULL,
-                function ($bev, $events, $arg) {
-                    $index = $arg['index'];
-                    if ($events & \EventBufferEvent::ERROR) {
-                        // Fetch errors from the SSL error stack
-                        while ($err = $bev->sslError()) {
-                            $this->logger->error("Sub process {$err}");
-                        }
-                    }
-
-                    if ($events & (\EventBufferEvent::EOF | \EventBufferEvent::ERROR)) {
-                        $bev->free();
-                        unset($this->event_buffer_events[$index]);
-                    }
-                },
+                array($this, 'slaveEventCallback'),
                 $arg
             );
         }
 
         $this->base->dispatch();
+    }
+
+    public function slaveReadCallback($bev, $arg) {
+        // IPC消息
+        $arr = $this->unSerializeIPC($bev);
+        $this->logger->info('IPC回调：' . $arr['callback']);
+
+        call_user_func_array(array($this, $arr['callback']), $arr['params']);
+    }
+
+    public function slaveEventCallback($bev, $events, $arg) {
+        $index = $arg['index'];
+        if ($events & \EventBufferEvent::ERROR) {
+            $this->logger->error("Sub process " . $this->getError($bev));
+        }
+
+        if ($events & (\EventBufferEvent::EOF | \EventBufferEvent::ERROR)) {
+            $bev->free();
+            unset($this->event_buffer_events[$index]);
+        }
     }
 
     /**
@@ -795,7 +804,6 @@ class WsServer implements IServer {
     public function forwardMessage($pid_list, $socket_list) {
         $resource = array();
         foreach ($socket_list as $key => $socket) {
-            $this->setSocketOption($socket);
             $resource[$pid_list[$key]] = $socket;
         }
 
@@ -816,6 +824,7 @@ class WsServer implements IServer {
                 } else {
                     foreach ($socket_list as $socket) {
                         fwrite($socket, $message);
+                        usleep(200000);
                     }
                 }
 
@@ -833,7 +842,7 @@ class WsServer implements IServer {
         return $head . $data;
     }
 
-    protected function getSerializeIPCHead(&$head) {
+    protected function getSerializeIPCHead($head) {
         if (strlen($head) < 8) {
             return array(
                 'len' => 0,
