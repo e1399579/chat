@@ -779,20 +779,32 @@ class Client implements IClient {
         return true;
     }
 
-    public function run($num) {
+    public function run($num = 1) {
         if (PHP_OS == 'WINNT') {
             $this->server->run(0, null);
         } else {
             $daemon = new DaemonCommand(true, 'root', __DIR__ . '/fork.log');
             $daemon->daemonize();
 
-            $daemon->addJob(function ($pid, $socket) {
+            /*$daemon->addJob(function ($pid, $socket) {
                 $this->user = new User();
                 $this->server->run($pid, $socket);
             });
             $daemon->addMasterJob(function($pid_list, $socket_list) {
                 (new User())->flushOnline();
                 $this->server->forwardMessage($pid_list, $socket_list);
+            });*/
+
+            $daemon->addJob(function ($pid, $socket) {
+                fclose($socket);
+                $this->user = new User();
+                $this->server->run($pid, null);
+            });
+            $daemon->addMasterJob(function($pid_list, $socket_list) {
+                foreach ($socket_list as $socket) {
+                    fclose($socket);
+                }
+                (new User())->flushOnline();
             });
 
             $daemon->start($num);
@@ -810,7 +822,7 @@ try {
     );
     $server = new WsServer($port, $ssl);
     $client = new Client($server);
-    $client->run(4);
+    $client->run();
 } catch (\Exception $e) {
     die($e);
 }

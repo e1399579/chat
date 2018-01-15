@@ -824,7 +824,6 @@ class WsServer implements IServer {
                 } else {
                     foreach ($socket_list as $socket) {
                         fwrite($socket, $message);
-                        usleep(200000);
                     }
                 }
 

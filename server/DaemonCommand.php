@@ -179,11 +179,11 @@ class DaemonCommand {
             }
         }
 
-        $this->addMasterJob(call_user_func_array($this->master_job, [$pid_list, $socket_list]));
+        call_user_func_array($this->master_job, [$pid_list, $socket_list]);
         while(count($pid_list) > 0) {
             foreach($pid_list as $key => $pid) {
-                //$res = pcntl_waitpid($pid, $status, WUNTRACED);
-                $res = pcntl_waitpid($pid, $status, WNOHANG);
+                $res = pcntl_waitpid($pid, $status, WUNTRACED);
+                //$res = pcntl_waitpid($pid, $status, WNOHANG);
 
                 // If the process has already exited
                 if($res == -1 || $res > 0)
