@@ -30,6 +30,7 @@ class WsServer implements IServer {
     protected $slave;
     protected $pid;
     protected $ctx;
+    protected $local_socket;
 
     public function __construct($port, $ssl = array()) {
         $this->checkEnvironment();
@@ -64,16 +65,7 @@ class WsServer implements IServer {
             ),
         ));
         $wrapper = empty($ssl) ? 'tcp' : 'tlsv1.2';
-        $local_socket = "{$wrapper}://0.0.0.0:{$port}";
-        $this->master = stream_socket_server($local_socket, $errno, $errstr,
-            STREAM_SERVER_BIND | STREAM_SERVER_LISTEN);
-        stream_socket_enable_crypto($this->master, false);
-
-        $this->setSocketOption($this->master);
-
-        $this->debug('Server Started : ' . date('Y-m-d H:i:s'));
-        $this->debug('Listening on   : '. $local_socket);
-        $this->debug('Master socket  : ' . $this->master);
+        $this->local_socket = "{$wrapper}://0.0.0.0:{$port}";
     }
 
     /**
@@ -281,6 +273,15 @@ class WsServer implements IServer {
      */
     public function run($pid, $socket) {
         $this->pid = $pid;
+        $this->master = stream_socket_server($this->local_socket, $errno, $errstr,
+            STREAM_SERVER_BIND | STREAM_SERVER_LISTEN);
+        stream_socket_enable_crypto($this->master, false);
+
+        $this->setSocketOption($this->master);
+
+        $this->debug('Server Started : ' . date('Y-m-d H:i:s'));
+        $this->debug('Listening on   : '. $this->local_socket);
+        $this->debug('Master socket  : ' . $this->master);
 
         $this->base = new \EventBase();
         if (!$this->base) {
