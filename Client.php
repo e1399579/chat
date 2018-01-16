@@ -761,7 +761,7 @@ class Client implements IClient {
 
             case E_USER_WARNING:
                 $content = "WARNING [$errno] $errstr";
-                $this->logger->info($content);
+                $this->logger->error($content);
                 break;
 
             case E_USER_NOTICE:
@@ -771,7 +771,7 @@ class Client implements IClient {
 
             default:
                 $content = "Unknown error type: [$errno] $errstr";
-                $this->logger->info($content);
+                $this->logger->error($content, debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS));
                 break;
         }
 

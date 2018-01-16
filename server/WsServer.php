@@ -198,7 +198,6 @@ class WsServer implements IServer {
                 return;
             }
 
-            isset($msg[$this->max_log_length]) or $this->logger->info('<' . $msg);//数据太大时不写日志
             if ($msg == 'PING') return;//Firefox
 
             $this->notify('onMessage', array($this->encodeKey($index), $msg));
@@ -332,7 +331,7 @@ class WsServer implements IServer {
     public function slaveReadCallback($bev, $arg) {
         // IPC消息
         $arr = $this->unSerializeIPC($bev);
-        $this->logger->info('IPC回调：' . $arr['callback']);
+        $this->logger->info('IPC callback:' . $arr['callback']);
 
         call_user_func_array(array($this, $arr['callback']), $arr['params']);
     }
@@ -357,7 +356,7 @@ class WsServer implements IServer {
     public function send($key, $msg) {
         list($pid, $index) = $this->decodeKey($key);
         if ($pid != $this->pid) {
-            $this->logger->info('IPC转发', array(
+            $this->logger->info('IPC forward', array(
                 'pid' => $this->pid,
                 'key' => $key,
             ));
@@ -383,13 +382,12 @@ class WsServer implements IServer {
             return;
         }
 
-        isset($msg[$this->max_log_length]) or $this->logger->info('>' . $msg);
         $event_buffer_event = $this->event_buffer_events[$index];
         $msg = $this->frame($msg);
         $len = strlen($msg);
         $res = $event_buffer_event->write($msg);
         if (false === $res) {
-            $error = $this->getError();
+            $error = $this->getError($event_buffer_event);
             $this->logger->error("{$index}# write error:" . $error);
 
             $this->disConnect($index);
@@ -419,7 +417,6 @@ class WsServer implements IServer {
      * @param string $msg
      */
     public function doSendAll($msg) {
-        isset($msg[$this->max_log_length]) or $this->logger->info('*>' . $msg);
         $msg = $this->frame($msg);
         foreach ($this->event_buffer_events as $index => $event_buffer_event) {
             if (isset($this->handshake[$index])) {
@@ -455,7 +452,7 @@ class WsServer implements IServer {
     public function close($key) {
         list($pid, $index) = $this->decodeKey($key);
         if ($pid != $this->pid) {
-            $this->logger->info('IPC转发', array(
+            $this->logger->info('IPC forward', array(
                 'pid' => $this->pid,
                 'key' => $key,
             ));

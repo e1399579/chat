@@ -82,8 +82,8 @@ class DaemonCommand {
 
     public function resetOutput() {
         //关闭打开的文件描述符
-        fclose(STDOUT);
-        fclose(STDERR);
+        @fclose(STDOUT);
+        @fclose(STDERR);
 
         global $STDOUT, $STDERR;
         chmod($this->output, 0622);
