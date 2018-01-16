@@ -779,7 +779,7 @@ class Client implements IClient {
         return true;
     }
 
-    public function run($num = 4) {
+    public function run($num = 1) {
         if (PHP_OS == 'WINNT') {
             $this->server->run(0, null);
         } else {
@@ -822,7 +822,7 @@ try {
     );
     $server = new WsServer($port, $ssl);
     $client = new Client($server);
-    $client->run();
+    $client->run(4);
 } catch (\Exception $e) {
     die($e);
 }
