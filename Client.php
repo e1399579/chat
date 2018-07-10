@@ -105,6 +105,7 @@ class Client implements IClient {
     public function __construct(IServer $server) {
         $this->server = $server;
         $this->server->attach($this);
+        $this->user = new User();
 
         $path = './logs/client';
         $this->logger = Logger::getInstance($path);
@@ -780,35 +781,7 @@ class Client implements IClient {
     }
 
     public function run($num = 1) {
-        if (PHP_OS == 'WINNT') {
-            $this->server->run(0, null);
-        } else {
-            $daemon = new DaemonCommand(true, 'root', __DIR__ . '/fork.log');
-            $daemon->daemonize();
-
-            $daemon->addJob(function ($pid, $socket) {
-                $this->user = new User();
-                $this->server->run($pid, $socket);
-            });
-            $daemon->addMasterJob(function($pid_list, $socket_list) {
-                (new User())->flushOnline();
-                $this->server->forwardMessage($pid_list, $socket_list);
-            });
-
-            /*$daemon->addJob(function ($pid, $socket) {
-                fclose($socket);
-                $this->user = new User();
-                $this->server->run($pid, null);
-            });
-            $daemon->addMasterJob(function($pid_list, $socket_list) {
-                foreach ($socket_list as $socket) {
-                    fclose($socket);
-                }
-                (new User())->flushOnline();
-            });*/
-
-            $daemon->start($num);
-        }
+        $this->server->run($num);
     }
 }
 

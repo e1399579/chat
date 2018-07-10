@@ -41,11 +41,10 @@ interface IServer {
 
     /**
      * 开始运行
-     * @param int $pid
-     * @param resource|null $socket
+     * @param int $num
      * @return void
      */
-    public function run($pid, $socket);
+    public function run($num);
 
     /**
      * 转发消息

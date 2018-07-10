@@ -27,10 +27,19 @@ class WsServer implements IServer {
      * @var Logger
      */
     protected $logger;
+    /**
+     * @var \EventBufferEvent
+     */
     protected $slave;
+    protected $slave_socket;
     protected $pid;
     protected $ctx;
     protected $local_socket;
+    /**
+     * @var \EventBufferEvent[]
+     */
+    protected $channels = [];
+    protected $sockets;
 
     public function __construct($port, $ssl = array()) {
         $this->checkEnvironment();
@@ -94,8 +103,8 @@ class WsServer implements IServer {
             throw new \RuntimeException('Only run in command line');
         }
 
-        if (!extension_loaded('libevent')) {
-            throw new \RuntimeException("Please install libevent extension firstly");
+        if (!extension_loaded('event')) {
+            throw new \RuntimeException("Please install event extension firstly");
         }
     }
 
@@ -180,7 +189,12 @@ class WsServer implements IServer {
             if ($params['is_closed']) {
                 $this->disConnect($index);
 
-                $this->notify('onClose', array($this->encodeKey($index)));
+                //$this->notify('onClose', array($this->encodeKey($index)));
+                $data = [
+                    'callback' => 'onClose',
+                    'params' => [$index],
+                ];
+                $this->sendToChannel($index, $data);
                 return;
             }
 
@@ -190,31 +204,54 @@ class WsServer implements IServer {
                     $this->logger->error("{$index}#socket ERROR:" . $error);
 
                     $this->disConnect($index);
-                    $this->notify('onError', array(
+                    /*$this->notify('onError', array(
                         $this->encodeKey($index),
                         $error,
-                    ));
+                    ));*/
+                    $data = [
+                        'callback' => 'onError',
+                        'params' => [$index, $msg],
+                    ];
+                    $this->sendToChannel($index, $data);
                 }
                 return;
             }
 
             if ($msg == 'PING') return;//Firefox
 
-            $this->notify('onMessage', array($this->encodeKey($index), $msg));
+            //$this->notify('onMessage', array($this->encodeKey($index), $msg));
+            // 发给子进程处理
+            $data = [
+                'callback' => 'onMessage',
+                'params' => [$index, $msg],
+            ];
+            $this->sendToChannel($index, $data);
 
             unset($msg);//图片数据很大，清空临时数据，释放内存
         } else {
-            $buffer = $bev->read(2048);
+            $buffer = $bev->read($bev->input->length);
             $this->headers['REMOTE_ADDR'] = $arg['address'][0];
             $handshake = $this->doHandShake($bev, $buffer, $index);
             if ($handshake) {
-                $this->notify('onOpen', array($this->encodeKey($index), $this->headers)); //握手成功，通知客户端连接已经建立
+                //$this->notify('onOpen', array($this->encodeKey($index), $this->headers)); //握手成功，通知客户端连接已经建立
+                $data = [
+                    'callback' => 'onOpen',
+                    'params' => [$index, $this->headers],
+                ];
+                $this->sendToChannel($index, $data);
             } else {
                 $this->disConnect($index); //关闭连接
             }
 
             $this->headers = array();
         }
+    }
+
+    protected function sendToChannel($index, &$data) {
+        $num = count($this->channels);
+        $channel_index = $index % $num;
+        $channel = $this->channels[$channel_index];
+        $ret = $channel->write($this->serializeIPC($data));
     }
 
     /**
@@ -234,7 +271,12 @@ class WsServer implements IServer {
 
         if ($events & (\EventBufferEvent::EOF | \EventBufferEvent::ERROR)) {
             $this->disConnect($index);
-            $this->notify('onClose', array($this->encodeKey($index)));
+            //$this->notify('onClose', array($this->encodeKey($index)));
+            $data = [
+                'callback' => 'onClose',
+                'params' => [$index],
+            ];
+            $this->sendToChannel($index, $data);
         }
     }
 
@@ -267,11 +309,60 @@ class WsServer implements IServer {
 
     /**
      * 开始运行
-     * @param int $pid
-     * @param resource $socket
+     * @param int $num
      */
-    public function run($pid, $socket) {
-        $this->pid = $pid;
+    public function run($num) {
+        $this->base = new \EventBase();
+        if (!$this->base) {
+            die("Couldn't open event base\n");
+        }
+        for ($i = 0;$i < $num;++$i) {
+            $sockets = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+            $pid = pcntl_fork();
+            if (-1 === $pid) {
+                throw new \RuntimeException('could not fork');
+            }
+            if ($pid) {
+                fclose($sockets[1]);
+                $this->sockets[] = $sockets[0];
+                $this->channels[] = $event_buffer_event = new \EventBufferEvent(
+                    $this->base,
+                    $sockets[0],
+                    \EventBufferEvent::OPT_CLOSE_ON_FREE
+                );
+            } else {
+                // 子进程：接收主线程消息
+                fclose($sockets[0]);
+                $this->slave_socket = $sockets[1];
+
+                $this->base = new \EventBase();
+                $this->slave = $event_buffer_event = new \EventBufferEvent(
+                    $this->base,
+                    $this->slave_socket,
+                    \EventBufferEvent::OPT_CLOSE_ON_FREE
+                );
+
+                if (!$event_buffer_event) {
+                    $this->base->exit(NULL);
+                    throw new \RuntimeException('Failed creating buffer');
+                }
+                $this->setEventOption($event_buffer_event);
+                $event_buffer_event->setCallbacks(
+                    function ($bev) {
+                        $data = $bev->read($bev->input->length);
+                        $arr = $this->unSerializeIPC($data);
+                        $this->logger->info('slave callback:' . $arr['callback']);
+
+                        $this->notify($arr['callback'], $arr['params']);
+                    },
+                    NULL,
+                    array($this, 'channelEventCallback')
+                );
+                $this->base->dispatch();
+                die();
+            }
+        }
+
         $this->master = stream_socket_server($this->local_socket, $errno, $errstr,
             STREAM_SERVER_BIND | STREAM_SERVER_LISTEN);
         stream_socket_enable_crypto($this->master, false);
@@ -282,10 +373,7 @@ class WsServer implements IServer {
         $this->debug('Listening on   : '. $this->local_socket);
         $this->debug('Master socket  : ' . $this->master);
 
-        $this->base = new \EventBase();
-        if (!$this->base) {
-            die("Couldn't open event base\n");
-        }
+
         $this->listener = new \EventListener(
             $this->base,
             array($this, "acceptConnect"),
@@ -299,28 +387,18 @@ class WsServer implements IServer {
         }
         $this->listener->setErrorCallback(array($this, "acceptError"));
 
-        if (!is_null($socket)) {
-            $this->slave = $socket;
-            $event_buffer_event = new \EventBufferEvent(
-                $this->base,
-                $socket,
-                \EventBufferEvent::OPT_CLOSE_ON_FREE
-            );
-
+        foreach ($this->channels as $index => $event_buffer_event) {
             if (!$event_buffer_event) {
                 $this->base->exit(NULL);
                 throw new \RuntimeException('Failed creating buffer');
             }
 
-            $index = $this->max_index++;
-            $this->event_buffer_events[$index] = $event_buffer_event;
             $arg = compact('index');
-
             $this->setEventOption($event_buffer_event);
             $event_buffer_event->setCallbacks(
-                array($this, 'slaveReadCallback'),
+                array($this, 'channelReadCallback'),
                 NULL,
-                array($this, 'slaveEventCallback'),
+                array($this, 'channelEventCallback'),
                 $arg
             );
         }
@@ -328,15 +406,16 @@ class WsServer implements IServer {
         $this->base->dispatch();
     }
 
-    public function slaveReadCallback($bev, $arg) {
+    public function channelReadCallback($bev, $arg) {
         // IPC消息
-        $arr = $this->unSerializeIPC($bev);
-        $this->logger->info('IPC callback:' . $arr['callback']);
+        $data = $bev->read($bev->input->length);
+        $arr = $this->unSerializeIPC($data);
+        $this->logger->info('master callback:' . $arr['callback']);
 
         call_user_func_array(array($this, $arr['callback']), $arr['params']);
     }
 
-    public function slaveEventCallback($bev, $events, $arg) {
+    public function channelEventCallback($bev, $events, $arg) {
         $index = $arg['index'];
         if ($events & \EventBufferEvent::ERROR) {
             $this->logger->error("Sub process " . $this->getError($bev));
@@ -344,7 +423,7 @@ class WsServer implements IServer {
 
         if ($events & (\EventBufferEvent::EOF | \EventBufferEvent::ERROR)) {
             $bev->free();
-            unset($this->event_buffer_events[$index]);
+            unset($this->channels[$index]);
         }
     }
 
@@ -354,7 +433,7 @@ class WsServer implements IServer {
      * @param string $msg 消息
      */
     public function send($key, $msg) {
-        list($pid, $index) = $this->decodeKey($key);
+        /*list($pid, $index) = $this->decodeKey($key);
         if ($pid != $this->pid) {
             $this->logger->info('IPC forward', array(
                 'pid' => $this->pid,
@@ -368,7 +447,13 @@ class WsServer implements IServer {
             fwrite($this->slave, $this->serializeIPC($data, $pid));
         } else {
             $this->doSend($index, $msg);
-        }
+        }*/
+        // 发给主进程
+        $data = [
+            'callback' => 'doSend',
+            'params' => [$key, $msg],
+        ];
+        $this->slave->write($this->serializeIPC($data));
     }
 
     protected function sendToOther($pid, $index, $msg) {
@@ -377,7 +462,7 @@ class WsServer implements IServer {
         }
     }
 
-    protected function doSend($index, &$msg) {
+    protected function doSend($index, $msg) {
         if (!isset($this->event_buffer_events[$index])) {
             return;
         }
@@ -391,17 +476,22 @@ class WsServer implements IServer {
             $this->logger->error("{$index}# write error:" . $error);
 
             $this->disConnect($index);
-            $this->notify('onError', array(
+            /*$this->notify('onError', array(
                 $this->encodeKey($index),
                 $error,
-            ));
+            ));*/
+            $data = [
+                'callback' => 'onError',
+                'params' => [$index, $error],
+            ];
+            $this->sendToChannel($index, $data);
         } else {
             $this->logger->info('!' . $len . ' bytes sent');
         }
     }
 
     public function sendAll($msg) {
-        if (is_null($this->slave)) {
+        /*if (is_null($this->slave)) {
             $this->doSendAll($msg);
         } else {
             $data = [
@@ -409,7 +499,13 @@ class WsServer implements IServer {
                 'params' => [$msg],
             ];
             fwrite($this->slave, $this->serializeIPC($data, 0));
-        }
+        }*/
+        // 发给主进程
+        $data = [
+            'callback' => 'doSendAll',
+            'params' => [$msg],
+        ];
+        $this->slave->write($this->serializeIPC($data));
     }
 
     /**
@@ -427,10 +523,15 @@ class WsServer implements IServer {
                     $this->logger->error("{$index}# write error:" . $error);
 
                     $this->disConnect($index);
-                    $this->notify('onError', array(
+                    /*$this->notify('onError', array(
                         $this->encodeKey($index),
                         $error,
-                    ));
+                    ));*/
+                    $data = [
+                        'callback' => 'onError',
+                        'params' => [$index, $error],
+                    ];
+                    $this->sendToChannel($index, $data);
                 } else {
                     $this->logger->info('*!' . $len . ' bytes sent');
                 }
@@ -450,7 +551,7 @@ class WsServer implements IServer {
     }
 
     public function close($key) {
-        list($pid, $index) = $this->decodeKey($key);
+        /*list($pid, $index) = $this->decodeKey($key);
         if ($pid != $this->pid) {
             $this->logger->info('IPC forward', array(
                 'pid' => $this->pid,
@@ -464,7 +565,12 @@ class WsServer implements IServer {
             fwrite($this->slave, $this->serializeIPC($data, $pid));
         } else {
             $this->disConnect($index);
-        }
+        }*/
+        $data = [
+            'callback' => 'disConnect',
+            'params' => [$key],
+        ];
+        $this->slave->write($this->serializeIPC($data));
     }
 
     protected function closeOther($pid, $index) {
@@ -830,13 +936,14 @@ class WsServer implements IServer {
         }
     }
 
-    protected function serializeIPC(&$data, $pid) {
-        $data = serialize($data);
+    protected function serializeIPC(&$data) {
+        /*$data = serialize($data);
         $len = strlen($data);
         $pid_head = pack('n', $pid);
         $head = $pid_head . pack('J', $len);
 
-        return $head . $data;
+        return $head . $data;*/
+        return serialize($data);
     }
 
     protected function getSerializeIPCHead($head) {
@@ -854,20 +961,22 @@ class WsServer implements IServer {
         );
     }
 
-    protected function unSerializeIPC(&$event_buffer_event) {
-        $head = $event_buffer_event->read(8);
+    protected function unSerializeIPC(&$data) {
+        /*$head = $event_buffer_event->read(8);
         $head = $this->getSerializeIPCHead($head);
-        $len = $head['len'];
+        $len = $head['len'];*/
 
-        return unserialize($event_buffer_event->read($len));
+        return unserialize($data);
     }
 
     protected function encodeKey($key) {
-        return $this->pid . ':' . $key;
+        //return $this->pid . ':' . $key;
+        return pack('n', $key);
     }
 
     protected function decodeKey($key) {
-        return explode(':', $key, 2);
+        //return explode(':', $key, 2);
+        return current(unpack('n', $key));
     }
 }
 
