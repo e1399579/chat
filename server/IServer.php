@@ -42,15 +42,8 @@ interface IServer {
     /**
      * 开始运行
      * @param int $num
+     * @param callable $callback
      * @return void
      */
-    public function run($num);
-
-    /**
-     * 转发消息
-     * @param $pid_list
-     * @param $socket_list
-     * @return mixed
-     */
-    public function forwardMessage($pid_list, $socket_list);
+    public function run($num, callable $callback = null);
 }

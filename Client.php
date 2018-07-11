@@ -781,7 +781,9 @@ class Client implements IClient {
     }
 
     public function run($num = 1) {
-        $this->server->run($num);
+        $this->server->run($num, function () {
+            $this->user->connect();
+        });
     }
 }
 
@@ -795,7 +797,7 @@ try {
     );
     $server = new WsServer($port, $ssl);
     $client = new Client($server);
-    $client->run(4);
+    $client->run(10);
 } catch (\Exception $e) {
     die($e);
 }

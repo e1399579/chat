@@ -8,6 +8,9 @@ class User {
 
     public function __construct() {
         $this->redis = new \Redis();
+    }
+
+    public function connect() {
         $res = $this->redis->connect('127.0.0.1', 6379);
         if (false == $res)
             throw new \RuntimeException('连接REDIS失败！');
