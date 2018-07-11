@@ -31,7 +31,6 @@ class WsServer implements IServer {
      * @var \EventBufferEvent
      */
     protected $slave;
-    protected $pid;
     protected $ctx;
     protected $local_socket;
     /**
@@ -450,12 +449,6 @@ class WsServer implements IServer {
         $this->slave->write($this->serializeIPC($data));
     }
 
-    protected function sendToOther($pid, $index, $msg) {
-        if ($pid == $this->pid) {
-            $this->doSend($index, $msg);
-        }
-    }
-
     protected function doSend($index, $msg) {
         if (!isset($this->event_buffer_events[$index])) {
             return;
@@ -541,12 +534,6 @@ class WsServer implements IServer {
             'params' => [$key],
         ];
         $this->slave->write($this->serializeIPC($data));
-    }
-
-    protected function closeOther($pid, $index) {
-        if ($pid == $this->pid) {
-            $this->disConnect($index);
-        }
     }
 
     /**
