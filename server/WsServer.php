@@ -31,6 +31,7 @@ class WsServer implements IServer {
      * @var \EventBufferEvent
      */
     protected $slave;
+    protected $slave_socket;
     protected $ctx;
     protected $local_socket;
     /**
@@ -305,12 +306,37 @@ class WsServer implements IServer {
         }
     }
 
+    public function daemonize() {
+        $pid = pcntl_fork();
+        if (-1 === $pid) {
+            throw new \RuntimeException('could not fork');
+        }
+
+        if ($pid) {
+            exit(0);
+        }
+
+        //设置新会话组长，脱离终端
+        if (-1 === posix_setsid()) {
+            throw new \RuntimeException('posix_setsid fail');
+        }
+
+        $pid = pcntl_fork();
+        if (-1 === $pid) {
+            throw new \RuntimeException('could not fork');
+        } else if ($pid) {
+            exit(0);
+        }
+    }
+
     /**
      * 开始运行
      * @param int $num
      * @param callable $callback
      */
     public function run($num, callable $callback = null) {
+        $this->daemonize();
+
         $this->base = new \EventBase();
         if (!$this->base) {
             die("Couldn't open event base\n");
@@ -327,7 +353,6 @@ class WsServer implements IServer {
                 // 主进程：管理全部通道，传递消息，并接收子进程消息（调用）
                 fclose($sockets[1]);
                 $this->sockets[] = $sockets[0];
-                $this->setSocketOption($sockets[0]);
 
                 $event_buffer_event = new \EventBufferEvent(
                     $this->base,
@@ -355,8 +380,7 @@ class WsServer implements IServer {
 
                 // 子进程：接收主进程程消息，处理业务
                 fclose($sockets[0]);
-                $this->sockets[] = $sockets[1];
-                $this->setSocketOption($sockets[1]);
+                $this->slave_socket = $sockets[1];
 
                 $this->base = new \EventBase();
                 $event_buffer_event = new \EventBufferEvent(
@@ -450,7 +474,9 @@ class WsServer implements IServer {
             'callback' => 'doSend',
             'params' => [$key, $msg],
         ];
-        $this->slave->write($this->serializeIPC($data));
+        //$this->slave->write($this->serializeIPC($data));
+        fwrite($this->slave_socket, $this->serializeIPC($data));
+        usleep(100);
     }
 
     protected function doSend($index, $msg) {

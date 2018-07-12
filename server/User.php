@@ -7,10 +7,11 @@ class User {
     public $fileStore = 'file:md5'; //文件库:md5 => path
 
     public function __construct() {
-        $this->redis = new \Redis();
+
     }
 
     public function connect() {
+        $this->redis = new \Redis();
         $res = $this->redis->connect('127.0.0.1', 6379);
         if (false == $res)
             throw new \RuntimeException('连接REDIS失败！');
