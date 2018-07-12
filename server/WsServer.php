@@ -87,12 +87,12 @@ class WsServer implements IServer {
             'l_onoff' => 1,
             'l_linger' => 1,
         ));*/
-        //\EventUtil::setSocketOption($socket, SOL_SOCKET, SO_SNDBUF, PHP_INT_MAX); //发送缓冲
-        //\EventUtil::setSocketOption($socket, SOL_SOCKET, SO_RCVBUF, PHP_INT_MAX); //接收缓冲
+        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_SNDBUF, PHP_INT_MAX); //发送缓冲
+        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_RCVBUF, PHP_INT_MAX); //接收缓冲
         \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_DONTROUTE, 0); // 报告传出消息是否绕过标准路由设施：1只能在本机IP使用，0无限制
         $timeout = array('sec' => $this->timeout, 'usec' => 0);
-        //\EventUtil::setSocketOption($socket, SOL_SOCKET, SO_RCVTIMEO, $timeout); //发送超时
-        //\EventUtil::setSocketOption($socket, SOL_SOCKET, SO_SNDTIMEO, $timeout); //接收超时
+        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_RCVTIMEO, $timeout); //发送超时
+        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_SNDTIMEO, $timeout); //接收超时
         \EventUtil::setSocketOption($socket, SOL_SOCKET, TCP_NODELAY, 1); //取消Nagle算法
     }
 
@@ -107,8 +107,8 @@ class WsServer implements IServer {
     }
 
     protected function setEventOption($event_buffer_event) {
-        $event_buffer_event->enable(\Event::READ);
-        $event_buffer_event->setWatermark(\Event::READ, 0, 0);
+        $event_buffer_event->enable(\Event::READ | \Event::WRITE);
+        $event_buffer_event->setWatermark(\Event::READ | \Event::WRITE, 0, 0);
     }
 
     public function acceptError($listener, $arg) {
@@ -134,13 +134,13 @@ class WsServer implements IServer {
                 $fd,
                 $ctx,
                 \EventBufferEvent::SSL_ACCEPTING,
-                \EventBufferEvent::OPT_CLOSE_ON_FREE
+                \EventBufferEvent::OPT_CLOSE_ON_FREE | \EventBufferEvent::OPT_DEFER_CALLBACKS
             );
         } else {
             $event_buffer_event = new \EventBufferEvent(
                 $this->base,
                 $fd,
-                \EventBufferEvent::OPT_CLOSE_ON_FREE
+                \EventBufferEvent::OPT_CLOSE_ON_FREE | \EventBufferEvent::OPT_DEFER_CALLBACKS
             );
         }
 
@@ -327,11 +327,12 @@ class WsServer implements IServer {
                 // 主进程：管理全部通道，传递消息，并接收子进程消息（调用）
                 fclose($sockets[1]);
                 $this->sockets[] = $sockets[0];
+                $this->setSocketOption($sockets[0]);
 
                 $event_buffer_event = new \EventBufferEvent(
                     $this->base,
                     $sockets[0],
-                    \EventBufferEvent::OPT_CLOSE_ON_FREE
+                    \EventBufferEvent::OPT_CLOSE_ON_FREE | \EventBufferEvent::OPT_DEFER_CALLBACKS
                 );
 
                 if (!$event_buffer_event) {
@@ -355,12 +356,13 @@ class WsServer implements IServer {
                 // 子进程：接收主进程程消息，处理业务
                 fclose($sockets[0]);
                 $this->sockets[] = $sockets[1];
+                $this->setSocketOption($sockets[1]);
 
                 $this->base = new \EventBase();
                 $event_buffer_event = new \EventBufferEvent(
                     $this->base,
                     $sockets[1],
-                    \EventBufferEvent::OPT_CLOSE_ON_FREE
+                    \EventBufferEvent::OPT_CLOSE_ON_FREE | \EventBufferEvent::OPT_DEFER_CALLBACKS
                 );
 
                 if (!$event_buffer_event) {
@@ -370,12 +372,7 @@ class WsServer implements IServer {
 
                 $this->setEventOption($event_buffer_event);
                 $event_buffer_event->setCallbacks(
-                    function ($bev, $arg) {
-                        $data = $bev->read($bev->input->length);
-                        $arr = $this->unSerializeIPC($data);
-                        $this->logger->info('slave callback:' . $arr['callback']);
-                        $this->notify($arr['callback'], $arr['params']);
-                    },
+                    array($this, 'slaveReadCallback'),
                     NULL,
                     array($this, 'channelEventCallback'),
                     $arg
@@ -433,6 +430,13 @@ class WsServer implements IServer {
             $bev->free();
             unset($this->channels[$index]);
         }
+    }
+
+    public function slaveReadCallback($bev, $arg) {
+        $data = $bev->read($bev->input->length);
+        $arr = $this->unSerializeIPC($data);
+        $this->logger->info('slave callback:' . $arr['callback']);
+        $this->notify($arr['callback'], $arr['params']);
     }
 
     /**

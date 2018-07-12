@@ -781,9 +781,9 @@ class Client implements IClient {
     }
 
     public function run($num = 1) {
-        $this->server->run($num, function () {
-            $this->user->connect();
-        });
+        $this->user->connect();
+        $this->user->flushOnline();
+        $this->server->run($num);
     }
 }
 
