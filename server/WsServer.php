@@ -437,7 +437,11 @@ class WsServer implements IServer {
 
     public function channelReadCallback($bev, $arg) {
         // IPC消息
-        $data = $bev->read($bev->input->length);
+        $data = '';
+        while ($len = $bev->input->length) {
+            $data .= $bev->read($len);
+        }
+
         $arr = $this->unSerializeIPC($data);
         $this->logger->info('master callback:' . $arr['callback']);
 
