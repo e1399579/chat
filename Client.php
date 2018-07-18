@@ -799,7 +799,7 @@ try {
     );
     $server = new WsServer($port, $ssl);
     $client = new Client($server);
-    $client->run(10);
+    $client->run(4);
 } catch (\Exception $e) {
     die($e);
 }
