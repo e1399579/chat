@@ -39,6 +39,7 @@ class WsServer implements IServer {
      */
     protected $channels = [];
     protected $sockets = [];
+    protected $context;
 
     public function __construct($port, $ssl = array()) {
         $this->checkEnvironment();
@@ -55,7 +56,7 @@ class WsServer implements IServer {
             }
 
             $this->ctx = new \EventSslContext(
-                \EventSslContext::TLS_SERVER_METHOD ,
+                \EventSslContext::TLS_SERVER_METHOD,
                 array (
                     \EventSslContext::OPT_LOCAL_CERT  => $ssl['local_cert'],
                     \EventSslContext::OPT_LOCAL_PK    => $ssl['local_pk'],
@@ -65,7 +66,7 @@ class WsServer implements IServer {
             );
         }
 
-        stream_context_set_default(array(
+        $this->context = stream_context_create(array(
             'ssl' => $ssl,
             'socket' => array(
                 'so_reuseport' => 1,
@@ -134,12 +135,14 @@ class WsServer implements IServer {
                 $this->base,
                 $fd,
                 $ctx,
-                \EventBufferEvent::SSL_ACCEPTING
+                \EventBufferEvent::SSL_ACCEPTING,
+                \EventBufferEvent::OPT_DEFER_CALLBACKS
             );
         } else {
             $event_buffer_event = new \EventBufferEvent(
                 $this->base,
-                $fd
+                $fd,
+                \EventBufferEvent::OPT_DEFER_CALLBACKS
             );
         }
 
@@ -443,7 +446,7 @@ class WsServer implements IServer {
         }
 
         $this->master = stream_socket_server($this->local_socket, $errno, $errstr,
-            STREAM_SERVER_BIND | STREAM_SERVER_LISTEN);
+            STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $this->context);
         stream_socket_enable_crypto($this->master, false);
 
         $this->setSocketOption($this->master);
