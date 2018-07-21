@@ -179,6 +179,10 @@ class WsServer implements IServer {
                 return;
             }
 
+            if ($params['is_pending']) {
+                return;
+            }
+
             if ($params['is_ping']) {
                 $protocol = chr(0b10001010);//0x0A pong帧--1010
                 $bev->write($protocol);
@@ -265,24 +269,24 @@ class WsServer implements IServer {
     protected function receiveFromChannel($bev) {
         $data_list = [];
         // 可能写入的数据有多条，但是都在一个缓存里面
-        while ($bev->input->length) {
-            $protocol = $bev->read(8);
-            $len = current(unpack('J', $protocol));
+        $input = $bev->input;
+        while ($input->length) {
+            $len = current(unpack('J', $input->substr(0, 8)));
+
             if (($len > $this->memory_limit) || ($len < 0)) {
-                $bev->input->drain($bev->input->length);
+                $input->drain($input->length);
                 $this->logger->info('Receive length error:' . $len);
                 break;
             }
-            $str = '';
-            $remain_len = $len;
-            $i = 0;
-            do {
-                $str .= $bev->read($remain_len);
-                $remain_len = $len - strlen($str);
-                usleep(5);
-                ++$i;
-            } while(($remain_len > 0) && ($i < 10));
-            $data_list[] = unserialize($str);
+
+            if ($len > $input->length) {
+                // 下次回调再作处理
+                break;
+            }
+
+            $input->drain(8);
+
+            $data_list[] = unserialize($bev->read($len));
         }
 
         return $data_list;
@@ -389,6 +393,9 @@ class WsServer implements IServer {
                 fclose($sockets[1]);
                 $this->sockets[] = $sockets[0];
 
+                //socket_set_option($sockets[0], SOL_SOCKET, SO_SNDBUF, PHP_INT_MAX); //发送缓冲
+                //socket_set_option($sockets[0], SOL_SOCKET, SO_RCVBUF, PHP_INT_MAX); //接收缓冲
+
                 $event_buffer_event = new \EventBufferEvent(
                     $this->base,
                     $sockets[0],
@@ -417,6 +424,9 @@ class WsServer implements IServer {
                 // 子进程：接收主进程程消息，处理业务
                 fclose($sockets[0]);
                 $this->slave_socket = $sockets[1];
+
+                //socket_set_option($sockets[1], SOL_SOCKET, SO_SNDBUF, PHP_INT_MAX); //发送缓冲
+                //socket_set_option($sockets[1], SOL_SOCKET, SO_RCVBUF, PHP_INT_MAX); //接收缓冲
 
                 $this->base = new \EventBase();
                 $event_buffer_event = new \EventBufferEvent(
@@ -747,12 +757,16 @@ class WsServer implements IServer {
             'is_closed' => false,
             'is_ping' => false,
             'is_exception' => false,
+            'is_pending' => false,
         );
         $is_first = true;
 //        echo 'IN:', PHP_EOL;
 
+        $frame_struct = [];
+        $cursor = 0;
+        $input = $event_buffer_event->input;
         do {
-            $buffer = $event_buffer_event->read(2);
+            $buffer = $input->substr($cursor, 2);
             $len = strlen($buffer);
             if ($is_first) {
                 if (!isset($buffer[0])) {
@@ -773,9 +787,11 @@ class WsServer implements IServer {
                 }
             }
             if ($len < 2) {
-                $params['is_exception'] = true;
+                $params['is_pending'] = true;
                 break;
             }
+
+            $cursor += 2;
 
             $is_first = false;
 
@@ -809,7 +825,7 @@ class WsServer implements IServer {
             switch ($payload_len) {
                 case 126: //<2^16 65536
                     $read_length = 6; // 16bit+4byte=2+4
-                    $buffer = $event_buffer_event->read($read_length);
+                    $buffer = $input->substr($cursor, $read_length);
                     $len = strlen($buffer);
                     $payload_length_data = substr($buffer, 0, 2);
                     $unpack = unpack('n', $payload_length_data); //16bit 字节序
@@ -818,7 +834,7 @@ class WsServer implements IServer {
                     break;
                 case 127: //<2^64
                     $read_length = 12; // 64bit+4byte=8+4
-                    $buffer = $event_buffer_event->read($read_length);
+                    $buffer = $input->substr($cursor, $read_length);
                     $len = strlen($buffer);
                     $payload_length_data = substr($buffer, 0, 8);
                     $unpack = unpack('J', $payload_length_data); //64bit 字节序
@@ -827,7 +843,7 @@ class WsServer implements IServer {
                     break;
                 default: //<=125
                     $read_length = 4; // 4byte
-                    $buffer = $event_buffer_event->read($read_length);
+                    $buffer = $input->substr($cursor, $read_length);
                     $len = strlen($buffer);
                     $payload_length_data = '';
                     $unpack = array();
@@ -842,6 +858,20 @@ class WsServer implements IServer {
                 break;
             }
 
+            $cursor += $read_length;
+            $cursor += $length;
+
+            if ($cursor > $input->length) {
+                $params['is_pending'] = true;
+                break;
+            }
+
+            $frame_struct[] = [
+                'payload_length' => 2 + $read_length,
+                'masks' => $masks,
+                'length' => $length,
+            ];
+
 //			echo 'PAYLOAD_LENGTH_DATA:', $payload_length_data, PHP_EOL;
 //			for ($i = 0, $n = strlen($payload_length_data); $i < $n; ++$i) {
 //				echo sprintf('%08b', ord($payload_length_data[$i])), PHP_EOL;
@@ -850,31 +880,30 @@ class WsServer implements IServer {
 //			var_dump($unpack);
 
             //$finished_len = socket_recv($socket, $data, $length, MSG_WAITALL); //这里用阻塞模式，接收指定长度的数据
-            $data = '';
-            $finished_len = 0;
-            do {
-                // 每次都尝试以最大长度来读取，实际长度以接收到的为准
-                $buff = $event_buffer_event->read($length);
-                $bytes = strlen($buff);
-                if (false === $bytes) {
-                    $params['is_exception'] = true;
-                    break 2;
-                }
-                $data .= $buff;
-                $length -= $bytes;
-                $finished_len += $bytes;
-            } while ($length > 0);
-            unset($buff);
+            //$data = $event_buffer_event->read($length);
 
 //            echo 'FINISHED LENGTH:', $finished_len, PHP_EOL;
 
             //根据掩码解析数据，处理每个字节，比较费时
+//            for ($index = 0, $n = strlen($data); $index < $n; ++$index) {
+//                $decoded .= $data[$index] ^ $masks[$index % 4];
+//            }
+//            unset($buffer, $data); //销毁临时变量(可能很大)，释放内存
+        } while (0 === $FIN); //连续帧
+//        echo 'END.', PHP_EOL, PHP_EOL;
+
+        if (array_sum($params) > 0) {
+            $frame_struct = [];
+        }
+        foreach ($frame_struct as $item) {
+            $input->drain($item['payload_length']);
+            $data = $event_buffer_event->read($item['length']);
+            $masks = $item['masks'];
             for ($index = 0, $n = strlen($data); $index < $n; ++$index) {
                 $decoded .= $data[$index] ^ $masks[$index % 4];
             }
-            unset($buffer, $data); //销毁临时变量(可能很大)，释放内存
-        } while (0 === $FIN); //连续帧
-//        echo 'END.', PHP_EOL, PHP_EOL;
+        }
+
         return $decoded;
     }
 
