@@ -14,7 +14,6 @@ class WsServer implements IServer {
     protected $handshake = array();//服务握手标志
     protected $backlog = 0;//最大的积压连接数
     protected $storage;//业务处理对象存储容器
-    protected $timeout = 0; //读取/发送超时
     protected $max_log_length = 1024; //消息记录在日志的最大长度
     protected $headers = array(); //请求头
     protected $memory_limit; //最大内存限制:byte
@@ -40,6 +39,10 @@ class WsServer implements IServer {
     protected $channels = [];
     protected $sockets = [];
     protected $context;
+    protected $ipc_payload = [
+        'length' => 4,
+        'format' => 'N',
+    ];
 
     public function __construct($port, $ssl = array()) {
         $this->checkEnvironment();
@@ -85,16 +88,9 @@ class WsServer implements IServer {
     protected function setSocketOption($socket) {
         \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_REUSEADDR, 1); //重用本地地址
         \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_KEEPALIVE, 1); //保持连接
-        /*\EventUtil::setSocketOption($socket, SOL_SOCKET, SO_LINGER, array(
-            'l_onoff' => 1,
-            'l_linger' => 1,
-        ));*/
         \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_SNDBUF, PHP_INT_MAX); //发送缓冲
         \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_RCVBUF, PHP_INT_MAX); //接收缓冲
         \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_DONTROUTE, 0); // 报告传出消息是否绕过标准路由设施：1只能在本机IP使用，0无限制
-        $timeout = array('sec' => $this->timeout, 'usec' => 0);
-        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_RCVTIMEO, $timeout); //发送超时
-        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_SNDTIMEO, $timeout); //接收超时
         \EventUtil::setSocketOption($socket, SOL_SOCKET, TCP_NODELAY, 1); //取消Nagle算法
     }
 
@@ -233,7 +229,7 @@ class WsServer implements IServer {
 
             unset($msg);//图片数据很大，清空临时数据，释放内存
         } else {
-            $buffer = $bev->input->read($bev->input->length);
+            $buffer = $bev->read($bev->input->length);
             $this->headers['REMOTE_ADDR'] = $arg['address'][0];
             $handshake = $this->doHandShake($bev, $buffer, $index);
             if ($handshake) {
@@ -262,28 +258,36 @@ class WsServer implements IServer {
     protected function sendToChannel($bev, &$data) {
         $str = serialize($data);
         $len = strlen($str);
-        $bev->write(pack('J', $len) . $str);
+        $format = $this->ipc_payload['format'];
+        $payload = pack($format, $len);
+        $bev->write($payload . $str);
     }
 
     protected function receiveFromChannel($bev) {
         $data_list = [];
-        // 可能写入的数据有多条，但是都在一个缓存里面
+        // 可能写入的数据有多条，但是都在一个缓存里面，故延迟处理
         $input = $bev->input;
+        $length = $this->ipc_payload['length'];
+        $format = $this->ipc_payload['format'];
         while ($input->length) {
-            $len = current(unpack('J', $input->substr(0, 8)));
+            $payload = $input->substr(0, $length);
+            if (strlen($payload) < $length) {
+                break;
+            }
 
+            $len = current(unpack($format, $payload));
             if (($len > $this->memory_limit) || ($len < 0)) {
                 $input->drain($input->length);
                 $this->logger->error('Receive length error:' . $len);
                 break;
             }
 
-            if ($len > $input->length) {
+            if ($len > ($input->length - $length)) {
                 // 下次回调再作处理
                 break;
             }
 
-            $input->drain(8);
+            $input->drain($length);
 
             $data_list[] = unserialize($bev->read($len));
         }
@@ -455,6 +459,7 @@ class WsServer implements IServer {
         $this->master = stream_socket_server($this->local_socket, $errno, $errstr,
             STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $this->context);
         stream_socket_enable_crypto($this->master, false);
+        stream_set_blocking($this->master, 0);
 
         $this->setSocketOption($this->master);
 
