@@ -263,7 +263,6 @@ class WsServer implements IServer {
         $str = serialize($data);
         $len = strlen($str);
         $bev->write(pack('J', $len) . $str);
-        usleep(5);
     }
 
     protected function receiveFromChannel($bev) {
@@ -275,7 +274,7 @@ class WsServer implements IServer {
 
             if (($len > $this->memory_limit) || ($len < 0)) {
                 $input->drain($input->length);
-                $this->logger->info('Receive length error:' . $len);
+                $this->logger->error('Receive length error:' . $len);
                 break;
             }
 
@@ -408,7 +407,6 @@ class WsServer implements IServer {
                 }
 
                 $this->setEventOption($event_buffer_event);
-                $event_buffer_event->setPriority(0);
                 $event_buffer_event->setCallbacks(
                     array($this, 'channelReadCallback'),
                     NULL,
@@ -441,7 +439,6 @@ class WsServer implements IServer {
                 }
 
                 $this->setEventOption($event_buffer_event);
-                $event_buffer_event->setPriority(0);
                 $event_buffer_event->setCallbacks(
                     array($this, 'slaveReadCallback'),
                     NULL,
@@ -491,7 +488,7 @@ class WsServer implements IServer {
                 return;
             }
 
-            $this->logger->info('master callback:' . $item['callback']);
+            $this->debug('master callback:' . $item['callback']);
 
             call_user_func_array(array($this, $item['callback']), $item['params']);
         }
@@ -517,7 +514,7 @@ class WsServer implements IServer {
                 return;
             }
 
-            $this->logger->info('slave callback:' . $item['callback']);
+            $this->debug('slave callback:' . $item['callback']);
             $this->notify($item['callback'], $item['params']);
         }
     }
@@ -560,7 +557,7 @@ class WsServer implements IServer {
             ];
             $this->sendToChannel($this->chooseChannel($index), $data);
         } else {
-            $this->logger->info('!' . $len . ' bytes sent');
+            $this->debug('!' . $len . ' bytes sent');
         }
     }
 
@@ -598,7 +595,7 @@ class WsServer implements IServer {
                     ];
                     $this->sendToChannel($this->chooseChannel($index), $data);
                 } else {
-                    $this->logger->info('*!' . $len . ' bytes sent');
+                    $this->debug('*!' . $len . ' bytes sent');
                 }
             }
         }
