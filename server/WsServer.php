@@ -10,9 +10,7 @@ class WsServer implements IServer {
     const FRAME_TYPE_BINARY = 0b10000010;
     const FRAME_TYPE_TEXT = 0b10000001;
 
-    protected $master;//主机
     protected $handshake = array();//服务握手标志
-    protected $backlog = 0;//最大的积压连接数
     protected $storage;//业务处理对象存储容器
     protected $max_log_length = 1024; //消息记录在日志的最大长度
     protected $headers = array(); //请求头
@@ -32,13 +30,12 @@ class WsServer implements IServer {
     protected $slave;
     protected $slave_socket;
     protected $ctx;
-    protected $local_socket;
+    protected $target;
     /**
      * @var \EventBufferEvent[]
      */
     protected $channels = [];
     protected $sockets = [];
-    protected $context;
     protected $ipc_payload = [
         'length' => 4,
         'format' => 'N',
@@ -69,29 +66,7 @@ class WsServer implements IServer {
             );
         }
 
-        $this->context = stream_context_create(array(
-            'ssl' => $ssl,
-            'socket' => array(
-                'so_reuseport' => 1,
-                'backlog' => $this->backlog,
-            ),
-        ));
-        $wrapper = empty($ssl) ? 'tcp' : 'tlsv1.2';
-        $this->local_socket = "{$wrapper}://0.0.0.0:{$port}";
-    }
-
-    /**
-     * 设置socket选项
-     * @param resource $socket
-     * @return void
-     */
-    protected function setSocketOption($socket) {
-        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_REUSEADDR, 1); //重用本地地址
-        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_KEEPALIVE, 1); //保持连接
-        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_SNDBUF, PHP_INT_MAX); //发送缓冲
-        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_RCVBUF, PHP_INT_MAX); //接收缓冲
-        \EventUtil::setSocketOption($socket, SOL_SOCKET, SO_DONTROUTE, 0); // 报告传出消息是否绕过标准路由设施：1只能在本机IP使用，0无限制
-        \EventUtil::setSocketOption($socket, SOL_SOCKET, TCP_NODELAY, 1); //取消Nagle算法
+        $this->target = "0.0.0.0:{$port}";
     }
 
     public function checkEnvironment() {
@@ -125,7 +100,6 @@ class WsServer implements IServer {
      * @param $ctx
      */
     public function acceptConnect($listener, $fd, $address, $ctx) {
-        $this->setSocketOption($fd);
         if ($ctx) {
             $event_buffer_event = \EventBufferEvent::sslSocket(
                 $this->base,
@@ -456,25 +430,16 @@ class WsServer implements IServer {
             }
         }
 
-        $this->master = stream_socket_server($this->local_socket, $errno, $errstr,
-            STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, $this->context);
-        stream_socket_enable_crypto($this->master, false);
-        stream_set_blocking($this->master, 0);
-
-        $this->setSocketOption($this->master);
-
         $this->debug('Server Started : ' . date('Y-m-d H:i:s'));
-        $this->debug('Listening on   : '. $this->local_socket);
-        $this->debug('Master socket  : ' . $this->master);
-
+        $this->debug('Listening on   : '. $this->target);
 
         $this->listener = new \EventListener(
             $this->base,
             array($this, "acceptConnect"),
             $this->ctx,
             \EventListener::OPT_CLOSE_ON_FREE | \EventListener::OPT_REUSEABLE,
-            $this->backlog,
-            $this->master
+            -1,
+            $this->target
         );
         if (!$this->listener) {
             die("Couldn't create listener\n");
