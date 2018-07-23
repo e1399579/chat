@@ -79,9 +79,10 @@ class WsServer implements IServer {
         }
     }
 
-    protected function setEventOption($event_buffer_event) {
+    protected function setEventOption($event_buffer_event, $priority = 100) {
         $event_buffer_event->enable(\Event::READ | \Event::WRITE | \Event::PERSIST);
         $event_buffer_event->setWatermark(\Event::READ | \Event::WRITE, 0, 0);
+        $event_buffer_event->setPriority($priority);
     }
 
     public function acceptError($listener, $arg) {
@@ -105,14 +106,12 @@ class WsServer implements IServer {
                 $this->base,
                 $fd,
                 $ctx,
-                \EventBufferEvent::SSL_ACCEPTING,
-                \EventBufferEvent::OPT_DEFER_CALLBACKS
+                \EventBufferEvent::SSL_ACCEPTING
             );
         } else {
             $event_buffer_event = new \EventBufferEvent(
                 $this->base,
-                $fd,
-                \EventBufferEvent::OPT_DEFER_CALLBACKS
+                $fd
             );
         }
 
@@ -125,7 +124,7 @@ class WsServer implements IServer {
         $this->event_buffer_events[$index] = $event_buffer_event;
         $arg = compact('index', 'address', 'fd');
 
-        $this->setEventOption($event_buffer_event);
+        $this->setEventOption($event_buffer_event, 0);
         $event_buffer_event->setCallbacks(
             array($this, "readCallback"),
             NULL,
@@ -353,7 +352,9 @@ class WsServer implements IServer {
     public function run($num, callable $callback = null) {
         $this->daemonize();
 
-        $this->base = new \EventBase();
+        $cfg = new \EventConfig();
+        $cfg->requireFeatures(\EventConfig::FEATURE_O1);
+        $this->base = new \EventBase($cfg);
         if (!$this->base) {
             die("Couldn't open event base\n");
         }
@@ -369,9 +370,6 @@ class WsServer implements IServer {
                 // 主进程：管理全部通道，传递消息，并接收子进程消息（调用）
                 fclose($sockets[1]);
                 $this->sockets[] = $sockets[0];
-
-                //socket_set_option($sockets[0], SOL_SOCKET, SO_SNDBUF, PHP_INT_MAX); //发送缓冲
-                //socket_set_option($sockets[0], SOL_SOCKET, SO_RCVBUF, PHP_INT_MAX); //接收缓冲
 
                 $event_buffer_event = new \EventBufferEvent(
                     $this->base,
@@ -401,10 +399,7 @@ class WsServer implements IServer {
                 fclose($sockets[0]);
                 $this->slave_socket = $sockets[1];
 
-                //socket_set_option($sockets[1], SOL_SOCKET, SO_SNDBUF, PHP_INT_MAX); //发送缓冲
-                //socket_set_option($sockets[1], SOL_SOCKET, SO_RCVBUF, PHP_INT_MAX); //接收缓冲
-
-                $this->base = new \EventBase();
+                $this->base = new \EventBase($cfg);
                 $event_buffer_event = new \EventBufferEvent(
                     $this->base,
                     $sockets[1],
