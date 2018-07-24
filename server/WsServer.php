@@ -40,6 +40,7 @@ class WsServer implements IServer {
         'length' => 4,
         'format' => 'N',
     ];
+    protected $frame_struct_pool = [];
 
     public function __construct($port, $ssl = array()) {
         $this->checkEnvironment();
@@ -143,7 +144,7 @@ class WsServer implements IServer {
 
         if (isset($this->handshake[$index])) {
             $params = array();
-            $msg = $this->prepareData($bev, $params);
+            $msg = $this->prepareData($index, $bev, $params);
             if ($params['is_exception']) {
                 return;
             }
@@ -709,11 +710,12 @@ class WsServer implements IServer {
 
     /**
      * 预处理数据，接收数据并且计算
+     * @param $index
      * @param \EventBufferEvent $event_buffer_event
      * @param array $params
      * @return string
      */
-    protected function prepareData($event_buffer_event, array &$params) {
+    protected function prepareData($index, $event_buffer_event, array &$params) {
         $decoded = '';
         $params = array(
             'is_closed' => false,
@@ -721,11 +723,17 @@ class WsServer implements IServer {
             'is_exception' => false,
             'is_pending' => false,
         );
-        $is_first = true;
 //        echo 'IN:', PHP_EOL;
 
-        $frame_struct = [];
-        $cursor = 0;
+        $flag = false; // 是否更新标识
+        if (isset($this->frame_struct_pool[$index])) {
+            list($cursor, $frame_struct, $is_first) = $this->frame_struct_pool[$index];
+        } else {
+            $cursor = 0;
+            $frame_struct = [];
+            $is_first = true;
+        }
+
         $input = $event_buffer_event->input;
         do {
             $buffer = $input->substr($cursor, 2);
@@ -834,6 +842,8 @@ class WsServer implements IServer {
                 'length' => $length,
             ];
 
+            $flag = true; // frame有变化才更新
+
 //			echo 'PAYLOAD_LENGTH_DATA:', $payload_length_data, PHP_EOL;
 //			for ($i = 0, $n = strlen($payload_length_data); $i < $n; ++$i) {
 //				echo sprintf('%08b', ord($payload_length_data[$i])), PHP_EOL;
@@ -853,6 +863,15 @@ class WsServer implements IServer {
 //            unset($buffer, $data); //销毁临时变量(可能很大)，释放内存
         } while (0 === $FIN); //连续帧
 //        echo 'END.', PHP_EOL, PHP_EOL;
+
+        // 保存未处理完成的帧结构信息，方便下次快速处理
+        if ($params['is_pending']) {
+            if ($flag) {
+                $this->frame_struct_pool[$index] = [$cursor, $frame_struct, $is_first];
+            }
+        } else {
+            unset($this->frame_struct_pool[$index]);
+        }
 
         if (array_sum($params) > 0) {
             $frame_struct = [];
