@@ -63,6 +63,7 @@ class WsServer implements IServer {
                     \EventSslContext::OPT_LOCAL_PK    => $ssl['local_pk'],
                     \EventSslContext::OPT_PASSPHRASE  => "",
                     \EventSslContext::OPT_VERIFY_PEER => false,
+                    \EventSslContext::OPT_CIPHERS => 'ECDHE-RSA-AES128-GCM-SHA256:ECDHE:ECDH:AES:HIGH:!NULL:!aNULL:!MD5:!ADH:!RC4',
                 )
             );
         }
@@ -101,12 +102,12 @@ class WsServer implements IServer {
      * @param $address
      * @param $ctx
      */
-    public function acceptConnect($listener, $fd, $address, $ctx) {
-        if ($ctx) {
+    public function acceptConnect($listener, $fd, $address) {
+        if ($this->ctx) {
             $event_buffer_event = \EventBufferEvent::sslSocket(
                 $this->base,
                 $fd,
-                $ctx,
+                $this->ctx,
                 \EventBufferEvent::SSL_ACCEPTING
             );
         } else {
@@ -432,7 +433,7 @@ class WsServer implements IServer {
         $this->listener = new \EventListener(
             $this->base,
             array($this, "acceptConnect"),
-            $this->ctx,
+            null,
             \EventListener::OPT_CLOSE_ON_FREE | \EventListener::OPT_REUSEABLE,
             -1,
             $this->target
