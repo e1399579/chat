@@ -10,15 +10,13 @@ class WsServer implements IServer {
     const FRAME_TYPE_BINARY = 0b10000010;
     const FRAME_TYPE_TEXT = 0b10000001;
 
-    protected $handshake = array();//服务握手标志
     protected $storage;//业务处理对象存储容器
     protected $max_log_length = 1024; //消息记录在日志的最大长度
-    protected $headers = array(); //请求头
     protected $memory_limit; //最大内存限制:byte
     protected $debug = false;
     protected $listener;
     protected $base;
-    protected $event_buffer_events = array();
+    protected $event_buffer_events = [];
     protected $max_index = 0;
     /**
      * @var Logger
@@ -42,7 +40,7 @@ class WsServer implements IServer {
     ];
     protected $frame_struct_pool = [];
 
-    public function __construct($port, $ssl = array()) {
+    public function __construct($port, $ssl = []) {
         $this->checkEnvironment();
 
         $path = './logs/socket';
@@ -128,11 +126,43 @@ class WsServer implements IServer {
 
         $this->setEventOption($event_buffer_event, 0);
         $event_buffer_event->setCallbacks(
-            array($this, "readCallback"),
+            [$this, "handShake"],
             NULL,
-            array($this, "eventCallback"),
+            [$this, "eventCallback"],
             $arg
         );
+    }
+
+    public function handShake($bev, $arg) {
+        $index = $arg['index'];
+        $buffer = $bev->read($bev->input->length);
+        $headers = $this->getHeaders($buffer);
+        $headers['REMOTE_ADDR'] = $arg['address'][0];
+        $headers += $this->getHeaders($buffer);
+
+        $this->debug('Requesting handshake...');
+        $this->debug($buffer);
+
+        $handshake = $this->doHandShake($bev, $index, $headers);
+        if ($handshake) {
+            // 握手成功，设置读取回调
+            $bev->setCallbacks(
+                [$this, "readCallback"],
+                NULL,
+                [$this, "eventCallback"],
+                $arg
+            );
+
+            //$this->notify('onOpen', array($this->encodeKey($index), $headers));
+            //握手成功，通知客户端连接已经建立
+            $data = [
+                'callback' => 'onOpen',
+                'params' => [$index, $headers],
+            ];
+            $this->sendToChannel($this->chooseChannel($index), $data);
+        } else {
+            $this->disConnect($index); //关闭连接
+        }
     }
 
     /**
@@ -143,84 +173,65 @@ class WsServer implements IServer {
     public function readCallback($bev, $arg) {
         $index = $arg['index'];
 
-        if (isset($this->handshake[$index])) {
-            $params = array();
-            $msg = $this->prepareData($index, $bev, $params);
-            if ($params['is_exception']) {
-                return;
-            }
-
-            if ($params['is_pending']) {
-                return;
-            }
-
-            if ($params['is_ping']) {
-                $protocol = chr(0b10001010);//0x0A pong帧--1010
-                $bev->write($protocol);
-                return;
-            }
-
-            if ($params['is_closed']) {
-                $this->disConnect($index);
-
-                //$this->notify('onClose', array($this->encodeKey($index)));
-                $data = [
-                    'callback' => 'onClose',
-                    'params' => [$index],
-                ];
-
-                $this->sendToChannel($this->chooseChannel($index), $data);
-                return;
-            }
-
-            if (!isset($msg[0])) {
-                if (\EventUtil::getLastSocketErrno()) {
-                    $error = $this->getError();
-                    $this->logger->error("{$index}#socket ERROR:" . $error);
-
-                    $this->disConnect($index);
-                    /*$this->notify('onError', array(
-                        $this->encodeKey($index),
-                        $error,
-                    ));*/
-                    $data = [
-                        'callback' => 'onError',
-                        'params' => [$index, $msg],
-                    ];
-                    $this->sendToChannel($this->chooseChannel($index), $data);
-                }
-                return;
-            }
-
-            if ($msg == 'PING') return;//Firefox
-
-            //$this->notify('onMessage', array($this->encodeKey($index), $msg));
-            // 发给子进程处理
-            $data = [
-                'callback' => 'onMessage',
-                'params' => [$index, $msg],
-            ];
-            $this->sendToChannel($this->chooseChannel($index), $data);
-
-            unset($msg);//图片数据很大，清空临时数据，释放内存
-        } else {
-            $buffer = $bev->read($bev->input->length);
-            $this->headers['REMOTE_ADDR'] = $arg['address'][0];
-            $handshake = $this->doHandShake($bev, $buffer, $index);
-            if ($handshake) {
-                //$this->notify('onOpen', array($this->encodeKey($index), $this->headers));
-                //握手成功，通知客户端连接已经建立
-                $data = [
-                    'callback' => 'onOpen',
-                    'params' => [$index, $this->headers],
-                ];
-                $this->sendToChannel($this->chooseChannel($index), $data);
-            } else {
-                $this->disConnect($index); //关闭连接
-            }
-
-            $this->headers = array();
+        $params = [];
+        $msg = $this->prepareData($index, $bev, $params);
+        if ($params['is_exception']) {
+            return;
         }
+
+        if ($params['is_pending']) {
+            return;
+        }
+
+        if ($params['is_ping']) {
+            $protocol = chr(0b10001010);//0x0A pong帧--1010
+            $bev->write($protocol);
+            return;
+        }
+
+        if ($params['is_closed']) {
+            $this->disConnect($index);
+
+            //$this->notify('onClose', array($this->encodeKey($index)));
+            $data = [
+                'callback' => 'onClose',
+                'params' => [$index],
+            ];
+
+            $this->sendToChannel($this->chooseChannel($index), $data);
+            return;
+        }
+
+        if (!isset($msg[0])) {
+            if (\EventUtil::getLastSocketErrno()) {
+                $error = $this->getError();
+                $this->logger->error("{$index}#socket ERROR:" . $error);
+
+                $this->disConnect($index);
+                /*$this->notify('onError', array(
+                    $this->encodeKey($index),
+                    $error,
+                ));*/
+                $data = [
+                    'callback' => 'onError',
+                    'params' => [$index, $msg],
+                ];
+                $this->sendToChannel($this->chooseChannel($index), $data);
+            }
+            return;
+        }
+
+        if ($msg == 'PING') return;//Firefox
+
+        //$this->notify('onMessage', array($this->encodeKey($index), $msg));
+        // 发给子进程处理
+        $data = [
+            'callback' => 'onMessage',
+            'params' => [$index, $msg],
+        ];
+        unset($msg);//图片数据很大，清空临时数据，释放内存
+
+        $this->sendToChannel($this->chooseChannel($index), $data);
     }
 
     protected function chooseChannel($index) {
@@ -319,7 +330,7 @@ class WsServer implements IServer {
      */
     protected function notify($method, $params) {
         foreach ($this->storage as $client) {
-            call_user_func_array(array($client, $method), $params);
+            call_user_func_array([$client, $method], $params);
         }
     }
 
@@ -386,9 +397,9 @@ class WsServer implements IServer {
 
                 $this->setEventOption($event_buffer_event);
                 $event_buffer_event->setCallbacks(
-                    array($this, 'channelReadCallback'),
+                    [$this, 'channelReadCallback'],
                     NULL,
-                    array($this, 'channelEventCallback'),
+                    [$this, 'channelEventCallback'],
                     $arg
                 );
                 $this->channels[] = $event_buffer_event;
@@ -415,9 +426,9 @@ class WsServer implements IServer {
 
                 $this->setEventOption($event_buffer_event);
                 $event_buffer_event->setCallbacks(
-                    array($this, 'slaveReadCallback'),
+                    [$this, 'slaveReadCallback'],
                     NULL,
-                    array($this, 'channelEventCallback'),
+                    [$this, 'channelEventCallback'],
                     $arg
                 );
                 $this->slave = $event_buffer_event;
@@ -432,7 +443,7 @@ class WsServer implements IServer {
 
         $this->listener = new \EventListener(
             $this->base,
-            array($this, "acceptConnect"),
+            [$this, "acceptConnect"],
             null,
             \EventListener::OPT_CLOSE_ON_FREE | \EventListener::OPT_REUSEABLE,
             -1,
@@ -441,7 +452,7 @@ class WsServer implements IServer {
         if (!$this->listener) {
             die("Couldn't create listener\n");
         }
-        $this->listener->setErrorCallback(array($this, "acceptError"));
+        $this->listener->setErrorCallback([$this, "acceptError"]);
 
         $this->base->dispatch();
     }
@@ -457,7 +468,7 @@ class WsServer implements IServer {
 
             $this->debug('master callback:' . $item['callback']);
 
-            call_user_func_array(array($this, $item['callback']), $item['params']);
+            call_user_func_array([$this, $item['callback']], $item['params']);
         }
     }
 
@@ -544,26 +555,24 @@ class WsServer implements IServer {
     public function doSendAll($msg) {
         $msg = $this->frame($msg);
         foreach ($this->event_buffer_events as $index => $event_buffer_event) {
-            if (isset($this->handshake[$index])) {
-                $len = strlen($msg);
-                $res = $event_buffer_event->write($msg);
-                if (false === $res) {
-                    $error = $this->getError();
-                    $this->logger->error("{$index}# write error:" . $error);
+            $len = strlen($msg);
+            $res = $event_buffer_event->write($msg);
+            if (false === $res) {
+                $error = $this->getError();
+                $this->logger->error("{$index}# write error:" . $error);
 
-                    $this->disConnect($index);
-                    /*$this->notify('onError', array(
-                        $this->encodeKey($index),
-                        $error,
-                    ));*/
-                    $data = [
-                        'callback' => 'onError',
-                        'params' => [$index, $error],
-                    ];
-                    $this->sendToChannel($this->chooseChannel($index), $data);
-                } else {
-                    $this->debug('*!' . $len . ' bytes sent');
-                }
+                $this->disConnect($index);
+                /*$this->notify('onError', array(
+                    $this->encodeKey($index),
+                    $error,
+                ));*/
+                $data = [
+                    'callback' => 'onError',
+                    'params' => [$index, $error],
+                ];
+                $this->sendToChannel($this->chooseChannel($index), $data);
+            } else {
+                $this->debug('*!' . $len . ' bytes sent');
             }
         }
     }
@@ -576,7 +585,6 @@ class WsServer implements IServer {
         isset($this->event_buffer_events[$index]) and ($this->event_buffer_events[$index])->free();
         $this->debug($index . ' DISCONNECTED!');
         unset($this->event_buffer_events[$index]);
-        unset($this->handshake[$index]);
     }
 
     public function close($key) {
@@ -590,18 +598,18 @@ class WsServer implements IServer {
     /**
      * 服务端与客户端握手
      * @param \EventBufferEvent $event_buffer_event 客户端服务
-     * @param string $buffer 二进制数据
      * @param int $index 服务下标
+     * @param array $headers
      * @return bool
      */
-    protected function doHandShake($event_buffer_event , $buffer, $index) {
-        $this->debug('Requesting handshake...');
-        $this->debug($buffer);
-        $this->headers += $this->getHeaders($buffer);
-
-
+    protected function doHandShake($event_buffer_event , $index, $headers) {
         // TODO 请求信息校验
-        $key = isset($this->headers['Sec-WebSocket-Key']) ? $this->headers['Sec-WebSocket-Key'] : '';
+        if (!isset($headers['Sec-WebSocket-Key'])) {
+            $this->logger->error('Handshake failed:none Sec-WebSocket-Key');
+            return false;
+        }
+
+        $key = $headers['Sec-WebSocket-Key'];
         $this->debug("Handshaking...");
         $upgrade =
             "HTTP/1.1 101 Switching Protocol\r\n" .
@@ -615,7 +623,6 @@ class WsServer implements IServer {
             $this->logger->error('Handshake failed!' . $this->getError($event_buffer_event));
             return false;
         } else {
-            $this->handshake[$index] = true;
             $this->debug('Done handshaking...');
             return true;
         }
@@ -644,7 +651,7 @@ class WsServer implements IServer {
         */
         $headers = explode("\r\n", $request);
         unset($headers[0]);
-        $res = array();
+        $res = [];
         foreach ($headers as $row) {
             $arr = explode(':', $row, 2);
             isset($arr[1]) and $res[trim($arr[0])] = trim($arr[1]);
@@ -718,12 +725,12 @@ class WsServer implements IServer {
      */
     protected function prepareData($index, $event_buffer_event, array &$params) {
         $decoded = '';
-        $params = array(
+        $params = [
             'is_closed' => false,
             'is_ping' => false,
             'is_exception' => false,
             'is_pending' => false,
-        );
+        ];
 //        echo 'IN:', PHP_EOL;
 
         $flag = false; // 是否更新标识
@@ -817,7 +824,7 @@ class WsServer implements IServer {
                     $buffer = $input->substr($cursor, $read_length);
                     $len = strlen($buffer);
                     $payload_length_data = '';
-                    $unpack = array();
+                    $unpack = [];
                     $length = $payload_len;
                     $masks = $buffer;
                     break;
