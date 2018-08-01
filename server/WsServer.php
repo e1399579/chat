@@ -16,7 +16,8 @@ class WsServer implements IServer {
     protected $debug = false;
     protected $listener;
     protected $base;
-    protected $event_buffer_events = [];
+    protected $event_buffer_events = []; // 已握手的服务
+    protected $ready_connections = []; // 准备握手的服务
     protected $max_index = 0;
     /**
      * @var Logger
@@ -121,7 +122,7 @@ class WsServer implements IServer {
         }
 
         $index = $this->max_index++;
-        $this->event_buffer_events[$index] = $event_buffer_event;
+        $this->ready_connections[$index] = $event_buffer_event;
         $arg = compact('index', 'address', 'fd');
 
         $this->setEventOption($event_buffer_event, 0);
@@ -145,6 +146,8 @@ class WsServer implements IServer {
 
         $handshake = $this->doHandShake($bev, $index, $headers);
         if ($handshake) {
+            $this->event_buffer_events[$index] = $bev;
+
             // 握手成功，设置读取回调
             $bev->setCallbacks(
                 [$this, "readCallback"],
@@ -163,6 +166,9 @@ class WsServer implements IServer {
         } else {
             $this->disConnect($index); //关闭连接
         }
+
+        // 销毁等待握手的服务
+        unset($this->ready_connections[$index]);
     }
 
     /**
@@ -366,7 +372,7 @@ class WsServer implements IServer {
         $this->daemonize();
 
         $cfg = new \EventConfig();
-        $cfg->requireFeatures(\EventConfig::FEATURE_O1);
+        $cfg->requireFeatures(\EventConfig::FEATURE_O1 | \EventConfig::FEATURE_ET);
         $this->base = new \EventBase($cfg);
         if (!$this->base) {
             die("Couldn't open event base\n");
