@@ -2,6 +2,9 @@
 namespace server;
 
 class User {
+    /**
+     * @var \Redis
+     */
     public $redis;
     public $userSet = 'user';//在线用户ID集合
     public $fileStore = 'file:md5'; //文件库:md5 => path
@@ -12,7 +15,7 @@ class User {
 
     public function connect() {
         $this->redis = new \Redis();
-        $res = $this->redis->connect('127.0.0.1', 6379);
+        $res = $this->redis->connect('redis', 6379);
         if (false == $res)
             throw new \RuntimeException('连接REDIS失败！');
         $this->redis->select(15);
@@ -25,9 +28,9 @@ class User {
      * @param array $headers
      * @return array|bool
      */
-    public function register($name, $password, $headers = array()) {
+    public function register($name, $password, $headers = []) {
         $user_id = uniqid();
-        $user = array(
+        $user = [
             'user_id' => $user_id,
             'username' => $name,
             'password' => password_hash($password, PASSWORD_DEFAULT),
@@ -35,7 +38,7 @@ class User {
             'role_id' => 0,
             'is_active' => 1,
             'avatar' => '',
-        );
+        ];
         $user = array_merge($headers, $user);
         $hKey = 'user_id:' . $user_id;
         $res = $this->redis->hMset($hKey, $user);
@@ -50,7 +53,7 @@ class User {
      * @param array $info
      * @return array
      */
-    public function getUserById($user_id, $info = array('user_id', 'username', 'role_id', 'is_active', 'avatar')) {
+    public function getUserById($user_id, $info = ['user_id', 'username', 'role_id', 'is_active', 'avatar']) {
         $hKey = 'user_id:' . $user_id;
         return $this->redis->hMGet($hKey, $info);
     }
@@ -61,7 +64,7 @@ class User {
      * @param array $info
      * @return array|bool
      */
-    public function getUserByName($name, $info = array('user_id', 'username', 'role_id', 'is_active')) {
+    public function getUserByName($name, $info = ['user_id', 'username', 'role_id', 'is_active']) {
         $key = 'username:' . $name;
         $user_id = $this->redis->get($key);
         if (!$user_id)
@@ -78,12 +81,20 @@ class User {
     }
 
     /**
+     * 在线用户数量
+     * @return int
+     */
+    public function getOnlineTotal() {
+        return $this->redis->sCard($this->userSet);
+    }
+
+    /**
      * 登录/添加用户
      * @param $user_id
      * @param $info
      * @return int
      */
-    public function login($user_id, $info = array()) {
+    public function login($user_id, $info = []) {
         $this->update($user_id, $info);
         return $this->redis->sAdd($this->userSet, $user_id);
     }
@@ -94,7 +105,7 @@ class User {
      * @param $info
      * @return int
      */
-    public function logout($user_id, $info = array()) {
+    public function logout($user_id, $info = []) {
         $this->update($user_id, $info);
         return $this->redis->sRem($this->userSet, $user_id);
     }
@@ -145,7 +156,7 @@ class User {
         //score之前的数量
         $end = $this->redis->zCount($key, '-inf', $timestamp) - 1;
         if ($end < 0)
-            return array();
+            return [];
         $start = $end - $size + 1; //包含start，所有要少一个下标
         $start = max(0, $start);
         return $this->redis->zRange($key, $start, $end);

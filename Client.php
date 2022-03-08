@@ -10,7 +10,6 @@ use server\IClient;
 use server\IServer;
 use server\WsServer;
 use server\User;
-use server\DaemonCommand;
 use server\Logger;
 
 class Client implements IClient {
@@ -19,17 +18,17 @@ class Client implements IClient {
      * @var User
      */
     private $user;//用户
-    public $userService = array();//user_id=>socket key
-    public $serviceUser = array();//socket key=>user_id
-    public $serviceAgent = array();//socket key=>agent
-    public $serviceIp = array();//socket key=>ip
+    public $userService = [];//user_id=>socket key
+    public $serviceUser = [];//socket key=>user_id
+    public $serviceAgent = [];//socket key=>agent
+    public $serviceIp = [];//socket key=>ip
     public $login = '欢迎%USERNAME%进入聊天室';
     public $logout = '%USERNAME%退出聊天室';
     public $remove = '用户%USERNAME%被管理员移除聊天室';
     private $debug = false;//调试开关
     public $upload = 'upload';//上传目录
-    private $request = array();
-    private $response = array();
+    private $request = [];
+    private $response = [];
     private $timestamp;
     private $request_type;
     /**
@@ -52,6 +51,7 @@ class Client implements IClient {
     const USER_DOWNLINE = 207;//用户下线
     const USER_INCORRECT = 208;//用户名/密码错误
     const USER_REMOVE = 209;//用户移除
+    const USER_ONLINE_TOTAL = 213; // 用户在线数量
 
     const USER_AVATAR_UPLOAD = 210;//上传头像
     const USER_AVATAR_SUCCESS = 211;//上传成功
@@ -95,12 +95,12 @@ class Client implements IClient {
     const WARNING = 901;//警告消息
     const SYSTEM = 902;//系统消息
 
-    protected $types = array(
-        self::MESSAGE_PERSONAL => array(self::MESSAGE_SELF, self::MESSAGE_OTHER),
-        self::IMAGE_PERSONAL => array(self::IMAGE_SELF, self::IMAGE_OTHER),
-        self::EMOTION_PERSONAL => array(self::EMOTION_SELF, self::EMOTION_OTHER),
-        self::MUSIC_PERSONAL => array(self::MUSIC_SELF, self::MUSIC_OTHER),
-    );
+    protected $types = [
+        self::MESSAGE_PERSONAL => [self::MESSAGE_SELF, self::MESSAGE_OTHER],
+        self::IMAGE_PERSONAL => [self::IMAGE_SELF, self::IMAGE_OTHER],
+        self::EMOTION_PERSONAL => [self::EMOTION_SELF, self::EMOTION_OTHER],
+        self::MUSIC_PERSONAL => [self::MUSIC_SELF, self::MUSIC_OTHER],
+    ];
 
     public function __construct(IServer $server) {
         $this->server = $server;
@@ -110,26 +110,26 @@ class Client implements IClient {
         $path = './logs/client';
         $this->logger = Logger::getInstance($path);
 
-        set_error_handler(array($this, 'errorHandler'));
+        set_error_handler([$this, 'errorHandler']);
     }
 
-    public function onOpen($key, $headers) {
-        $this->serviceAgent[$key] = isset($headers['User-Agent']) ? $headers['User-Agent'] : '';
+    public function onOpen(int $key, array $headers): void {
+        $this->serviceAgent[$key] = $headers['User-Agent'] ?? '';
         $this->serviceIp[$key] = $headers['REMOTE_ADDR'];
         $this->debug(var_export($headers, true));
     }
 
-    public function onMessage($key, $message) {
+    public function onMessage(int $key, string $message): void {
         //发送消息-处理业务
         $this->request = $this->decode($message);
         $this->timestamp = microtime(true);
         if (!isset($this->request['type'])) {
             $this->logger->error(sprintf('数据不完整，共 %s bytes', strlen($message)));
-            $this->response = array(
+            $this->response = [
                 'type' => self::ERROR,
                 'mess' => '读取消息出错',
                 'timestamp' => $this->timestamp,
-            );
+            ];
             $this->sendMessage($key);
             unset($message);
             $this->clearData();
@@ -159,26 +159,26 @@ class Client implements IClient {
                     $this->register($key);
                     break;
                 }
-                $info = array('user_id', 'username', 'role_id', 'is_active', 'password');
+                $info = ['user_id', 'username', 'role_id', 'is_active', 'password'];
                 $user = $this->user->getUserByName($username, $info);
 
-                $headers = array('ip' => $this->serviceIp[$key], 'agent' => $this->serviceAgent[$key]);
+                $headers = ['ip' => $this->serviceIp[$key], 'agent' => $this->serviceAgent[$key]];
                 empty($user['user_id']) and $user = $this->user->register($username, $password, $headers);
                 if (empty($user['user_id'])) {
-                    $this->response = array(
+                    $this->response = [
                         'type' => self::ERROR,
                         'mess' => '注册用户失败！',
                         'timestamp' => $this->timestamp,
-                    );
+                    ];
                     $this->sendMessage($key);
                     break;
                 }
                 if (!password_verify($password, $user['password'])) {
-                    $this->response = array(
+                    $this->response = [
                         'type' => self::USER_INCORRECT,
                         'mess' => '用户名或密码错误',
                         'timestamp' => $this->timestamp,
-                    );
+                    ];
                     $this->sendMessage($key);
                     break;
                 }
@@ -187,7 +187,7 @@ class Client implements IClient {
 
                 break;
             case self::USER_LOGIN:
-                $headers = array('ip' => $this->serviceIp[$key], 'agent' => $this->serviceAgent[$key]);
+                $headers = ['ip' => $this->serviceIp[$key], 'agent' => $this->serviceAgent[$key]];
                 $this->user->update($this->request['sender_id'], $headers);
                 $user = $this->user->getUserById($this->request['sender_id']);
                 $this->login($key, $user);
@@ -195,72 +195,72 @@ class Client implements IClient {
                 unset($headers, $this->serviceIp[$key], $this->serviceAgent[$key]);
                 break;
             case self::USER_REMOVE: //移除，由管理员发起
-                $admin = $this->user->getUserById($this->request['sender_id'], array('role_id'));
+                $admin = $this->user->getUserById($this->request['sender_id'], ['role_id']);
                 $receiver_id = $this->request['receiver_id'];
-                $user = $this->user->getUserById($receiver_id, array('user_id', 'role_id', 'username'));
+                $user = $this->user->getUserById($receiver_id, ['user_id', 'role_id', 'username']);
                 if (empty($user['user_id']) || empty($admin['role_id'])) {
-                    $this->response = array(
+                    $this->response = [
                         'type' => self::WARNING,
                         'mess' => '移除失败！用户不存在或者非法操作',
                         'timestamp' => $this->timestamp,
-                    );
+                    ];
                     $this->sendMessage($key);
                     break;
                 }
                 if ($admin['role_id'] <= $user['role_id']) {
-                    $this->response = array(
+                    $this->response = [
                         'type' => self::WARNING,
                         'mess' => '移除失败！您没有该权限',
                         'timestamp' => $this->timestamp,
-                    );
+                    ];
                     $this->sendMessage($key);
                     break;
                 }
 
-                $info = array('is_active' => 0);
+                $info = ['is_active' => 0];
                 $res = $this->user->update($receiver_id, $info);
                 if (false == $res) {
-                    $this->response = array(
+                    $this->response = [
                         'type' => self::WARNING,
                         'mess' => '移除失败！服务器出错',
                         'timestamp' => $this->timestamp,
-                    );
+                    ];
                     $this->sendMessage($key);
                     break;
                 }
 
                 if (!isset($this->userService[$receiver_id])) {
-                    $this->response = array(
+                    $this->response = [
                         'type' => self::SYSTEM,
                         'mess' => "移除成功！",
                         'timestamp' => $this->timestamp,
-                    );
+                    ];
                     $this->sendMessage($key);
                     break;
                 }
                 $key = $this->userService[$receiver_id];//用户的服务索引
-                $this->response = array(
+                $this->response = [
                     'type' => self::USER_REMOVE,
                     'mess' => '你已被移除聊天室',
                     'timestamp' => $this->timestamp,
-                );
+                ];
                 $this->sendMessage($key);//发给禁用的用户
                 $this->server->close($key);//断开连接
 
                 $this->tearDown($receiver_id, $key);//注销用户服务
 
                 //系统通知
-                $this->response = array(
+                $this->response = [
                     'type' => self::SYSTEM,
                     'mess' => str_replace('%USERNAME%', $user['username'], $this->remove),
                     'timestamp' => $this->timestamp,
-                );
+                ];
                 $this->sendAllMessage();
 
                 break;
             case self::USER_AVATAR_UPLOAD:
                 //删除原来图片
-                $user = $this->user->getUserById($this->request['sender_id'], array('avatar'));
+                $user = $this->user->getUserById($this->request['sender_id'], ['avatar']);
                 if (!empty($user['avatar'])) {
                     unlink(__DIR__ . '/' . $user['avatar']);
                 }
@@ -268,28 +268,37 @@ class Client implements IClient {
                 $info['avatar'] = $path = $this->getUniqueFile($this->request['mess'], 'avatar');
                 $res = $this->user->update($this->request['sender_id'], $info);
                 if (false == $res) {
-                    $this->response = array(
+                    $this->response = [
                         'type' => self::USER_AVATAR_FAIL,
                         'mess' => '头像上传失败！',
                         'timestamp' => $this->timestamp,
-                    );
+                    ];
                     $this->sendMessage($key);
                     break;
                 }
-                $this->response = array(
+                $this->response = [
                     'type' => self::USER_AVATAR_SUCCESS,
                     'mess' => $path,
                     'timestamp' => $this->timestamp,
-                );
+                ];
                 $this->sendMessage($key);
                 break;
             case self::USER_QUERY:
-                $user = $this->request['receiver_id'] ? $this->user->getUserById($this->request['receiver_id']) : array();
-                $this->response = array(
+                $user = $this->request['receiver_id'] ? $this->user->getUserById($this->request['receiver_id']) : [];
+                $this->response = [
                     'type' => self::USER_QUERY,
                     'user' => $user,
                     'timestamp' => $this->timestamp,
-                );
+                ];
+                $this->sendMessage($key);
+                break;
+            case self::USER_ONLINE_TOTAL:
+                $total = $this->user->getOnlineTotal();
+                $this->response = [
+                    'type' => self::USER_ONLINE_TOTAL,
+                    'mess' => $total,
+                    'timestamp' => $this->timestamp,
+                ];
                 $this->sendMessage($key);
                 break;
             case self::MESSAGE_COMMON: //公共消息
@@ -320,9 +329,9 @@ class Client implements IClient {
                 $data = $this->request['mess']['data'];
                 $name = $this->request['mess']['name'];
                 $this->response['mess'] = $this->getUniqueFile($data, 'music');
-                $extra = array(
+                $extra = [
                     'name' => $name,
-                );
+                ];
                 $this->sendCommonMessage($key, $extra);
                 break;
             case self::MUSIC_PERSONAL:
@@ -330,9 +339,9 @@ class Client implements IClient {
                 $name = $this->request['mess']['name'];
                 $this->response['mess'] = $this->getUniqueFile($data, 'music');
 
-                $extra = array(
+                $extra = [
                     'name' => $name,
-                );
+                ];
                 $this->sendPersonalMessage($key, $extra);
                 break;
             case self::VIDEO_PERSONAL_REQUEST:
@@ -355,7 +364,7 @@ class Client implements IClient {
                 $this->sendPersonalVideoMessage($key, '视频聊天结束');
                 break;
             case self::VIDEO_COMMON_REQUEST:
-                $this->sendCommonMessage($key, array(), false);
+                $this->sendCommonMessage($key, [], false);
                 break;
             case self::HISTORY_MESSAGE_COMMON:
                 $timestamp = empty($this->request['mess']) ? $this->timestamp : $this->request['mess'];
@@ -366,19 +375,19 @@ class Client implements IClient {
                     $row = $this->decode($row);
                 }
                 unset($row);
-                $this->response = array(
+                $this->response = [
                     'type' => $this->request_type,
                     'sender_id' => $this->request['sender_id'],
                     'receiver_id' => $this->request['receiver_id'],
                     'mess' => $mess,
                     'timestamp' => $this->timestamp,
-                );
+                ];
                 unset($mess);
                 $this->sendMessage($key);
                 break;
             case self::HISTORY_MESSAGE_PERSONAL:
                 $timestamp = empty($this->request['mess']) ? $this->timestamp : $this->request['mess'];
-                $users = array($this->request['sender_id'], $this->request['receiver_id']);
+                $users = [$this->request['sender_id'], $this->request['receiver_id']];
                 $mess = $this->user->getPrevPersonalMessage($users, $timestamp);
                 foreach ($mess as &$row) {
                     $row = $this->decode($row);
@@ -388,22 +397,22 @@ class Client implements IClient {
                     $row['type'] = $this->request['sender_id'] == $row['sender_id'] ? $types[0] : $types[1];
                 }
                 unset($row);
-                $this->response = array(
+                $this->response = [
                     'type' => $this->request_type,
                     'sender_id' => $this->request['sender_id'],
                     'receiver_id' => $this->request['receiver_id'], //标识是哪个联系人的，防止多个窗口混淆
                     'mess' => $mess,
                     'timestamp' => $this->timestamp,
-                );
+                ];
                 unset($mess);
                 $this->sendMessage($key);
                 break;
             default:
-                $this->response = array(
+                $this->response = [
                     'type' => self::ERROR,
                     'mess' => '未知的消息类型',
                     'timestamp' => $this->timestamp,
-                );
+                ];
                 $this->sendMessage($key);
         }
 
@@ -412,13 +421,13 @@ class Client implements IClient {
 
     public function clearData() {
         //释放内存
-        $this->request = array();
-        $this->response = array();
+        $this->request = [];
+        $this->response = [];
     }
 
     public function filterRequest() {
         if (!in_array($this->request_type,
-            array(self::VIDEO_PERSONAL_OFFER_DESC, self::VIDEO_PERSONAL_ANSWER_DESC, self::VIDEO_PERSONAL_CANDIDATE))
+            [self::VIDEO_PERSONAL_OFFER_DESC, self::VIDEO_PERSONAL_ANSWER_DESC, self::VIDEO_PERSONAL_CANDIDATE])
         ) {
             array_walk_recursive($this->request, function (&$item, $key) {
                 $item = addslashes(htmlspecialchars(trim($item)));
@@ -426,39 +435,39 @@ class Client implements IClient {
         }
     }
 
-    public function sendCommonMessage($key, $extra = array(), $is_store = true) {
+    public function sendCommonMessage($key, $extra = [], $is_store = true) {
         if (empty($this->request['mess'])) {
-            $this->response = array(
+            $this->response = [
                 'type' => self::WARNING,
                 'mess' => '请不要发空消息！',
                 'timestamp' => $this->timestamp,
-            );
+            ];
             $this->sendMessage($key);
 
             return;
         }
 
-        $this->response = array_merge(array(
+        $this->response = array_merge([
             'type' => $this->request_type,
             'sender_id' => $this->request['sender_id'],
             'receiver_id' => $this->request['receiver_id'],
-            'mess' => isset($this->response['mess']) ? $this->response['mess'] : $this->request['mess'],
+            'mess' => $this->response['mess'] ?? $this->request['mess'],
             'timestamp' => $this->timestamp,
-        ), $extra);
+        ], $extra);
         $is_store and $this->user->addCommonMessage($this->request['receiver_id'], $this->timestamp, $this->encode($this->response));
 
         $this->sendAllMessage();
     }
 
-    public function sendPersonalMessage($key, $extra = array()) {
-        $this->response = array_merge(array(
+    public function sendPersonalMessage($key, $extra = []) {
+        $this->response = array_merge([
             'type' => $this->request_type,
             'sender_id' => $this->request['sender_id'],
             'receiver_id' => $this->request['receiver_id'],
-            'mess' => isset($this->response['mess']) ? $this->response['mess'] : $this->request['mess'],
+            'mess' => $this->response['mess'] ?? $this->request['mess'],
             'timestamp' => $this->timestamp,
-        ), $extra);
-        $users = array($this->request['sender_id'], $this->request['receiver_id']);
+        ], $extra);
+        $users = [$this->request['sender_id'], $this->request['receiver_id']];
         $this->user->addPersonalMessage($users, $this->timestamp, $this->encode($this->response));
 
         $receiver_id = $this->request['receiver_id'];
@@ -470,7 +479,7 @@ class Client implements IClient {
             $index = $this->userService[$receiver_id];
             $this->sendMessage($index);//给接收者发送消息
         } elseif ($this->user->isOnline($receiver_id)) {
-            $info = $this->user->getUserById($receiver_id, array('key'));
+            $info = $this->user->getUserById($receiver_id, ['key']);
             if (empty($info['key'])) {
                 $this->response['type'] = self::MESSAGE_SELF;
                 $this->response['mess'] = '发送失败';
@@ -492,20 +501,20 @@ class Client implements IClient {
     }
 
     public function sendPersonalVideoMessage($key, $mess = '') {
-        $this->response = array(
+        $this->response = [
             'type' => $this->request_type,
             'sender_id' => $this->request['sender_id'],
             'receiver_id' => $this->request['receiver_id'],
             'mess' => $mess ? $mess : $this->request['mess'],
             'timestamp' => $this->timestamp,
-        );
+        ];
 
         $receiver_id = $this->request['receiver_id'];
         if (isset($this->userService[$receiver_id])) {
             $index = $this->userService[$receiver_id];
             $this->sendMessage($index);
         } elseif ($this->user->isOnline($receiver_id)) {
-            $info = $this->user->getUserById($receiver_id, array('key'));
+            $info = $this->user->getUserById($receiver_id, ['key']);
             if (empty($info['key'])) {
                 $this->response['type'] = self::MESSAGE_SELF;
                 $this->response['mess'] = '邀请失败';
@@ -533,7 +542,7 @@ class Client implements IClient {
         return $path;
     }
 
-    public function onError($key, $err) {
+    public function onError(int $key, string $err): void {
         $this->onClose($key);
         if (isset($this->serviceUser[$key])) {
             $user_id = $this->serviceUser[$key];
@@ -543,24 +552,24 @@ class Client implements IClient {
         }
     }
 
-    public function onClose($key) {
+    public function onClose(int $key): void {
         //用户退出-处理业务
         if (isset($this->serviceUser[$key])) {
             $user_id = $this->serviceUser[$key];
             $this->tearDown($user_id, $key);//注销用户服务
 
-            $user = $this->user->getUserById($user_id, array('user_id', 'username'));
-            $this->response = array(
+            $user = $this->user->getUserById($user_id, ['user_id', 'username']);
+            $this->response = [
                 'type' => self::USER_QUIT,
                 'user' => $user,
                 'timestamp' => $this->timestamp,
-            );
+            ];
             $this->sendAllMessage(); //通知所有人
         }
     }
 
     public function auth($key, $user_id) {
-        $user = $this->user->getUserById($user_id, array('user_id', 'is_active'));
+        $user = $this->user->getUserById($user_id, ['user_id', 'is_active']);
         if (empty($user['user_id'])) {
             $this->register($key);
 
@@ -580,64 +589,64 @@ class Client implements IClient {
         if (isset($this->userService[$user_id])) {
             //多点登录，让他下线
             $index = $this->userService[$user_id];
-            $this->response = array(
+            $this->response = [
                 'type' => self::USER_DOWNLINE,
                 'mess' => '您已下线',
                 'timestamp' => $this->timestamp,
-            );
+            ];
             $this->sendMessage($index); //给他发送通知
             $this->server->close($index);//断开连接
             $this->tearDown($user_id, $index);//注销用户服务
         } elseif ($this->user->isOnline($user_id)) {
-            $info = $this->user->getUserById($user_id, array('key'));
+            $info = $this->user->getUserById($user_id, ['key']);
             if (!empty($info['key'])) {
                 $index = $info['key'];
-                $this->response = array(
+                $this->response = [
                     'type' => self::USER_DOWNLINE,
                     'mess' => '您已下线',
                     'timestamp' => $this->timestamp,
-                );
+                ];
                 $this->sendMessage($index); //给他发送通知
                 $this->server->close($index);//断开连接
                 $this->tearDown($user_id, $index);//注销用户服务
             }
         } else {
-            $this->response = array(
+            $this->response = [
                 'type' => self::USER_LOGIN,
                 'user' => $user,
                 'timestamp' => $this->timestamp,
-            );
+            ];
             $this->sendMessage($key); //通知当前用户，已经登录
             //绑定用户ID与SOCKET
             $this->userService[$user_id] = $key;//user_id=>socket key，通过用户ID找到服务索引
             $this->serviceUser[$key] = $user_id;//socket key=>user_id，通过服务索引找到用户ID
 
             $this->user->login($user_id, compact('key'));
-            $this->response = array(
+            $this->response = [
                 'type' => self::USER_ONLINE,
                 'user' => $user,
                 'timestamp' => $this->timestamp,
-            );
+            ];
             $this->sendAllMessage(); //欢迎消息
 
-            $this->flushUsers($key); //刷新在线用户列表
+//            $this->flushUsers($key); //刷新在线用户列表
         }
     }
 
     public function register($key) {
-        $this->response = array(
+        $this->response = [
             'type' => self::USER_REGISTER,
             'timestamp' => $this->timestamp,
-        );
+        ];
         $this->sendMessage($key);
     }
 
     public function forbidden($key, $user) {
-        $this->response = array(
+        $this->response = [
             'type' => self::USER_DISABLED,
             'mess' => '你已被管理员禁用，不能发送消息',
             'timestamp' => $this->timestamp,
-        );
+        ];
         $this->sendMessage($key);
         $this->server->close($key);//断开连接
 
@@ -658,15 +667,15 @@ class Client implements IClient {
      * @param $key
      */
     public function flushUsers($key) {
-        $users = array();
+        $users = [];
         foreach ($this->user->getOnlineUsers() as $user_id) {
             $users[] = $this->user->getUserById($user_id);
         }
-        $this->response = array(
+        $this->response = [
             'type' => self::USER_LIST,
             'users' => $users,
             'timestamp' => $this->timestamp,
-        );
+        ];
         $this->sendMessage($key); //刷新在线用户列表
     }
 
@@ -679,9 +688,9 @@ class Client implements IClient {
     public function tearDown($user_id, $key) {
         unset($this->userService[$user_id]);//注销服务
         unset($this->serviceUser[$key]);//注销用户
-        $this->user->logout($user_id, array(
+        $this->user->logout($user_id, [
             'key' => '',
-        ));
+        ]);
     }
 
     public function base64ToFile(&$base64, $flag = 'message') {
@@ -792,14 +801,15 @@ class Client implements IClient {
 try {
     // php Client.php
     $port = isset($argv[1]) ? $argv[1] + 0 : 8080;
-    $ssl = array(
+    $ssl = [
         'local_cert'  => '/usr/local/nginx/conf/1_chat.ridersam.cn_cert.crt',
         'local_pk'    => '/usr/local/nginx/conf/2_chat.ridersam.cn.key',
         'verify_peer' => false,
-    );
-    $server = new WsServer($port, $ssl);
+    ];
+//    $server = new WsServer($port, $ssl);
+    $server = new WsServer($port, []);
     $client = new Client($server);
-    $client->run(7);
+    $client->run(8);
 } catch (\Exception $e) {
     die($e);
 }

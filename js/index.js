@@ -33,6 +33,7 @@ const USER_DISABLED = 206;//用户禁用
 const USER_DOWNLINE = 207;//用户下线
 const USER_INCORRECT = 208;//用户名/密码错误
 const USER_REMOVE = 209;//用户移除
+const USER_ONLINE_TOTAL = 213; // 用户在线数量
 
 const USER_AVATAR_UPLOAD = 210;//上传头像
 const USER_AVATAR_SUCCESS = 211;//上传成功
@@ -305,11 +306,13 @@ class MainWindow {
 
     init() {
         let swiper = new Swiper(this.window.get(0), {
+            scrollbar: {
+                el: '.swiper-scrollbar',
+                hide: false,
+                draggable: false,
+                snapOnRelease: true,
+            },
             wrapperClass: "swiper-wrapper",
-            scrollbar: '.swiper-scrollbar',
-            scrollbarHide: false,
-            scrollbarDraggable: false,
-            scrollbarSnapOnRelease: true,
             slidesPerView: 'auto',
             centeredSlides: true,
             spaceBetween: 0,
@@ -348,12 +351,12 @@ class Util {
 class DataHelper {
     static encode(obj) {
         //return JSON.stringify(obj);
-        return msgpack.encode(obj);
+        return msgpackr.pack(obj);
     }
 
     static decode(str) {
         //return JSON.parse(str);
-        return msgpack.decode(new Uint8Array(str)); //ArrayBuffer->Uint8Array
+        return msgpackr.unpack(new Uint8Array(str)); //ArrayBuffer->Uint8Array
     }
 
     static toObject(obj) {
@@ -636,8 +639,10 @@ class EmotionWindow {
         this.emotion_height = this.container.height();
 
         let swiper = new Swiper(this.container.get(0), {
-            pagination: ".swiper-pagination",
-            paginationClickable: true
+            pagination: {
+                el: '.swiper-pagination',
+                clickable: true,
+            },
         });
         this.bindMessage();
     }
@@ -1013,9 +1018,9 @@ class MusicWindow {
                 layer.close(index);
                 let name = file.name;
                 let type = file.type;
-                let regexp = /(?:mp3|ogg|wav)/i;
-                if (!regexp.test(type.split('/').pop())) {
-                    return Util.toast("目前只支持mp3,ogg,wav格式");
+                let regexp = /audio/i;
+                if (!regexp.test(type.split('/').shift())) {
+                    return Util.toast("目前只支持mp3,ogg,wav,midi,webm格式");
                 }
                 if (file.size > MAX_MUSIC_SIZE) {
                     return Util.toast(`文件大太，目前最大${this.size_m}M`);
@@ -1674,10 +1679,7 @@ class SingleWindow {
 
     hide() {
         this.is_show = 0;
-        this.window.removeClass("slideInRight").addClass("animated slideOutRight");
-        window.setTimeout(() => {
-            this.window.removeClass("z-index-top").addClass("z-index-normal");
-        }, ANIMATE_DURING);
+        this.window.removeClass("slideInRight z-index-top").addClass("animated slideOutRight z-index-normal");
     }
 
     hidden() {
@@ -1933,11 +1935,10 @@ class CommonWindow extends SingleWindow {
         return CommonWindow.windows.get(id);
     }
 
-    flushTitle(group, total) {
+    flushTitle(group) {
         //this.name = group.name;
         this.name = "大厅";
         this.window.find(".group-name").text(this.name);
-        this.flushTotal(total);
     }
 
     flushTotal(total) {
@@ -1956,10 +1957,7 @@ class Box {
     }
 
     hide() {
-        this.window.removeClass("slideInLeft").addClass("animated slideOutLeft");
-        window.setTimeout(() => {
-            this.window.removeClass("z-index-top").addClass("z-index-normal");
-        }, ANIMATE_DURING);
+        this.window.removeClass("slideInLeft z-index-top").addClass("animated slideOutLeft z-index-normal");
     }
 
     hideEvent() {
@@ -2381,6 +2379,7 @@ class Observer {
 
 //用户观察者，监测用户信息变化、存储用户信息
 class UserObserver extends Observer {
+    static online_total = 0;
     constructor() {
         super();
         this.storage = localStorage;
@@ -2402,11 +2401,18 @@ class UserObserver extends Observer {
             case USER_ONLINE:
                 user = mess.user;
                 UserObserver.online(user.user_id);
-                this.addUser(user);
+                // this.addUser(user);
+
+                ++UserObserver.online_total;
+                break;
+            case USER_ONLINE_TOTAL:
+                UserObserver.online_total = mess.mess; // 置为实际数量
                 break;
             case USER_QUIT:
                 user = mess.user;
                 UserObserver.downline(user.user_id);
+
+                UserObserver.online_total = Math.max(--UserObserver.online_total, 1);
                 break;
             case USER_LIST:
                 users = mess.users;
@@ -2506,7 +2512,8 @@ class UserObserver extends Observer {
     }
 
     static total() {
-        return UserObserver.online_users.size; //算上本人
+        // return UserObserver.online_users.size; //算上本人
+        return UserObserver.online_total;
     }
 
     static clear() {
@@ -2673,11 +2680,15 @@ class CommonWindowObserver extends Observer {
         is_self = user && (user.user_id === USER.user_id);
         switch (splSubject.type) {
             case USER_ONLINE://欢迎消息
-                commonWindow.flushTitle(user, UserObserver.total());
+                commonWindow.flushTitle(user);
+                commonWindow.flushTotal(UserObserver.total());
                 if (is_self) return;
                 template = templates.get("welcome_message");
                 decorator = new WelcomeDecorator(new TimeTextMessage(template, window_id, this.is_history));
 
+                break;
+            case USER_ONLINE_TOTAL:
+                commonWindow.flushTotal(UserObserver.total());
                 break;
             case USER_QUIT://退出消息
                 commonWindow.flushTotal(UserObserver.total());
@@ -2686,10 +2697,6 @@ class CommonWindowObserver extends Observer {
 
                 break;
             case USER_LIST:
-                commonWindow.flushTotal(UserObserver.total());
-                return;
-                break;
-            case USER_DOWNLINE:
                 commonWindow.flushTotal(UserObserver.total());
                 return;
                 break;
@@ -2723,7 +2730,7 @@ class CommonWindowObserver extends Observer {
                 break;
         }
 
-        content = decorator.process(mess);
+        if (decorator) content = decorator.process(mess);
         if (this.is_history) {
             commonWindow.writeHistory(content);
         } else {
@@ -2919,6 +2926,8 @@ class LoginWindowObserver extends Observer {
                 break;
             case USER_LOGIN://已经登录
                 window.login(mess);
+                // 查询数量
+                Upload.sendMessage(USER_ONLINE_TOTAL);
                 break;
             default:
                 return;

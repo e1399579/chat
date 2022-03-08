@@ -8,7 +8,7 @@ interface IClient {
      * @param array $headers
      * @return void
      */
-    public function onOpen($key, $headers);
+    public function onOpen(int $key, array $headers): void;
 
     /**
      * 有消息时
@@ -16,7 +16,7 @@ interface IClient {
      * @param string $message
      * @return void
      */
-    public function onMessage($key, $message);
+    public function onMessage(int $key, string $message): void;
 
     /**
      * 出错时
@@ -24,12 +24,12 @@ interface IClient {
      * @param string $err
      * @return void
      */
-    public function onError($key, $err);
+    public function onError(int $key, string $err): void;
 
     /**
      * 关闭连接时
-     * @param $key
+     * @param int $key
      * @return void
      */
-    public function onClose($key);
+    public function onClose(int $key): void;
 }
