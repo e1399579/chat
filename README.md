@@ -1,20 +1,48 @@
-# chat
-websocket 聊天室 https://chat.ridersam.cn/
-## config
-参考nginx.conf
-## install
-1. 需要安装Msgpack扩展，项目地址 https://github.com/msgpack/msgpack-php/
-2. 需要安装Redis，项目地址 https://redis.io/
-3. 需要安装libevent扩展，项目地址 https://github.com/expressif/pecl-event-libevent
-4. 需要安装event扩展，项目地址 http://pecl.php.net/package/event
-5. 视频聊天采用webrtc技术，要求网站是https协议，需要搭建turnserver，项目地址 https://github.com/coturn/coturn/
-6. PHP版本：5.3+，建议7.0+
-## shell
+## 简介
+WebSocket 聊天室
+
+## docker安装
+1. 构建PHP镜像
 ```
-php Client 8080
+cd docker
+docker build -t test/php7 .
 ```
-## support browser
-1. chrome
-2. firefox
-3. opera
-4. qq
+2. 修改默认docker配置`docker-compose.yml`中的目录映射
+3. 修改默认网站配置`nginx/www.conf`
+4. 启动服务
+```
+docker-compose up
+```
+4. 浏览器访问 index.html
+
+## 常规安装
+1. PHP版本：7.0+
+2. 安装msgpack扩展，`pecl install msgpack`
+3. 安装Redis，请访问 https://redis.io/
+4. 安装libevent，`apt install libevent-dev`
+5. 安装event扩展，`pecl install event`
+6. 启动，`php Client.php -d -p 8080 -n 8`
+7. 浏览器访问 index.html
+
+## 启动参数说明
+1. -d 后台运行
+2. -p port 监听端口号
+3. -n num 开启的子进程数，至少为1
+
+## 视频聊天
+采用WebRTC技术，有以下要求：
+1. 网站以https协议访问
+2. 搭建turnserver实现NAT穿透，请访问 https://github.com/coturn/coturn/
+3. 修改`index.js`中的`iceServers`配置
+
+## 支持的浏览器
+1. Chrome
+2. Firefox
+3. Edge
+4. Opera
+5. ...
+
+## 待办
+- [ ] 重写界面
+- [ ] 前后端项目拆分
+- [ ] 细节优化

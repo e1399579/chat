@@ -358,37 +358,12 @@ class WsServer implements IServer {
         }
     }
 
-    public function daemonize() {
-        $pid = pcntl_fork();
-        if (-1 === $pid) {
-            throw new \RuntimeException('could not fork');
-        }
-
-        if ($pid) {
-            exit(0);
-        }
-
-        //设置新会话组长，脱离终端
-        if (-1 === posix_setsid()) {
-            throw new \RuntimeException('posix_setsid fail');
-        }
-
-        $pid = pcntl_fork();
-        if (-1 === $pid) {
-            throw new \RuntimeException('could not fork');
-        } else if ($pid) {
-            exit(0);
-        }
-    }
-
     /**
      * 开始运行
      * @param int $num
      * @param ?callable $callback
      */
     public function run(int $num, ?callable $callback = null): void {
-        $this->daemonize();
-
         $cfg = new \EventConfig();
         $cfg->requireFeatures(\EventConfig::FEATURE_O1 | \EventConfig::FEATURE_ET);
         $this->base = new \EventBase($cfg);
