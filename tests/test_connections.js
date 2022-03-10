@@ -8,7 +8,7 @@ const ws = require('ws');
 const WebSocket = ws.WebSocket;
 const msgpack = require('msgpackr');
 
-let success = 0, fail = 0;
+let success = 0, fail = 0, closed = 0;
 let test_num = process.argv.length > 2 ? parseInt(process.argv[2]) : 255;
 let sockets = [];
 
@@ -39,59 +39,54 @@ class DataHelper {
 }
 
 let success_set = new Set();
-function test_message(message) {
-    let dec = DataHelper.decode(message);
-    let type = dec.type;
-    switch (type) {
-        case ERROR:
-        case WARNING:
-        case SYSTEM:
-            fail++;
-            console.log("success:", success, "fail:", fail, "type:",dec.type);
-            break;
-        case USER_LOGIN:
-            // ++success;
-            // console.log("success:", success, "fail:", fail);
-            break;
-        case USER_ONLINE: // 每次登录会通知所有人，去重数量
-            let prev = success;
-            let user_id = dec.user.user_id;
-            success_set.add(user_id);
-            success = success_set.size;
-            if (success > prev) {
-                console.log("success:", success, "fail:", fail);
-            }
-            break;
-        case USER_QUIT:
-        default:
-
-            break;
-    }
-}
-
-function test_close(e) {
-    console.log(e);
-}
-
-function test_error(e) {
-    console.log(e);
-}
-
 function init_sockets(num, sockets) {
     for (let i=0;i<num;i++) {
         let socket = new WebSocket(SERVER_URL);
         socket.binaryType = 'arraybuffer'; //设为二进制的原始缓冲区
         socket.on('open', () => {
-            let date = new Date();
             socket.send(DataHelper.encode({
                 type: USER_REGISTER,
-                username: date.getTime(),
+                username: 'test_' + Math.random().toString(36).substr(2,10),
                 password: 123456
             }));
         });
-        socket.on('message', test_message);
-        socket.on('close', test_close);
-        socket.on('error', test_error);
+        socket.on('message', (message) => {
+            let dec = DataHelper.decode(message);
+            let type = dec.type;
+            switch (type) {
+                case ERROR:
+                case WARNING:
+                case SYSTEM:
+                    fail++;
+                    console.log("success:", success, "fail:", fail, "type:",dec.type);
+                    break;
+                case USER_LOGIN:
+                    ++success;
+                    console.log("success:", success, "fail:", fail);
+                    socket.ping();
+                    break;
+                case USER_ONLINE: // 每次登录会通知所有人，去重数量
+                    // let prev = success;
+                    // let user_id = dec.user.user_id;
+                    // success_set.add(user_id);
+                    // success = success_set.size;
+                    // if (success > prev) {
+                    //     console.log("success:", success, "fail:", fail);
+                    // }
+                    break;
+                case USER_QUIT:
+                default:
+
+                    break;
+            }
+        });
+        socket.on('close', (code) => {
+            ++closed;
+            console.log("closed:", closed);
+        });
+        socket.on('error', (code) => {
+            console.log("error", code);
+        });
         sockets[i] = socket;
     }
 }

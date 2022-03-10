@@ -18,6 +18,14 @@ interface IServer {
     public function detach(IClient $client): void;
 
     /**
+     * 通知观察者
+     * @param string $method
+     * @param array $params
+     * @return void
+     */
+    public function notify(string $method, array $params): void;
+
+    /**
      * 关闭连接
      * @param int $key
      * @return void
