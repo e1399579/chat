@@ -6,91 +6,35 @@
 </head>
 <body>
 <p>请打开控制台查看</p>
-<script type="text/javascript" src="../js/msgpack.min.js"></script>
+<script type="text/javascript" src="../js/msgpackr.min.js"></script>
 <script type="text/javascript">
     let success = 0, fail = 0;
     let test_num = 255;
     let sockets = [];
 
-    const MESSAGE_COMMON = 100;//公共消息
-    const MESSAGE_SELF = 101;//本人消息
-    const MESSAGE_OTHER = 102;//他人消息
-    const MESSAGE_PERSONAL = 103;//私信
-
     const USER_ONLINE = 200;//用户上线
     const USER_QUIT = 201;//用户退出
-    const USER_LIST = 202;//用户列表
-    const USER_QUERY = 203; //用户查询
     const USER_REGISTER = 204;//用户注册
     const USER_LOGIN = 205;//用户登录
-    const USER_DISABLED = 206;//用户禁用
-    const USER_DOWNLINE = 207;//用户下线
-    const USER_INCORRECT = 208;//用户名/密码错误
-    const USER_REMOVE = 209;//用户移除
-
-    const USER_AVATAR_UPLOAD = 210;//上传头像
-    const USER_AVATAR_SUCCESS = 211;//上传成功
-    const USER_AVATAR_FAIL = 212;//上传失败
-
-    const IMAGE_COMMON = 300;//公共图片
-    const IMAGE_SELF = 301;//本人图片
-    const IMAGE_OTHER = 302;//他人图片
-    const IMAGE_PERSONAL = 303;//私信图片
-
-    const EMOTION_COMMON = 400;//公共表情
-    const EMOTION_SELF = 401;//本人表情
-    const EMOTION_OTHER = 402;//他人图片
-    const EMOTION_PERSONAL = 403;//私信表情
-
-    const MUSIC_COMMON = 500; //公共音乐
-    const MUSIC_SELF = 501; //本人音乐
-    const MUSIC_OTHER = 502; //他人音乐
-    const MUSIC_PERSONAL = 503; //私信音乐
-
-    const VIDEO_PERSONAL_REQUEST = 600; //私信视频请求
-    const VIDEO_PERSONAL_OFFLINE = 601; //离线
-    const VIDEO_PERSONAL_ALLOW = 602; //请求通过
-    const VIDEO_PERSONAL_DENY = 603; //请求拒绝
-    const VIDEO_PERSONAL_OPEN = 604; //打开摄像头
-    const VIDEO_PERSONAL_CLOSE = 605; //关闭摄像头
-    const VIDEO_PERSONAL_END = 606; //传输结束
-
-    const VIDEO_PERSONAL_OFFER_DESC = 607;
-    const VIDEO_PERSONAL_ANSWER_DESC = 608;
-    const VIDEO_PERSONAL_CANDIDATE = 609;
-
-    const VIDEO_COMMON_REQUEST = 700;
-    const VIDEO_COMMON_NOTIFY = 701;
-    const VIDEO_PERSONAL_NOTIFY = 702;
-
-    const HISTORY_MESSAGE_COMMON = 800; //历史公共消息
-    const HISTORY_MESSAGE_PERSONAL = 801; //历史个人消息
 
     const ERROR = 900;//错误消息
     const WARNING = 901;//警告消息
     const SYSTEM = 902;//系统消息
 
     const PORT = 8080;
-    const PROTOCOL = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    const SERVER_URL = PROTOCOL + window.location.host + ':' + PORT;
+    const PROTOCOL = 'ws://';
+    const HOST = '192.168.0.10';
+    const SERVER_URL = PROTOCOL + HOST + ':' + PORT;
 
     class DataHelper {
         static encode(obj) {
             //return JSON.stringify(obj);
-            return msgpack.encode(obj);
+            return msgpackr.pack(obj);
         }
 
         static decode(str) {
             //return JSON.parse(str);
-            return msgpack.decode(new Uint8Array(str)); //ArrayBuffer->Uint8Array
-        }
-
-        static toObject(obj) {
-            let target = {};
-            for (let key in obj) {
-                target[key] = obj[key];
-            }
-            return target;
+            return msgpackr.unpack(new Uint8Array(str)); //ArrayBuffer->Uint8Array
         }
     }
 
@@ -98,7 +42,7 @@
         let date = new Date();
         e.currentTarget.send(DataHelper.encode({
             type: USER_REGISTER,
-            username: date.getTime(),
+            username: 'test_' + Math.random().toString(36).substr(2,10),
             password: 123456
         }));
     }
@@ -111,24 +55,23 @@
             case ERROR:
             case WARNING:
             case SYSTEM:
-            case USER_QUIT:
                 fail++;
-                console.log(success, fail, dec.type);
+                console.log("success:", success, "fail:", fail, "type:",dec.type);
+                break;
+            case USER_LOGIN:
+                ++success;
+                console.log("success:", success, "fail:", fail);
                 break;
             case USER_ONLINE: // 每次登录会通知所有人，去重数量
-                let prev = success;
-                let user_id = dec.user.user_id;
-                success_set.add(user_id);
-                success = success_set.size;
-                if (success > prev) {
-                    console.log(success, fail);
-                }
+                // let prev = success;
+                // let user_id = dec.user.user_id;
+                // success_set.add(user_id);
+                // success = success_set.size;
+                // if (success > prev) {
+                //     console.log("success:", success, "fail:", fail);
+                // }
                 break;
-            case USER_LIST:
-            case MESSAGE_COMMON:
-            case MESSAGE_SELF:
-            case MESSAGE_OTHER:
-            case MESSAGE_PERSONAL:
+            case USER_QUIT:
             default:
 
                 break;

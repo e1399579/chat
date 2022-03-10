@@ -20,18 +20,22 @@ class WsServer implements IServer {
     const NOTIFY_TYPE_ON_CLOSE = 0b10;
     const NOTIFY_TYPE_ON_MESSAGE = 0b100;
     const NOTIFY_TYPE_ON_ERROR = 0b1000;
-    const NOTIFY_TYPE_SEND_TO = 0b10000;
-    const NOTIFY_TYPE_SEND_TO_ALL = 0b100000;
-    const NOTIFY_TYPE_NORMAL_CLOSE = 0b1000000;
 
-    protected $method_map = [
+    const CALL_TYPE_SEND_TO = 0b1;
+    const CALL_TYPE_SEND_TO_ALL = 0b10;
+    const CALL_TYPE_NORMAL_CLOSE = 0b100;
+
+    protected $notify_map = [
         self::NOTIFY_TYPE_ON_OPEN => 'onOpen',
         self::NOTIFY_TYPE_ON_CLOSE => 'onClose',
         self::NOTIFY_TYPE_ON_MESSAGE => 'onMessage',
         self::NOTIFY_TYPE_ON_ERROR => 'onError',
-        self::NOTIFY_TYPE_SEND_TO => 'sendTo',
-        self::NOTIFY_TYPE_SEND_TO_ALL => 'sendToAll',
-        self::NOTIFY_TYPE_NORMAL_CLOSE => 'normalClose',
+    ];
+
+    protected $call_map = [
+        self::CALL_TYPE_SEND_TO => 'sendTo',
+        self::CALL_TYPE_SEND_TO_ALL => 'sendToAll',
+        self::CALL_TYPE_NORMAL_CLOSE => 'normalClose',
     ];
 
     protected $debug = false; // 调试
@@ -108,7 +112,137 @@ class WsServer implements IServer {
         $this->target = "0.0.0.0:{$port}";
     }
 
-    public function checkEnvironment() {
+    /**
+     * 观察对象
+     * @param IClient $client
+     */
+    public function attach(IClient $client): void {
+        $this->storage->attach($client);
+    }
+
+    /**
+     * 解除对象
+     * @param IClient $client
+     */
+    public function detach(IClient $client): void {
+        $this->storage->detach($client);
+    }
+
+    /**
+     * 通知对象
+     * @param string $method
+     * @param array $params
+     */
+    public function notify(string $method, array $params): void {
+        foreach ($this->storage as $client) {
+            call_user_func_array([$client, $method], $params);
+        }
+    }
+
+    /**
+     * 开始运行
+     * @param int $num
+     * @param ?callable $callback
+     */
+    public function run(int $num, ?callable $callback = null): void {
+        $cfg = new \EventConfig();
+        $cfg->requireFeatures(\EventConfig::FEATURE_O1 | \EventConfig::FEATURE_ET);
+        $this->base = new \EventBase($cfg);
+        for ($i = 0;$i < $num;++$i) {
+            $sockets = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+            $index = $i;
+            $arg = compact('index');
+            $pid = pcntl_fork();
+            if (-1 === $pid) {
+                throw new \RuntimeException('could not fork');
+            }
+            if ($pid) {
+                // 主进程：管理全部通道，传递消息，并接收子进程消息（调用）。此处在主进程中执行N次
+                // 注意：需要保留socket和bev，否则将立即停止
+                fclose($sockets[1]);
+                $this->sockets[] = $sockets[0];
+
+                $bev = new \EventBufferEvent(
+                    $this->base,
+                    $sockets[0],
+                    \EventBufferEvent::OPT_CLOSE_ON_FREE
+                );
+
+                $this->setEventOption($bev, 10, 7);
+                $bev->setCallbacks(
+                    [$this, 'masterReadCallback'],
+                    NULL,
+                    [$this, 'channelEventCallback'],
+                    $arg
+                );
+                $this->channels[] = $bev;
+            } else {
+                if (!is_null($callback)) {
+                    $callback();
+                }
+
+                // 子进程：接收主进程程消息，处理业务。此处在每个不同的新子进程中执行1次
+                fclose($sockets[0]);
+                $this->work_socket = $sockets[1];
+
+                $this->base = new \EventBase($cfg);
+                $bev = new \EventBufferEvent(
+                    $this->base,
+                    $sockets[1],
+                    \EventBufferEvent::OPT_CLOSE_ON_FREE
+                );
+
+                $this->setEventOption($bev, 10, 7);
+                $bev->setCallbacks(
+                    [$this, 'workReadCallback'],
+                    NULL,
+                    [$this, 'channelEventCallback'],
+                    $arg
+                );
+                $this->work = $bev;
+
+                $this->base->dispatch();
+                die();
+            }
+        }
+
+        // 主进程作用域，最终有1个主进程+n个子进程
+        $this->debug('Listening on: ' . $this->target);
+
+        $this->listener = new \EventListener(
+            $this->base,
+            $this->ctx ? [$this, "acceptConnectSSL"] : [$this, "acceptConnect"],
+            null,
+            \EventListener::OPT_CLOSE_ON_FREE | \EventListener::OPT_REUSEABLE,
+            -1,
+            $this->target
+        );
+        $this->listener->setErrorCallback([$this, "acceptError"]);
+
+        $this->base->dispatch();
+    }
+
+    public function close(int $key): void {
+        $data = '';
+        $this->sendToChannel($this->work, self::CALL_TYPE_NORMAL_CLOSE, $key, $data);
+    }
+
+    /**
+     * 发送消息
+     * @param int $key socket index
+     * @param string $msg 消息
+     */
+    public function send(int $key, string $msg): void {
+        // 发给主进程
+        $this->sendToChannel($this->work, self::CALL_TYPE_SEND_TO, $key, $msg);
+    }
+
+    public function sendAll(string $msg): void {
+        // 发给主进程
+        $this->sendToChannel($this->work, self::CALL_TYPE_SEND_TO_ALL, 0, $msg);
+    }
+
+    protected function checkEnvironment() {
         if (php_sapi_name() !== 'cli') {
             throw new \RuntimeException('Only run in command line');
         }
@@ -118,7 +252,7 @@ class WsServer implements IServer {
         }
     }
 
-    protected function setEventOption(\EventBufferEvent $bev, $priority = 100, $low = 2): void {
+    protected function setEventOption(\EventBufferEvent $bev, $priority, $low): void {
         $bev->enable(\Event::READ | \Event::WRITE | \Event::PERSIST);
         $bev->setWatermark(\Event::READ, $low, 0);
         $bev->setWatermark(\Event::WRITE, 0, 0);
@@ -161,12 +295,12 @@ class WsServer implements IServer {
         $this->prepareConnect($bev, $fd, $address);
     }
 
-    public function prepareConnect(\EventBufferEvent $bev, $fd, $address) {
+    protected function prepareConnect(\EventBufferEvent $bev, $fd, $address) {
         $index = $this->max_index++;
         $this->ready_connections[$index] = $bev;
         $arg = compact('index', 'address', 'fd');
 
-        $this->setEventOption($bev, 0);
+        $this->setEventOption($bev, 0, 2);
         $bev->setCallbacks(
             [$this, "handShake"],
             NULL,
@@ -177,14 +311,13 @@ class WsServer implements IServer {
 
     public function handShake(\EventBufferEvent $bev, $arg) {
         $index = $arg['index'];
-        $buffer = $bev->read($bev->input->length);
+        $buffer = $bev->input->read($bev->input->length);
         $headers = $this->getHeaders($buffer);
         $headers['REMOTE_ADDR'] = $arg['address'][0];
 
-        $this->debug('Requesting handshake...');
-        $this->debug($buffer);
+        $this->debug($index . '# Requesting handshake...' . PHP_EOL . $buffer);
 
-        $handshake = $this->doHandShake($bev, $headers);
+        $handshake = $this->doHandShake($bev, $headers, $index);
         if ($handshake) {
             $this->established_connections[$index] = $bev;
             // 握手成功，设置读取回调
@@ -281,28 +414,30 @@ class WsServer implements IServer {
         // 可能写入的数据有多条，但是都在一个缓存里面，故延迟处理
         $input = $bev->input;
         $payload_length = 7;
-        while ($input->length) {
+        while ($length = $input->length) {
             $payload = $input->substr(0, $payload_length);
             if (strlen($payload) < $payload_length) {
                 break;
             }
 
             $data_length = current(unpack('N', substr($payload, 0, 4)));
-            if (($data_length > $this->frame_max_length) || ($data_length < 0)) {
-                $input->drain($input->length);
-                $this->logger->error('Receive length error:' . $data_length);
-                break;
-            }
-            $notify_type = ord(substr($payload, 4, 1));
-            $index = current(unpack('n', substr($payload, 5, 2)));
-
-            if ($payload_length + $data_length > $input->length) {
+            if ($payload_length + $data_length > $length) {
                 // 未接收完，下次回调再作处理
                 break;
             }
 
+            if (($data_length > $this->frame_max_length) || ($data_length < 0)) {
+                // 协议出错，清空数据
+                $input->drain($input->length);
+                $this->logger->error('Receive length error:' . $data_length);
+                break;
+            }
+
+            $notify_type = ord(substr($payload, 4, 1));
+            $index = current(unpack('n', substr($payload, 5, 2)));
+
             $input->drain($payload_length);
-            $data = $bev->read($data_length);
+            $data = $input->read($data_length);
             $data_list[] = [$notify_type, $index, $data];
         }
 
@@ -331,133 +466,21 @@ class WsServer implements IServer {
         }
     }
 
-    /**
-     * 观察对象
-     * @param IClient $client
-     */
-    public function attach(IClient $client): void {
-        $this->storage->attach($client);
-    }
-
-    /**
-     * 解除对象
-     * @param IClient $client
-     */
-    public function detach(IClient $client): void {
-        $this->storage->detach($client);
-    }
-
-    /**
-     * 通知对象
-     * @param string $method
-     * @param array $params
-     */
-    protected function notify($method, $params) {
-        foreach ($this->storage as $client) {
-            call_user_func_array([$client, $method], $params);
-        }
-    }
-
-    /**
-     * 开始运行
-     * @param int $num
-     * @param ?callable $callback
-     */
-    public function run(int $num, ?callable $callback = null): void {
-        $cfg = new \EventConfig();
-        $cfg->requireFeatures(\EventConfig::FEATURE_O1 | \EventConfig::FEATURE_ET);
-        $this->base = new \EventBase($cfg);
-        for ($i = 0;$i < $num;++$i) {
-            $sockets = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
-            $index = $i;
-            $arg = compact('index');
-            $pid = pcntl_fork();
-            if (-1 === $pid) {
-                throw new \RuntimeException('could not fork');
-            }
-            if ($pid) {
-                // 主进程：管理全部通道，传递消息，并接收子进程消息（调用）。此处在主进程中执行N次
-                // 注意：需要保留socket和bev，否则将立即停止
-                fclose($sockets[1]);
-                $this->sockets[] = $sockets[0];
-
-                $bev = new \EventBufferEvent(
-                    $this->base,
-                    $sockets[0],
-                    \EventBufferEvent::OPT_CLOSE_ON_FREE
-                );
-
-                $this->setEventOption($bev);
-                $bev->setCallbacks(
-                    [$this, 'masterReadCallback'],
-                    NULL,
-                    [$this, 'channelEventCallback'],
-                    $arg
-                );
-                $this->channels[] = $bev;
-            } else {
-                if (!is_null($callback)) {
-                    $callback();
-                }
-
-                // 子进程：接收主进程程消息，处理业务。此处在每个不同的新子进程中执行1次
-                fclose($sockets[0]);
-                $this->work_socket = $sockets[1];
-
-                $this->base = new \EventBase($cfg);
-                $bev = new \EventBufferEvent(
-                    $this->base,
-                    $sockets[1],
-                    \EventBufferEvent::OPT_CLOSE_ON_FREE
-                );
-
-                $this->setEventOption($bev);
-                $bev->setCallbacks(
-                    [$this, 'workReadCallback'],
-                    NULL,
-                    [$this, 'channelEventCallback'],
-                    $arg
-                );
-                $this->work = $bev;
-
-                $this->base->dispatch();
-                die();
-            }
-        }
-
-        // 主进程作用域，最终有1个主进程+n个子进程
-        $this->debug('Server Started : ' . date('Y-m-d H:i:s'));
-        $this->debug('Listening on   : '. $this->target);
-
-        $this->listener = new \EventListener(
-            $this->base,
-            $this->ctx ? [$this, "acceptConnectSSL"] : [$this, "acceptConnect"],
-            null,
-            \EventListener::OPT_CLOSE_ON_FREE | \EventListener::OPT_REUSEABLE,
-            -1,
-            $this->target
-        );
-        $this->listener->setErrorCallback([$this, "acceptError"]);
-
-        $this->base->dispatch();
-    }
-
     public function masterReadCallback(\EventBufferEvent $bev, $arg): void {
         // IPC消息
         $data_list = $this->receiveFromChannel($bev);
         foreach ($data_list as list($notify_type, $index, $data)) {
             $this->debug('master callback:' . sprintf('%08b', $notify_type));
-//            call_user_func_array([$this, $this->method_map[$notify_type]], [$index, $data]);
+//            call_user_func_array([$this, $this->call_map[$notify_type]], [$index, $data]);
             switch ($notify_type) {
-                case self::NOTIFY_TYPE_SEND_TO:
+                case self::CALL_TYPE_SEND_TO:
                     $this->sendTo($index, $data);
                     break;
-                case self::NOTIFY_TYPE_SEND_TO_ALL:
+                case self::CALL_TYPE_SEND_TO_ALL:
                     $this->sendToAll($data);
                     break;
-                case self::NOTIFY_TYPE_NORMAL_CLOSE:
-                    $bev->write($this->frame('', self::FRAME_OPCODE_CLOSE));
-                    $this->disConnect($index);
+                case self::CALL_TYPE_NORMAL_CLOSE:
+                    $this->normalClose($index);
                     break;
             }
         }
@@ -478,22 +501,12 @@ class WsServer implements IServer {
     public function workReadCallback(\EventBufferEvent $bev, $arg): void {
         $data_list = $this->receiveFromChannel($bev);
         foreach ($data_list as list($notify_type, $index, $data)) {
-            $this->debug('work callback:' . sprintf('%08b', $notify_type));
+            $this->debug(posix_getpid() . '# work callback:' . sprintf('%08b', $notify_type));
             if ($notify_type === self::NOTIFY_TYPE_ON_OPEN) {
                 $data = json_decode($data, true);
             }
-            $this->notify($this->method_map[$notify_type], [$index, $data]);
+            $this->notify($this->notify_map[$notify_type], [$index, $data]);
         }
-    }
-
-    /**
-     * 发送消息
-     * @param int $key socket index
-     * @param string $msg 消息
-     */
-    public function send(int $key, string $msg): void {
-        // 发给主进程
-        $this->sendToChannel($this->work, self::NOTIFY_TYPE_SEND_TO, $key, $msg);
     }
 
     protected function sendTo(int $index, string $msg): void {
@@ -516,20 +529,15 @@ class WsServer implements IServer {
             $this->disConnect($index);
             $this->sendToChannel($this->chooseChannel($index), self::NOTIFY_TYPE_ON_ERROR, $index, $error);
         } else {
-            $this->debug('!' . $len . ' bytes sent');
+            $this->debug($index . '# ' . $len . ' bytes sent');
         }
-    }
-
-    public function sendAll(string $msg): void {
-        // 发给主进程
-        $this->sendToChannel($this->work, self::NOTIFY_TYPE_SEND_TO_ALL, 0, $msg);
     }
 
     /**
      * 给所有完成握手的客户端发送消息
      * @param string $msg
      */
-    public function sendToAll(string $msg): void {
+    protected function sendToAll(string $msg): void {
         $msg = $this->frame($msg);
         foreach ($this->established_connections as $index => $bev) {
             $this->doSend($bev, $index, $msg);
@@ -546,43 +554,48 @@ class WsServer implements IServer {
             $this->established_connections[$index]->free();
         }
 
-        $this->debug($index . ' DISCONNECTED!');
+        $this->debug($index . '# DISCONNECTED!');
         unset($this->established_connections[$index]);
     }
 
-    public function close(int $key): void {
-        $data = '';
-        $this->sendToChannel($this->work, self::NOTIFY_TYPE_NORMAL_CLOSE, $key, $data);
+    protected function normalClose(int $index) {
+        $bev = $this->established_connections[$index];
+        $bev and $bev->write($this->frame('', self::FRAME_OPCODE_CLOSE));
+        $this->disConnect($index);
     }
 
     /**
      * 服务端与客户端握手
      * @param \EventBufferEvent $bev 客户端服务
      * @param array $headers
+     * @param int $index
      * @return bool
      */
-    protected function doHandShake(\EventBufferEvent $bev, array $headers): bool {
+    protected function doHandShake(\EventBufferEvent $bev, array $headers, int $index): bool {
         // TODO 请求信息校验
-        if (!isset($headers['Sec-WebSocket-Key'])) {
-            $this->logger->error('Handshake failed:none Sec-WebSocket-Key');
+        $version = $headers['Sec-WebSocket-Version'] ?? '';
+        $versions = explode(',', $version);
+        if (!(in_array(13, $versions)
+            && isset($headers['Sec-WebSocket-Key']))) {
+            $str = "HTTP/1.1 400 Bad Request\r\n" .
+                "Sec-WebSocket-Version: 13\r\n\r\n";
+            $bev->write($str);
+            $this->debug($index . '# Bad Request');
             return false;
         }
 
         $key = $headers['Sec-WebSocket-Key'];
-        $this->debug("Handshaking...");
         $upgrade =
             "HTTP/1.1 101 Switching Protocol\r\n" .
             "Upgrade: websocket\r\n" .
-            "Sec-WebSocket-Version: 13\r\n" .
             "Connection: Upgrade\r\n" .
-            "Sec-WebSocket-Accept: " . $this->calcKey($key) . "\r\n\r\n";  //必须以两个空行结尾
-        $this->debug($upgrade);
+            "Sec-WebSocket-Accept: {$this->calcKey($key)}\r\n\r\n";  //必须以两个空行结尾
         $res = $bev->write($upgrade);
         if (false === $res) {
-            $this->logger->error('Handshake failed!' . $this->getError($bev->fd));
+            $this->logger->error($index . '# Handshake failed!' . $this->getError($bev->fd));
             return false;
         } else {
-            $this->debug('Done handshaking...');
+            $this->debug($index . '# Handshake complete!' . PHP_EOL . $upgrade);
             return true;
         }
     }
@@ -625,7 +638,7 @@ class WsServer implements IServer {
      * @param string $key 客户端的key
      * @return string
      */
-    public function calcKey(string $key): string {
+    protected function calcKey(string $key): string {
         //基于websocket version 13
         return base64_encode(sha1($key . self::GUID, true));
     }
@@ -746,7 +759,7 @@ class WsServer implements IServer {
             }
 
             if (($length > $this->frame_max_length) || ($length < 0)) {
-                //异常情况：1.接收的长度小于计算的 2.计算的长度大于最大内存限制的 3.数据错误导致unpack计算的长度为负
+                // 异常情况：1.计算的长度大于最大内存限制的 2.数据错误导致unpack计算的长度为负
                 $params['is_exception'] = true;
                 unset($this->frame_meta_pool[$index]);
                 return '';
@@ -833,9 +846,9 @@ class WsServer implements IServer {
         return (string) \EventUtil::getLastSocketError($fd);
     }
 
-    public function debug(string $content, array $context = []) {
-        if (!$this->debug) return true;
-        return $this->logger->info($content, $context);
+    protected function debug(string $content) {
+        if (!$this->debug) return;
+        echo (new \DateTime())->format('Y-m-d H:i:s.u') . ' ' . $content . PHP_EOL;
     }
 
     /**
