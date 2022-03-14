@@ -251,7 +251,7 @@ class Worker implements IClient {
                 //删除原来图片
                 $user = $this->user->getUserById($this->request['sender_id'], ['avatar']);
                 if (!empty($user['avatar'])) {
-                    unlink(__DIR__ . '/' . $user['avatar']);
+                    unlink(APP_PATH . '/' . $user['avatar']);
                 }
 
                 $info['avatar'] = $path = $this->getUniqueFile($this->request['mess'], 'avatar');
@@ -689,18 +689,22 @@ class Worker implements IClient {
         $pos3 = strpos($base64, ';');
         $suffix = '.' . substr($base64, $pos2 + 1, $pos3 - $pos2 - 1);
         $path = $this->getFilePath($suffix, $flag);
-        file_put_contents(__DIR__ . $path, $image);
+        file_put_contents($path['real'], $image);
         unset($image);
 
-        return $path;
+        return $path['relative'];
     }
 
     public function getFilePath($suffix, $flag = 'message') {
         $dir = sprintf('/%s/%s/%s/%s/', $this->upload, $flag, date('Ymd'), date('H'));
-        $real_path = __DIR__ . $dir;
-        is_dir($real_path) or mkdir($real_path, 0777, true);
+        $real_dir = APP_PATH . DIRECTORY_SEPARATOR . $dir;
+        is_dir($real_dir) or mkdir($real_dir, 0777, true);
 
-        return $dir . uniqid() . $suffix;
+        $filename = uniqid() . $suffix;
+        return [
+            'real' => $real_dir . $filename,
+            'relative' => $dir . $filename,
+        ];
     }
 
     /**

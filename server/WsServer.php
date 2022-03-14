@@ -666,9 +666,9 @@ class WsServer implements IServer {
         $this->buffers[$index] .= $input->read($input->length); // 读取全部数据
 
         if (isset($this->frame_meta_pool[$index])) {
-            list($cursor, $frame_struct_list) = $this->frame_meta_pool[$index];
+            list($offset, $frame_struct_list) = $this->frame_meta_pool[$index];
         } else {
-            $cursor = 0;
+            $offset = 0;
             $frame_struct_list = [];
         }
 
@@ -694,15 +694,15 @@ class WsServer implements IServer {
             +---------------------------------------------------------------+
         */
         $total_length = strlen($this->buffers[$index]);
-        $first_byte_ord = 0;
         do {
-            $buffer = substr($this->buffers[$index], $cursor, 2);
-            if (strlen($buffer) < 2) {
+            if ($offset + 2 > $total_length) {
+                // 数据未接收完成，下次再处理，本次返回空
                 $params['is_pending'] = true;
-                break;
+                return '';
             }
 
-            $cursor += 2;
+            $buffer = substr($this->buffers[$index], $offset, 2);
+            $offset += 2;
             $first_byte_ord = ord($buffer[0]);
             $FIN = $first_byte_ord >> 7; // 1表示最后一帧
 
@@ -724,11 +724,12 @@ class WsServer implements IServer {
             switch ($payload_len) {
                 case 126: //<2^16 65536
                     $read_length = 6; // 16bit+4byte=2+4
-                    if ($cursor + $read_length >= $total_length) {
+                    $data_offset = $offset + $read_length;
+                    if ($data_offset > $total_length) {
                         $params['is_pending'] = true;
-                        break 2;
+                        return '';
                     }
-                    $buffer = substr($this->buffers[$index], $cursor, $read_length);
+                    $buffer = substr($this->buffers[$index], $offset, $read_length);
                     $payload_length_data = substr($buffer, 0, 2);
                     $unpack = unpack('n', $payload_length_data); //16bit 字节序
                     $length = current($unpack);
@@ -736,11 +737,12 @@ class WsServer implements IServer {
                     break;
                 case 127: //<2^64
                     $read_length = 12; // 64bit+4byte=8+4
-                    if ($cursor + $read_length >= $total_length) {
+                    $data_offset = $offset + $read_length;
+                    if ($data_offset > $total_length) {
                         $params['is_pending'] = true;
-                        break 2;
+                        return '';
                     }
-                    $buffer = substr($this->buffers[$index], $cursor, $read_length);
+                    $buffer = substr($this->buffers[$index], $offset, $read_length);
                     $payload_length_data = substr($buffer, 0, 8);
                     $unpack = unpack('J', $payload_length_data); //64bit 字节序
                     $length = current($unpack);
@@ -748,11 +750,12 @@ class WsServer implements IServer {
                     break;
                 default: //<=125
                     $read_length = 4; // 4byte
-                    if ($cursor + $read_length >= $total_length) {
+                    $data_offset = $offset + $read_length;
+                    if ($data_offset > $total_length) {
                         $params['is_pending'] = true;
-                        break 2;
+                        return '';
                     }
-                    $buffer = substr($this->buffers[$index], $cursor, $read_length);
+                    $buffer = substr($this->buffers[$index], $offset, $read_length);
                     $length = $payload_len;
                     $masks = $buffer;
                     break;
@@ -761,33 +764,28 @@ class WsServer implements IServer {
             if (($length > $this->frame_max_length) || ($length < 0)) {
                 // 异常情况：1.计算的长度大于最大内存限制的 2.数据错误导致unpack计算的长度为负
                 $params['is_exception'] = true;
-                unset($this->frame_meta_pool[$index]);
+                unset($this->frame_meta_pool[$index], $this->buffers[$index]);
                 return '';
             }
 
-            $cursor += $read_length;
+            // 偏移量是否越界
+            $end = $data_offset + $length;
+            if ($end > $total_length) {
+                $params['is_pending'] = true;
+                return '';
+            }
+
+            $offset = $end; // 更新为合法值
             $frame_struct_list[] = [
-                'offset' => $cursor, // 当前帧承载数据的起始位置
+                'offset' => $data_offset, // 当前帧承载数据的起始位置
                 'length' => $length, // 当前帧承载数据的长度
                 'masks' => $masks, // 掩码
             ];
-            $cursor += $length;
 
             // 保存帧结构信息，方便下次快速处理
-            $this->frame_meta_pool[$index] = [$cursor, $frame_struct_list];
-
-            // 游标是否越界
-            if ($cursor > $total_length) {
-                $params['is_pending'] = true;
-                break;
-            }
+            $this->frame_meta_pool[$index] = [$offset, $frame_struct_list];
         } while (0 === $FIN); //连续帧
 //        echo 'END.', PHP_EOL, PHP_EOL;
-
-        // 数据未接收完成，下次再处理，本次返回空
-        if ($params['is_pending']) {
-            return '';
-        }
 
         // 最后一帧，检查控制帧（Control Frames）操作码
         $opcode = $first_byte_ord & 0b1111;
@@ -809,12 +807,14 @@ class WsServer implements IServer {
             $data = substr($this->buffers[$index], $item['offset'], $item['length']);
             $masks = $item['masks'];
             for ($i = 0, $n = strlen($data); $i < $n; ++$i) {
-                $decoded .= $data[$i] ^ $masks[$i % 4];
+                // 4是2的次幂，i % 4 = i & (4 - 1)，位运算更快
+//                $decoded .= $data[$i] ^ $masks[$i % 4];
+                $decoded .= $data[$i] ^ $masks[$i & 3];
             }
         }
 
         // 清除buffer、结构数据
-        $this->buffers[$index] = substr($this->buffers[$index], $cursor);
+        $this->buffers[$index] = substr($this->buffers[$index], $offset);
         unset($this->frame_meta_pool[$index]);
 
         return $decoded;
