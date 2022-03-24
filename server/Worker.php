@@ -2,24 +2,20 @@
 namespace server;
 
 class Worker implements IClient {
-    private $server;//WebSocket
+    protected $server;
     /**
      * @var User
      */
-    private $user;//用户
-    public $userService = [];//user_id=>socket key
-    public $serviceUser = [];//socket key=>user_id
-    public $serviceAgent = [];//socket key=>agent
-    public $serviceIp = [];//socket key=>ip
-    public $login = '欢迎%USERNAME%进入聊天室';
-    public $logout = '%USERNAME%退出聊天室';
-    public $remove = '用户%USERNAME%被管理员移除聊天室';
-    private $debug = false;//调试开关
-    public $upload = 'upload';//上传目录
-    private $request = [];
-    private $response = [];
-    private $timestamp;
-    private $request_type;
+    protected $user;//用户
+    protected $serviceAgent = [];//socket key=>agent
+    protected $serviceIp = [];//socket key=>ip
+    protected $remove = '用户%USERNAME%被管理员移除聊天室';
+    protected $debug = false;//调试开关
+    protected $upload = 'upload';//上传目录
+    protected $request = [];
+    protected $response = [];
+    protected $timestamp;
+    protected $request_type;
     /**
      * @var Logger
      */
@@ -120,7 +116,6 @@ class Worker implements IClient {
                 'timestamp' => $this->timestamp,
             ];
             $this->sendMessage($key);
-            unset($message);
             $this->clearData();
 
             return;
@@ -218,7 +213,8 @@ class Worker implements IClient {
                     break;
                 }
 
-                if (!isset($this->userService[$receiver_id])) {
+                $receiver_key = $this->user->getServiceKeyByUserId($receiver_id); // 用户的服务索引
+                if (false === $receiver_key) {
                     $this->response = [
                         'type' => self::SYSTEM,
                         'mess' => "移除成功！",
@@ -227,16 +223,15 @@ class Worker implements IClient {
                     $this->sendMessage($key);
                     break;
                 }
-                $key = $this->userService[$receiver_id];//用户的服务索引
                 $this->response = [
                     'type' => self::USER_REMOVE,
                     'mess' => '你已被移除聊天室',
                     'timestamp' => $this->timestamp,
                 ];
-                $this->sendMessage($key);//发给禁用的用户
-                $this->server->close($key);//断开连接
+                $this->sendMessage($receiver_key);//发给禁用的用户
+                $this->server->close($receiver_key);//断开连接
 
-                $this->tearDown($receiver_id, $key);//注销用户服务
+                $this->tearDown($receiver_id, $receiver_key);//注销用户服务
 
                 //系统通知
                 $this->response = [
@@ -274,10 +269,12 @@ class Worker implements IClient {
                 break;
             case self::USER_QUERY:
                 $user = $this->request['receiver_id'] ? $this->user->getUserById($this->request['receiver_id']) : [];
+                $is_online = $this->user->isOnline($this->request['receiver_id']);
                 $this->response = [
                     'type' => self::USER_QUERY,
                     'user' => $user,
                     'timestamp' => $this->timestamp,
+                    'is_online' => $is_online,
                 ];
                 $this->sendMessage($key);
                 break;
@@ -460,27 +457,13 @@ class Worker implements IClient {
         $this->user->addPersonalMessage($users, $this->timestamp, $this->encode($this->response));
 
         $receiver_id = $this->request['receiver_id'];
-        if (isset($this->userService[$receiver_id])) {
+        $receiver_key = $this->user->getServiceKeyByUserId($receiver_id);
+        if (false !== $receiver_key) {
             $this->response['type'] = $this->types[$this->request_type][0];//转换成本人
             $this->sendMessage($key);//给当前客户端发送消息
 
             $this->response['type'] = $this->types[$this->request_type][1];//转换成他人
-            $index = $this->userService[$receiver_id];
-            $this->sendMessage($index);//给接收者发送消息
-        } elseif ($this->user->isOnline($receiver_id)) {
-            $info = $this->user->getUserById($receiver_id, ['key']);
-            if (empty($info['key'])) {
-                $this->response['type'] = self::MESSAGE_SELF;
-                $this->response['mess'] = '发送失败';
-                $this->sendMessage($key);
-            } else {
-                $this->response['type'] = $this->types[$this->request_type][0];//转换成本人
-                $this->sendMessage($key);//给当前客户端发送消息
-
-                $this->response['type'] = $this->types[$this->request_type][1];//转换成他人
-                $index = $info['key'];
-                $this->sendMessage($index);//给接收者发送消息
-            }
+            $this->sendMessage($receiver_key);//给接收者发送消息
         } else {
             //用户已经离线
             $this->response['type'] = self::MESSAGE_SELF;
@@ -499,19 +482,9 @@ class Worker implements IClient {
         ];
 
         $receiver_id = $this->request['receiver_id'];
-        if (isset($this->userService[$receiver_id])) {
-            $index = $this->userService[$receiver_id];
-            $this->sendMessage($index);
-        } elseif ($this->user->isOnline($receiver_id)) {
-            $info = $this->user->getUserById($receiver_id, ['key']);
-            if (empty($info['key'])) {
-                $this->response['type'] = self::MESSAGE_SELF;
-                $this->response['mess'] = '邀请失败';
-                $this->sendMessage($key);
-            } else {
-                $index = $info['key'];
-                $this->sendMessage($index);
-            }
+        $receiver_key = $this->user->getServiceKeyByUserId($receiver_id);
+        if (false !== $receiver_key) {
+            $this->sendMessage($receiver_key);
         } else {
             $this->response['type'] = self::VIDEO_PERSONAL_OFFLINE;
             $this->response['mess'] = '对方已经离线...';
@@ -533,8 +506,8 @@ class Worker implements IClient {
 
     public function onError(int $key, string $err): void {
         $this->onClose($key);
-        if (isset($this->serviceUser[$key])) {
-            $user_id = $this->serviceUser[$key];
+        $user_id = $this->user->getUserIdByServiceKey($key);
+        if (false !== $user_id) {
             $this->logger->error('user_id:' . $user_id . ' service error:' . $err);
         } else {
             $this->logger->error("service#{$key} ERROR:$err");
@@ -543,8 +516,8 @@ class Worker implements IClient {
 
     public function onClose(int $key): void {
         //用户退出-处理业务
-        if (isset($this->serviceUser[$key])) {
-            $user_id = $this->serviceUser[$key];
+        $user_id = $this->user->getUserIdByServiceKey($key);
+        if (false !== $user_id) {
             $this->tearDown($user_id, $key);//注销用户服务
 
             $user = $this->user->getUserById($user_id, ['user_id', 'username']);
@@ -575,9 +548,9 @@ class Worker implements IClient {
 
     public function login($key, $user) {
         $user_id = $user['user_id'];
-        if (isset($this->userService[$user_id])) {
-            //多点登录，让他下线
-            $index = $this->userService[$user_id];
+        $index = $this->user->getServiceKeyByUserId($user_id);
+        if (false !== $index) {
+            // 多点登录，让他下线
             $this->response = [
                 'type' => self::USER_DOWNLINE,
                 'mess' => '您已下线',
@@ -586,40 +559,26 @@ class Worker implements IClient {
             $this->sendMessage($index); //给他发送通知
             $this->server->close($index);//断开连接
             $this->tearDown($user_id, $index);//注销用户服务
-        } elseif ($this->user->isOnline($user_id)) {
-            $info = $this->user->getUserById($user_id, ['key']);
-            if (!empty($info['key'])) {
-                $index = $info['key'];
-                $this->response = [
-                    'type' => self::USER_DOWNLINE,
-                    'mess' => '您已下线',
-                    'timestamp' => $this->timestamp,
-                ];
-                $this->sendMessage($index); //给他发送通知
-                $this->server->close($index);//断开连接
-                $this->tearDown($user_id, $index);//注销用户服务
-            }
-        } else {
-            $this->response = [
-                'type' => self::USER_LOGIN,
-                'user' => $user,
-                'timestamp' => $this->timestamp,
-            ];
-            $this->sendMessage($key); //通知当前用户，已经登录
-            //绑定用户ID与SOCKET
-            $this->userService[$user_id] = $key;//user_id=>socket key，通过用户ID找到服务索引
-            $this->serviceUser[$key] = $user_id;//socket key=>user_id，通过服务索引找到用户ID
+        }
 
-            $this->user->login($user_id, compact('key'));
-            $this->response = [
-                'type' => self::USER_ONLINE,
-                'user' => $user,
-                'timestamp' => $this->timestamp,
-            ];
-            $this->sendAllMessage(); //欢迎消息
+        $this->response = [
+            'type' => self::USER_LOGIN,
+            'user' => $user,
+            'timestamp' => $this->timestamp,
+        ];
+        $this->sendMessage($key); //通知当前用户，已经登录
+        // 绑定用户ID与SOCKET
+        $this->user->addUserServiceRelation($user_id, $key);
+
+        $this->user->login($user_id);
+        $this->response = [
+            'type' => self::USER_ONLINE,
+            'user' => $user,
+            'timestamp' => $this->timestamp,
+        ];
+        $this->sendAllMessage(); //欢迎消息
 
 //            $this->flushUsers($key); //刷新在线用户列表
-        }
     }
 
     public function register($key) {
@@ -644,10 +603,12 @@ class Worker implements IClient {
     }
 
     public function sendMessage($key) {
+        $this->response['trace_id'] = $this->request['trace_id'] ?? '';
         $this->server->send($key, $this->encode($this->response));
     }
 
     public function sendAllMessage() {
+        $this->response['trace_id'] = $this->request['trace_id'] ?? '';
         $this->server->sendAll($this->encode($this->response));
     }
 
@@ -675,11 +636,8 @@ class Worker implements IClient {
      * @param $key
      */
     public function tearDown($user_id, $key) {
-        unset($this->userService[$user_id]);//注销服务
-        unset($this->serviceUser[$key]);//注销用户
-        $this->user->logout($user_id, [
-            'key' => '',
-        ]);
+        $this->user->delUserServiceRelation($user_id, $key);
+        $this->user->logout($user_id);
     }
 
     public function base64ToFile(&$base64, $flag = 'message') {
@@ -785,6 +743,7 @@ class Worker implements IClient {
     public function run($num = 1) {
         $this->user->connect();
         $this->user->flushOnline();
+        $this->user->flushUserServiceRelation();
         $this->server->run($num, function () {
             $this->user->connect();
         });
