@@ -7,22 +7,16 @@ WebSocket 聊天室
 cd docker
 docker build -t test/php7 .
 ```
-2. 修改默认docker配置`docker-compose.yml`中的目录映射
-3. 修改默认网站配置`nginx/www.conf`
-4. 启动服务
-```
-docker-compose up
-```
-4. 浏览器访问 index.html
+2. 修改默认docker配置 `docker-compose.yml` 中的目录映射
+3. 修改默认网站配置 `nginx/www.conf`
+4. 启动服务 `docker-compose up`
+5. 浏览器访问 index.html
 
 ## 常规安装
-1. PHP版本：7.0+
-2. 安装msgpack扩展，`pecl install msgpack`
-3. 安装Redis，请访问 https://redis.io/
-4. 安装libevent，`apt install libevent-dev`
-5. 安装event扩展，`pecl install event`
-6. 启动，`php Client.php -d -p 8080 -n 8`
-7. 浏览器访问 index.html
+1. 环境要求：Redis 2.6+、PHP 7.0+、libevent-dev、Apache/nginx
+2. 安装扩展 `pecl install msgpack redis event` 并添加到 `php.ini` 中
+3. 启动服务 `php Client.php -d -p 8080 -n 8`
+4. 浏览器访问 index.html
 
 ## 启动参数说明
 1. -d 后台运行
@@ -33,7 +27,7 @@ docker-compose up
 采用WebRTC技术，有以下要求：
 1. 网站以https协议访问
 2. 搭建turnserver实现NAT穿透，请访问 https://github.com/coturn/coturn/
-3. 修改`index.js`中的`iceServers`配置
+3. 修改 `index.js` 中的 `iceServers` 配置
 
 ## 支持的浏览器
 1. Chrome

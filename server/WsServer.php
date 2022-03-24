@@ -15,6 +15,8 @@ class WsServer implements IServer {
     const FRAME_OPCODE_PING = 0x9;
     const FRAME_OPCODE_PONG = 0xA;
     const FRAME_FIN_FINAL = 0b10000000;
+    const FRAME_STATUS_CODE_NORMAL = 1000;
+    const FRAME_STATUS_CODE_PROTOCOL_ERROR = 1002;
 
     const NOTIFY_TYPE_ON_OPEN = 0b1;
     const NOTIFY_TYPE_ON_CLOSE = 0b10;
@@ -23,7 +25,7 @@ class WsServer implements IServer {
 
     const CALL_TYPE_SEND_TO = 0b1;
     const CALL_TYPE_SEND_TO_ALL = 0b10;
-    const CALL_TYPE_NORMAL_CLOSE = 0b100;
+    const CALL_TYPE_PREPARE_CLOSE = 0b100;
 
     protected $notify_map = [
         self::NOTIFY_TYPE_ON_OPEN => 'onOpen',
@@ -35,7 +37,7 @@ class WsServer implements IServer {
     protected $call_map = [
         self::CALL_TYPE_SEND_TO => 'sendTo',
         self::CALL_TYPE_SEND_TO_ALL => 'sendToAll',
-        self::CALL_TYPE_NORMAL_CLOSE => 'normalClose',
+        self::CALL_TYPE_PREPARE_CLOSE => 'prepareClose',
     ];
 
     protected $debug = false; // 调试
@@ -63,6 +65,7 @@ class WsServer implements IServer {
      * @var \EventBufferEvent[]
      */
     protected $ready_connections = []; // 准备握手的服务
+    protected $wait_for_close = []; // 等待关闭的索引列表
     protected $max_index = 0; // 连接索引
     /**
      * @var \EventBufferEvent
@@ -180,6 +183,7 @@ class WsServer implements IServer {
                 if (!is_null($callback)) {
                     $callback();
                 }
+                cli_set_process_title('php: worker process ' . $i);
 
                 // 子进程：接收主进程程消息，处理业务。此处在每个不同的新子进程中执行1次
                 fclose($sockets[0]);
@@ -206,6 +210,7 @@ class WsServer implements IServer {
             }
         }
 
+        cli_set_process_title('php: master process ' . $this->target);
         // 主进程作用域，最终有1个主进程+n个子进程
         $this->debug('Listening on: ' . $this->target);
 
@@ -224,7 +229,7 @@ class WsServer implements IServer {
 
     public function close(int $key): void {
         $data = '';
-        $this->sendToChannel($this->work, self::CALL_TYPE_NORMAL_CLOSE, $key, $data);
+        $this->sendToChannel($this->work, self::CALL_TYPE_PREPARE_CLOSE, $key, $data);
     }
 
     /**
@@ -367,22 +372,22 @@ class WsServer implements IServer {
 
         $channel = $this->chooseChannel($index);
         if ($params['is_closed']) {
-            // 发送关闭帧
-            $close = $this->frame('', self::FRAME_OPCODE_CLOSE);
-            $bev->write($close);
+            if (isset($this->wait_for_close[$index])) {
+                $this->disConnect($index);
+                unset($this->wait_for_close[$index]);
+            } else {
+                $this->confirmClose($index);
 
-            // 关闭TCP连接
-            $this->disConnect($index);
+                // 通知事件
+                $data = '';
+                $this->sendToChannel($channel, self::NOTIFY_TYPE_ON_CLOSE, $index, $data);
+            }
 
-            // 通知事件
-            $data = '';
-            $this->sendToChannel($channel, self::NOTIFY_TYPE_ON_CLOSE, $index, $data);
             return;
         }
 
         if ($params['is_exception']) {
-            $close = $this->frame(pack('n', 1002) . 'Data parse error', self::FRAME_OPCODE_CLOSE);
-            $bev->write($close);
+            $this->prepareClose($index, self::FRAME_STATUS_CODE_PROTOCOL_ERROR, 'Data parse error');
             return;
         }
 
@@ -479,8 +484,8 @@ class WsServer implements IServer {
                 case self::CALL_TYPE_SEND_TO_ALL:
                     $this->sendToAll($data);
                     break;
-                case self::CALL_TYPE_NORMAL_CLOSE:
-                    $this->normalClose($index);
+                case self::CALL_TYPE_PREPARE_CLOSE:
+                    $this->prepareClose($index);
                     break;
             }
         }
@@ -540,6 +545,8 @@ class WsServer implements IServer {
     protected function sendToAll(string $msg): void {
         $msg = $this->frame($msg);
         foreach ($this->established_connections as $index => $bev) {
+            if (isset($this->wait_for_close[$index])) continue; // 即将关闭的忽略
+
             $this->doSend($bev, $index, $msg);
         }
     }
@@ -558,9 +565,19 @@ class WsServer implements IServer {
         unset($this->established_connections[$index]);
     }
 
-    protected function normalClose(int $index) {
+    protected function prepareClose(int $index, int $status_code = self::FRAME_STATUS_CODE_NORMAL, string $reason = '') {
         $bev = $this->established_connections[$index];
-        $bev and $bev->write($this->frame('', self::FRAME_OPCODE_CLOSE));
+        $bev and $bev->write($this->frame(pack('n', $status_code) . $reason, self::FRAME_OPCODE_CLOSE));
+        $this->wait_for_close[$index] = 1;
+    }
+
+    protected function confirmClose($index) {
+        // 发送关闭帧
+        $close = $this->frame(pack('n', self::FRAME_STATUS_CODE_NORMAL), self::FRAME_OPCODE_CLOSE);
+        $bev = $this->established_connections[$index];
+        $bev->write($close);
+
+        // 关闭TCP连接
         $this->disConnect($index);
     }
 

@@ -5,9 +5,11 @@ class User {
     /**
      * @var \Redis
      */
-    public $redis;
-    public $userSet = 'user';//在线用户ID集合
-    public $fileStore = 'file:md5'; //文件库:md5 => path
+    protected $redis;
+    protected $userSet = 'user';//在线用户ID集合
+    protected $fileStore = 'file:md5'; //文件库:md5 => path
+    protected $userService = 'user_service'; // user_id=>socket key
+    protected $serviceUser = 'service_user'; // socket key=>user_id
 
     public function __construct() {
 
@@ -39,7 +41,7 @@ class User {
             'is_active' => 1,
             'avatar' => '',
         ];
-        $user = array_merge($headers, $user);
+        $user += $headers;
         $hKey = 'user_id:' . $user_id;
         $res = $this->redis->hMset($hKey, $user);
         $key = 'username:' . $name;
@@ -178,5 +180,27 @@ class User {
 
     public function getFileByMd5($md5) {
         return $this->redis->hGet($this->fileStore, $md5);
+    }
+
+    public function addUserServiceRelation($user_id, $key) {
+        $this->redis->hSet($this->userService, $user_id, $key);
+        $this->redis->hSet($this->serviceUser, $key, $user_id);
+    }
+
+    public function getServiceKeyByUserId($user_id) {
+        return $this->redis->hGet($this->userService, $user_id);
+    }
+
+    public function getUserIdByServiceKey($key) {
+        return $this->redis->hGet($this->serviceUser, $key);
+    }
+
+    public function delUserServiceRelation($user_id, $key) {
+        $this->redis->hDel($this->userService, $user_id);
+        $this->redis->hDel($this->serviceUser, $key);
+    }
+
+    public function flushUserServiceRelation() {
+        $this->redis->del([$this->userService, $this->serviceUser]);
     }
 }

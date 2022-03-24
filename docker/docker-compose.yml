@@ -32,6 +32,8 @@ services:
       - TZ=Asia/Shanghai
     command: -f Client.php -- -p 8080 -n 8
     depends_on: [redis]
+    sysctls:
+      - net.core.somaxconn=40960
     volumes:
       - ./conf/php/local.ini:/usr/local/etc/php/conf.d/local.ini
       - /mnt/hgfs/project/chat:/home/

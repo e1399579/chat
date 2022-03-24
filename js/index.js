@@ -97,10 +97,9 @@ const SHOW_TIME_DURING = 300; //聊天窗口中显示时间的间隔
 const ANIMATE_DURING = 500; //聊天窗切换动画时长
 const FIRST_TIMESTAMP = (new Date()).getTime() / 1000;
 
-let audio = document.createElement("audio");
-audio.src = "./media/notification.ogg";
+let message_related = new Map(); // 与trace_id相关联的消息
+let audio = new Audio("./media/notification.ogg");
 audio.volume = 0;
-let music = document.createElement("audio");
 
 let socket = new WebSocket(SERVER_URL);
 socket.binaryType = 'arraybuffer'; //设为二进制的原始缓冲区
@@ -366,6 +365,10 @@ class DataHelper {
         }
         return target;
     }
+
+    static buildTraceId() {
+        return Math.random().toString(36).substr(2,10);
+    }
 }
 
 class ImageView {
@@ -412,11 +415,12 @@ class ImageView {
 let imageView = new ImageView();
 
 class Upload {
-    static sendMessage(type, receiver_id = 0, mess = "") {
+    static sendMessage(type, receiver_id = 0, mess = "", trace_id = "") {
         let defaults = {
             type: MESSAGE_COMMON,
             receiver_id: 0,
             mess: "",
+            trace_id: trace_id ? trace_id : DataHelper.buildTraceId(),
         };
         socket.send(DataHelper.encode(
             Object.assign(defaults, {
@@ -803,12 +807,12 @@ class MenuWindow {
             if (i.hasClass("fa-bell-o")) {
                 Util.toast("声音：关");
                 audio.volume = 0;
-                music.volume = 0;
+                MusicWindow.audio.volume = 0;
                 i.removeClass("fa-bell-o").addClass("fa-bell-slash-o");
             } else {
                 Util.toast("声音：开");
                 audio.volume = 1;
-                music.volume = 1;
+                MusicWindow.audio.volume = 1;
                 audio.play();
                 i.removeClass("fa-bell-slash-o").addClass("fa-bell-o");
             }
@@ -818,13 +822,17 @@ class MenuWindow {
 let menu = new MenuWindow();
 
 class LoginWindow {
+    static cache = null;
+
     constructor() {
-        if (!LoginWindow.cache) {
-            this.window = $("#register");
-            this.bindSubmit();
-            LoginWindow.cache = this;
-        }
-        return LoginWindow.cache;
+        this.window = $("#register");
+        this.bindSubmit();
+    }
+
+    static getInstance() {
+        if (this.cache) return this.cache;
+        this.cache = new this();
+        return this.cache;
     }
 
     display() {
@@ -978,11 +986,13 @@ image.init();
 image.bindUpload(menu.getUploadImageBtn());
 
 class MusicWindow {
+    static music_timer = 0;
+    static audio = new Audio();
+
     constructor() {
         this.type = MUSIC_COMMON;
         this.receiver_id = '0';
         this.size_m = MAX_MUSIC_SIZE / 1024 / 1024;
-        MusicWindow.music_timer = 0;
     }
 
     init() {
@@ -1035,48 +1045,53 @@ class MusicWindow {
         });
     }
 
+    static getDuring(second) {
+        let minute = Math.floor(second / 60);
+        let sec = Math.ceil(second - minute * 60);
+        minute = minute > 9 ? minute : '0' + minute;
+        sec = sec > 9 ? sec : '0' + sec;
+        return minute + ":" + sec;
+    }
+
+    static doPlay(progress, music_during) {
+        this.audio.currentTime = progress.attr("data-time"); //保留播放进度
+        this.audio.play().then(() => {
+            this.music_timer = window.setInterval(() => {
+                try {
+                    let percent = (this.audio.currentTime / this.audio.duration * 100);
+                    progress.val(percent);
+                    progress.attr("data-time", this.audio.currentTime);
+                    //计算时长
+                    music_during.text(this.getDuring(this.audio.currentTime) + "/" + this.getDuring(this.audio.duration));
+                    if (percent >= 100) {
+                        progress.attr("data-time", 0); //清零，下次重新播放
+                        clearInterval(this.music_timer);
+                    }
+                } catch (e) {
+                    Util.toast("播放失败，请稍候再试...");
+                    console.log(e);
+                    clearInterval(this.music_timer);
+                }
+            }, 200);
+        });
+    }
+
     static playMusic(btn, e) {
         e.stopPropagation(); //阻止冒泡事件
         let url = href + $(btn).attr("data-url");
         let progress = $(btn).children("progress");
         let music_during = $(btn).children(".music-during");
-        if (music.src !== url) {
-            clearInterval(MusicWindow.music_timer);
-            music.pause();
-            music.src = url;
+        if (this.audio.src !== url) {
+            clearInterval(this.music_timer);
+            this.audio.pause();
+            this.audio.src = url;
         }
 
-        function getDuring(second) {
-            let minute = Math.floor(second / 60);
-            let sec = Math.ceil(second - minute * 60);
-            minute = minute > 9 ? minute : '0' + minute;
-            sec = sec > 9 ? sec : '0' + sec;
-            return minute + ":" + sec;
-        }
-
-        if (music.paused) {
-            music.currentTime = progress.attr("data-time"); //保留播放进度
-            music.play();
-            MusicWindow.music_timer = window.setInterval(() => {
-                try {
-                    let percent = (music.currentTime / music.duration * 100);
-                    progress.val(percent);
-                    progress.attr("data-time", music.currentTime);
-                    //计算时长
-                    music_during.text(getDuring(music.currentTime) + "/" + getDuring(music.duration));
-                    if (percent >= 100) {
-                        progress.attr("data-time", 0); //清零，下次重新播放
-                        clearInterval(MusicWindow.music_timer);
-                    }
-                } catch (e) {
-                    Util.toast("播放失败，请稍候再试...");
-                    console.log(e);
-                    clearInterval(MusicWindow.music_timer);
-                }
-            }, 200);
+        if (this.audio.paused) {
+            this.doPlay(progress, music_during);
         } else {
-            music.pause();
-            clearInterval(MusicWindow.music_timer);
+            this.audio.pause();
+            clearInterval(this.music_timer);
         }
     }
 }
@@ -1117,11 +1132,8 @@ class VideoWindow {
         this.servers = {
             iceServers: [
                 {urls: "turn:chat.ridersam.cn:5349", credential: "1399579", username: "ridersam"},
+                {urls: "stun:stun.l.google.com:19302"},
                 {urls: "stun:stun1.l.google.com:19302"},
-                {urls: "stun:stun2.l.google.com:19302"},
-                {urls: "stun:stun3.l.google.com:19302"},
-                {urls: "stun:stun4.l.google.com:19302"},
-                {urls: "stun:stun.ekiga.net"}
             ]
         };
         this.peerConnection = {};
@@ -1583,18 +1595,65 @@ let videoWindow = new VideoWindow();
 videoWindow.init();
 
 class SingleWindow {
-    constructor(id, initCallBack = '') {
+    static windows = new Map();
+
+    constructor(id) {
         this.id = id;
         this.is_show = 0;
         this.is_multi = true;
         this.timer = 0;
-        this.message_type = MESSAGE_COMMON;
-        this.emotion_type = EMOTION_COMMON;
-        this.image_type = IMAGE_COMMON;
-        this.music_type = MUSIC_COMMON;
-        this.video_type = VIDEO_COMMON_REQUEST;
-        this.notify_type = VIDEO_COMMON_NOTIFY;
-        this.history_type = HISTORY_MESSAGE_COMMON;
+    }
+
+    static getInstance(id) {
+        if (this.windows.has(id)) return this.windows.get(id);
+        let window = new this(id);
+        window.init();
+        this.windows.set(id, window);
+        return window;
+    }
+
+    init() {
+        this.window = this.createWindow();
+        this.title_container = this.window.find(".chat-title");
+        this.content_container = this.window.find(".chat-content");
+        this.features_container = this.window.find(".chat-features");
+        this.back_btn = this.window.find(".btn-back");
+        this.mess_input = this.window.find(".mess-input");
+        this.mess_submit = this.window.find(".mess-submit");
+        this.video_btn = this.window.find(".btn-video");
+        this.more_btn = this.window.find(".btn-more");
+        this.query_history_btn = this.window.find(".query-history");
+        this.query_time = 0;
+        //绑定事件
+        this.back_btn.bind("click", this.hide.bind(this));
+
+        //表情展示
+        emotion.bindToggle(this.window.find(".btn-emotion"), this.window);
+        emotion.bindClose(this.content_container, this.window);
+
+        //发送消息
+        this.bindSubmit();
+
+        //历史查询
+        this.bindQuery();
+
+        //菜单展示
+        menu.bindToggle(this.more_btn, this);
+        menu.bindHide(this.back_btn, this);
+        menu.bindHide(this.content_container, this);
+
+        //上传头像
+
+        //上传图片
+
+        //视频聊天
+        this.bindVideo();
+
+        //粘贴图片、刷新尺寸
+        this.bindInput();
+
+        //键盘发送
+        this.bindKeyboard();
     }
 
     getWindowId() {
@@ -1603,56 +1662,6 @@ class SingleWindow {
 
     getWindow() {
         return $(`#${this.window_id}`);
-    }
-
-    initWindow(initCallBack = '') {
-        if (this.getWindow().length <= 0) {
-            this.window = this.createWindow();
-            this.title_container = this.window.find(".chat-title");
-            this.content_container = this.window.find(".chat-content");
-            this.features_container = this.window.find(".chat-features");
-            this.back_btn = this.window.find(".btn-back");
-            this.mess_input = this.window.find(".mess-input");
-            this.mess_submit = this.window.find(".mess-submit");
-            this.video_btn = this.window.find(".btn-video");
-            this.more_btn = this.window.find(".btn-more");
-            this.query_history_btn = this.window.find(".query-history");
-            this.query_time = 0;
-            //绑定事件
-            this.back_btn.bind("click", this.hide.bind(this));
-
-            //表情展示
-            emotion.bindToggle(this.window.find(".btn-emotion"), this.window);
-            emotion.bindClose(this.content_container, this.window);
-
-            //发送消息
-            this.bindSubmit();
-
-            //历史查询
-            this.bindQuery();
-
-            //菜单展示
-            menu.bindToggle(this.more_btn, this);
-            menu.bindHide(this.back_btn, this);
-            menu.bindHide(this.content_container, this);
-
-            //上传头像
-
-            //上传图片
-
-            //视频聊天
-            this.bindVideo();
-
-            //粘贴图片、刷新尺寸
-            this.bindInput();
-
-            //键盘发送
-            this.bindKeyboard();
-
-            if (initCallBack) {
-                initCallBack(this);
-            }
-        }
     }
 
     createWindow() {
@@ -1856,8 +1865,8 @@ class SingleWindow {
 
 //私人窗口
 class PersonWindow extends SingleWindow {
-    constructor(id, initCallBack = '') {
-        super(id, initCallBack);
+    constructor(id) {
+        super(id);
         this.container = $(".chat-box");
         this.template_name = "person_window";
 
@@ -1870,17 +1879,6 @@ class PersonWindow extends SingleWindow {
         this.video_type = VIDEO_PERSONAL_REQUEST;
         this.notify_type = VIDEO_PERSONAL_NOTIFY;
         this.history_type = HISTORY_MESSAGE_PERSONAL;
-
-        this.initWindow(initCallBack);
-
-        if (!PersonWindow.windows) {
-            PersonWindow.windows = new Map();
-        }
-
-        if (!PersonWindow.windows.has(id)) {
-            PersonWindow.windows.set(id, this);
-        }
-        return PersonWindow.windows.get(id);
     }
 
     flushTitle(user, is_online = 1) {
@@ -1896,9 +1894,9 @@ class PersonWindow extends SingleWindow {
 
     static toShow(btn) {
         let id = $(btn).data("id");
-        let singleWindow = new PersonWindow(id);
-        let singleWindow2 = new CommonWindow('0');
-        let box = new MessageListWindow('0');
+        let singleWindow = PersonWindow.getInstance(id);
+        let singleWindow2 = CommonWindow.getInstance('0');
+        let box = MessageListWindow.getInstance('0');
         singleWindow.showEvent(box);
         singleWindow.display();
 
@@ -1909,8 +1907,8 @@ class PersonWindow extends SingleWindow {
 
 //公共窗口，群聊(多个群ID)
 class CommonWindow extends SingleWindow {
-    constructor(id, initCallBack = '') {
-        super(id, initCallBack);
+    constructor(id) {
+        super(id);
         this.container = $(".chat-room-box");
         this.template_name = "common_window";
 
@@ -1918,21 +1916,11 @@ class CommonWindow extends SingleWindow {
         this.window_id = `room_${id}`;
         this.message_type = MESSAGE_COMMON;
         this.emotion_type = EMOTION_COMMON;
+        this.image_type = IMAGE_COMMON;
         this.music_type = MUSIC_COMMON;
         this.video_type = VIDEO_COMMON_REQUEST;
         this.notify_type = VIDEO_COMMON_NOTIFY;
         this.history_type = HISTORY_MESSAGE_COMMON;
-
-        this.initWindow(initCallBack);
-
-        if (!CommonWindow.windows) {
-            CommonWindow.windows = new Map();
-        }
-
-        if (!CommonWindow.windows.has(id)) {
-            CommonWindow.windows.set(id, this);
-        }
-        return CommonWindow.windows.get(id);
     }
 
     flushTitle(group) {
@@ -2001,58 +1989,42 @@ class Box {
 
 //消息列表窗口
 class MessageListWindow extends Box {
-    constructor(id, initCallBack = '') {
+    static windows = new Map();
+
+    constructor(id) {
         super();
         this.window = $(".main-box");
         this.container = $(".message-list");
         this.template_name = "message_list_item";
         this.item_id = `item_${id}`;
         this.name = '消息';
-        this.initWindow(initCallBack);
+        this.total = 0;
+        this.unread = 0;
+        this.item = this.createItem();
+        this.head_container = this.item.find(".message-head");
+        this.title_container = this.item.find(".message-title");
+        this.time_container = this.item.find(".message-time");
+        this.badge_container = this.item.find(".message-badge");
+        this.last_container = this.item.find(".message-last");
+    }
 
-        if (!MessageListWindow.total) {
-            MessageListWindow.total = 0;
-        }
-
-        if (!MessageListWindow.windows) {
-            MessageListWindow.windows = new Map();
-        }
-
-        if (!MessageListWindow.windows.has(id)) {
-            MessageListWindow.windows.set(id, this);
-        }
-        return MessageListWindow.windows.get(id);
+    static getInstance(id, singleWindow = null) {
+        if (this.windows.has(id)) return this.windows.get(id);
+        let window = new this(id);
+        window.bindClick(singleWindow);
+        this.windows.set(id, window);
+        return window;
     }
 
     getWindowId() {
         return this.item_id;
     }
 
-    getWindow() {
-        return this.window;
-    }
-
     getItem() {
         return $(`#${this.item_id}`);
     }
 
-    initWindow(initCallBack = '') {
-        if (this.getItem().length <= 0) {
-            this.unread = 0;
-            this.item = this.createWindow();
-            this.head_container = this.item.find(".message-head");
-            this.title_container = this.item.find(".message-title");
-            this.time_container = this.item.find(".message-time");
-            this.badge_container = this.item.find(".message-badge");
-            this.last_container = this.item.find(".message-last");
-
-            if (initCallBack) {
-                initCallBack(this);
-            }
-        }
-    }
-
-    createWindow() {
+    createItem() {
         let search = ["%ID%"];
         let replace = [this.item_id];
         let html = templates.get(this.template_name).replaceMulti(search, replace);
@@ -2065,12 +2037,12 @@ class MessageListWindow extends Box {
     }
 
     getName() {
-        let unread = MessageListWindow.total;
+        let unread = this.total;
         return unread ? `${this.name}(${unread})` : this.name;
     }
 
     clearUnread() {
-        MessageListWindow.total -= this.unread;
+        this.total -= this.unread;
         this.unread = 0;
         this.badge_container.addClass("hidden").text("");
     }
@@ -2080,17 +2052,21 @@ class MessageListWindow extends Box {
     }
 
     flushTitle(user, mess) {
+        this.flushUser(user);
         let message = mess.message ? mess.message : '';
-        let html = user.avatar ? '<img src="' + user.avatar + '" />' : '<img src="./images/chat.png" />';
         let time = (new Date(mess.timestamp * 1000)).getTimeString();
-        this.head_container.html(html);
-        this.title_container.text(user.username);
         this.time_container.text(time);
         this.last_container.text(message.substr(0, 20));
     }
 
+    flushUser(user) {
+        let html = user.avatar ? '<img src="' + user.avatar + '" />' : '<img src="./images/chat.png" />';
+        this.head_container.html(html);
+        this.title_container.text(user.username);
+    }
+
     flushItemNum() {
-        MessageListWindow.total++;
+        this.total++;
         this.unread++;
         this.badge_container.removeClass("hidden").text(this.unread);
     }
@@ -2107,12 +2083,8 @@ class ContactsWindow extends Box {
         this.template_name = (this.role_id > 0) ?
             "contact_list_admin" : "contact_list_user";
         this.search = ["%ID%", "%USERNAME%", "%USER_STATUS%", "%SIGN%", "%AVATAR%"];
-        if (!ContactsWindow.total) {
-            ContactsWindow.total = 0;
-        }
-        if (!ContactsWindow.ids) {
-            ContactsWindow.ids = new Set();
-        }
+        this.ids = new Set();
+        this.total = 0;
     }
 
     getItemId(id) {
@@ -2131,8 +2103,8 @@ class ContactsWindow extends Box {
     }
 
     clear() {
-        ContactsWindow.total = 0;
-        ContactsWindow.ids = new Set();
+        this.total = 0;
+        this.ids = new Set();
         this.container.html(""); //清空列表
     }
 
@@ -2141,12 +2113,18 @@ class ContactsWindow extends Box {
     }
 
 
-    flushUser(user) {
-
+    flushUser(user, is_online = 1) {
+        let user_id = user.user_id;
+        if (this.isExists(user_id)) {
+            this.moveUser(user_id, 1);
+        } else {
+            this.addUser(user, true);
+        }
+        this.flushUserStatus(user_id, is_online);
     }
 
     addUser(user, prepend=false) {
-        ContactsWindow.total++;
+        this.total++;
         let user_id = user.user_id;
         let id = this.getItemId(user_id);
         let username = user.username;
@@ -2160,9 +2138,9 @@ class ContactsWindow extends Box {
         else
             this.container.append(html);
 
-        ContactsWindow.ids.add(user_id);
+        this.ids.add(user_id);
 
-        let window = new PersonWindow(user_id);
+        let window = PersonWindow.getInstance(user_id);
         this.bindClick(window, id);
 
         //移除按钮
@@ -2216,8 +2194,8 @@ class ContactsWindow extends Box {
         item.find(".user-status").text(user_status);
     }
 
-    static isExists(user_id) {
-        return ContactsWindow.ids.has(user_id);
+    isExists(user_id) {
+        return this.ids.has(user_id);
     }
 }
 
@@ -2328,9 +2306,6 @@ class MyZoneWindow extends Box {
         this.avatar_container.attr("src", '.' + avatar);
     }
 }
-let myZoneWindow = new MyZoneWindow();
-myZoneWindow.init();
-
 
 //=======================通知、观察者======================
 class SplSubject {
@@ -2380,18 +2355,15 @@ class Observer {
 //用户观察者，监测用户信息变化、存储用户信息
 class UserObserver extends Observer {
     static online_total = 0;
+    static waiting_for_query = new Set();
+    static users = new Map();
+    static online_users = new Set();
+
     constructor() {
         super();
         this.storage = localStorage;
         this.version = null;
-        if (!UserObserver.users) {
-            UserObserver.users = new Map();
-            this.initCache();
-        }
-
-        if (!UserObserver.online_users) {
-            UserObserver.online_users = new Set();
-        }
+        this.initCache();
     }
 
     update(splSubject) {
@@ -2422,7 +2394,9 @@ class UserObserver extends Observer {
                 });
                 break;
             case USER_QUERY:
-                this.addUser(mess.user);
+                user = mess.user;
+                this.addUser(user);
+                if (mess.is_online) UserObserver.online(user.user_id);
                 break;
             case USER_AVATAR_SUCCESS:
                 let update = {avatar: mess.mess};
@@ -2439,9 +2413,14 @@ class UserObserver extends Observer {
                 this.flushUser(USER);
                 Util.loading(mess.mess, false, false);
                 break;
+            case MESSAGE_OTHER:
+            case IMAGE_OTHER:
+            case EMOTION_OTHER:
+            case MUSIC_OTHER:
+                UserObserver.online(mess.sender_id);
+                break;
             default:
                 return;
-                break;
         }
     }
 
@@ -2490,47 +2469,53 @@ class UserObserver extends Observer {
     }
 
     static getUser(user_id) {
-        let user = UserObserver.users.get(user_id);
-        if (!user) {
-            //查询用户信息
-            Upload.sendMessage(USER_QUERY, user_id);
-            user = false;
+        if (user_id === USER.user_id) return USER;
+
+        let user = this.users.get(user_id);
+        if (user) {
+            this.waiting_for_query.delete(user_id);
+            return user;
         }
-        return user;
+        if (!this.waiting_for_query.has(user_id)) {
+            // 查询用户信息
+            Upload.sendMessage(USER_QUERY, user_id, "", user_id);
+            this.waiting_for_query.add(user_id);
+        }
+        return false;
     }
 
     static isOnline(user_id) {
-        return UserObserver.online_users.has(user_id);
+        return this.online_users.has(user_id);
     }
 
     static online(user_id) {
-        UserObserver.online_users.add(user_id);
+        this.online_users.add(user_id);
     }
 
     static downline(user_id) {
-        UserObserver.online_users.delete(user_id);
+        this.online_users.delete(user_id);
     }
 
     static total() {
         // return UserObserver.online_users.size; //算上本人
-        return UserObserver.online_total;
+        return this.online_total;
     }
 
     static clear() {
-        UserObserver.online_users.clear();
-        UserObserver.users.clear();
+        this.online_users.clear();
+        this.users.clear();
     }
 
     static getUsers(delete_me = true) {
         let users = new Map();
         let sort_list = [];
-        UserObserver.users.forEach((value, key) => {
+        this.users.forEach((value, key) => {
             users.set(key, value);
         });
         if (delete_me) {
             users.delete(USER.user_id); //用副本操作，不影响原来的
         }
-        for (let user_id of UserObserver.online_users) {
+        for (let user_id of this.online_users) {
             if (users.has(user_id)) {
                 sort_list.push(users.get(user_id));
                 users.delete(user_id);
@@ -2543,7 +2528,7 @@ class UserObserver extends Observer {
     }
 
     static isExists(user_id) {
-        return UserObserver.users.has(user_id);
+        return this.users.has(user_id);
     }
 }
 
@@ -2560,97 +2545,95 @@ class MessageListObserver extends Observer {
             case MESSAGE_SELF://myself @other
                 user = mess.receiver;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 mess.message = mess.mess;
                 break;
             case IMAGE_SELF://myself @other
                 user = mess.receiver;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 mess.message = "[图片]";
                 break;
             case EMOTION_SELF:
                 user = mess.receiver;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 mess.message = "[表情]";
                 break;
             case MUSIC_SELF:
                 user = mess.receiver;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 mess.message = `[音乐]${mess.name}`;
                 break;
             case MESSAGE_OTHER://other @me
                 user = mess.sender;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 mess.message = mess.mess;
                 break;
             case IMAGE_OTHER://other @me
                 user = mess.sender;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 mess.message = "[图片]";
                 break;
             case EMOTION_OTHER:
                 user = mess.sender;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 mess.message = "[表情]";
                 break;
             case MUSIC_OTHER:
                 user = mess.sender;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 mess.message = `[音乐]${mess.name}`;
                 break;
 
             case USER_ONLINE://欢迎消息
                 id = '0';
-                singleWindow = new CommonWindow(id);
+                singleWindow = CommonWindow.getInstance(id);
                 decorator = new WelcomeDecorator(new OriginalMessage(templates.get("welcome_text")));
                 mess.message = decorator.process(mess);
                 break;
             case USER_QUIT://退出消息
                 id = '0';
-                singleWindow = new CommonWindow(id);
+                singleWindow = CommonWindow.getInstance(id);
                 decorator = new WelcomeDecorator(new OriginalMessage(templates.get("quit_text")));
                 mess.message = decorator.process(mess);
                 break;
             case USER_DOWNLINE:
                 id = '0';
-                singleWindow = new CommonWindow(id);
+                singleWindow = CommonWindow.getInstance(id);
                 decorator = new NormalMessageDecorator(new OriginalMessage(templates.get("original_text")));
                 mess.message = decorator.process(mess);
                 break;
+
             case MESSAGE_COMMON://公共消息
                 id = '0';
-                singleWindow = new CommonWindow(id);
+                singleWindow = CommonWindow.getInstance(id);
                 mess.message = `${mess.sender.username}:${mess.mess}`;
                 break;
             case IMAGE_COMMON://公共消息
                 id = '0';
-                singleWindow = new CommonWindow(id);
+                singleWindow = CommonWindow.getInstance(id);
                 mess.message = `${mess.sender.username}:[图片]`;
                 break;
             case EMOTION_COMMON:
                 id = '0';
-                singleWindow = new CommonWindow(id);
+                singleWindow = CommonWindow.getInstance(id);
                 mess.message = `${mess.sender.username}:[表情]`;
                 break;
             case MUSIC_COMMON:
                 id = '0';
-                singleWindow = new CommonWindow(id);
+                singleWindow = CommonWindow.getInstance(id);
                 mess.message = `${mess.sender.username}:[音乐]${mess.name}`;
                 break;
             default:
                 return;
-                break;
         }
-        let messageList = new MessageListWindow(id, (messageListWindow) => {
-            messageListWindow.bindClick(singleWindow);
-        });
+        let messageList = MessageListWindow.getInstance(id, singleWindow);
         if (id === '0') user = {username: "大厅"};
         messageList.flushTitle(user, mess);
         if (!singleWindow.isShow()) {
@@ -2675,7 +2658,7 @@ class CommonWindowObserver extends Observer {
         let is_image = false;
         user = mess.sender || mess.user;
         id = '0';
-        commonWindow = new CommonWindow(id);
+        commonWindow = CommonWindow.getInstance(id);
         window_id = commonWindow.getWindowId();
         is_self = user && (user.user_id === USER.user_id);
         switch (splSubject.type) {
@@ -2699,7 +2682,6 @@ class CommonWindowObserver extends Observer {
             case USER_LIST:
                 commonWindow.flushTotal(UserObserver.total());
                 return;
-                break;
             case MESSAGE_COMMON://公共消息
                 commonWindow.flushTotal(UserObserver.total());
                 template = is_self ? templates.get("my_message") : templates.get("common_message");
@@ -2727,7 +2709,6 @@ class CommonWindowObserver extends Observer {
                 break;
             default:
                 return;
-                break;
         }
 
         if (decorator) content = decorator.process(mess);
@@ -2766,30 +2747,27 @@ class PersonWindowObserver extends Observer {
             case USER_QUERY:
                 user = mess.user;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 singleWindow.flushTitle(user, UserObserver.isOnline(id));
                 return;
-                break;
             case USER_QUIT:
                 user = mess.user;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 singleWindow.flushStatus(0);
                 return;
-                break;
             case USER_LIST:
                 let users = UserObserver.getUsers();
                 for (let user of users) {
                     id = user.user_id;
-                    singleWindow = new PersonWindow(id);
+                    singleWindow = PersonWindow.getInstance(id);
                     singleWindow.flushTitle(user, UserObserver.isOnline(id));
                 }
                 return;
-                break;
             case MESSAGE_SELF://myself @other
                 user = mess.receiver;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 window_id = singleWindow.getWindowId();
                 template = templates.get("self_message");
                 decorator = new PersonBubbleDecorator(new AvatarDecorator(new ParseCodeDecorator(new TimeTextMessage(template, window_id, this.is_history))));
@@ -2798,7 +2776,7 @@ class PersonWindowObserver extends Observer {
             case IMAGE_SELF://myself @other
                 user = mess.receiver;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 window_id = singleWindow.getWindowId();
                 template = templates.get("self_message");
                 decorator = new PersonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username, 1)));
@@ -2809,7 +2787,7 @@ class PersonWindowObserver extends Observer {
             case EMOTION_SELF:
                 user = mess.receiver;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 window_id = singleWindow.getWindowId();
                 template = templates.get("self_message");
                 decorator = new PersonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username)));
@@ -2819,7 +2797,7 @@ class PersonWindowObserver extends Observer {
             case MESSAGE_OTHER://other @me
                 user = mess.sender;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 window_id = singleWindow.getWindowId();
                 template = templates.get("private_message");
                 decorator = new PersonBubbleDecorator(new AvatarDecorator(new ParseCodeDecorator(new TimeTextMessage(template, window_id, this.is_history))));
@@ -2829,7 +2807,7 @@ class PersonWindowObserver extends Observer {
             case IMAGE_OTHER://other @me
                 user = mess.sender;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 window_id = singleWindow.getWindowId();
                 template = templates.get("private_message");
                 decorator = new PersonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username, 1)));
@@ -2841,7 +2819,7 @@ class PersonWindowObserver extends Observer {
             case EMOTION_OTHER:
                 user = mess.sender;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 window_id = singleWindow.getWindowId();
                 template = templates.get("private_message");
                 decorator = new PersonBubbleDecorator(new AvatarDecorator(new ImageDecorator(new TimeTextMessage(template, window_id, this.is_history), user.username)));
@@ -2852,7 +2830,7 @@ class PersonWindowObserver extends Observer {
             case MUSIC_SELF:
                 user = mess.receiver;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 window_id = singleWindow.getWindowId();
                 template = templates.get("self_message");
                 decorator = new PersonBubbleDecorator(new AvatarDecorator(new MusicDecorator(new TimeTextMessage(template, window_id, this.is_history))));
@@ -2860,7 +2838,7 @@ class PersonWindowObserver extends Observer {
             case MUSIC_OTHER:
                 user = mess.sender;
                 id = user.user_id;
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 window_id = singleWindow.getWindowId();
                 template = templates.get("private_message");
                 decorator = new PersonBubbleDecorator(new AvatarDecorator(new MusicDecorator(new TimeTextMessage(template, window_id, this.is_history))));
@@ -2869,7 +2847,6 @@ class PersonWindowObserver extends Observer {
                 break;
             default:
                 return;
-                break;
         }
         content = decorator.process(mess);
         if (this.is_history) {
@@ -2888,7 +2865,7 @@ class PersonWindowObserver extends Observer {
             imageView.preview(singleWindow, this.is_history);
         }
 
-        user = UserObserver.getUser(id);
+        // user = UserObserver.getUser(id);
         let is_online = UserObserver.isOnline(id);
         singleWindow.flushTitle(user, is_online);
     }
@@ -2916,7 +2893,7 @@ class LoginWindowObserver extends Observer {
 
     update(splSubject) {
         let mess = splSubject.getData();
-        let window = new LoginWindow();
+        let window = LoginWindow.getInstance();
         switch (splSubject.type) {
             case USER_REGISTER://需要注册
                 window.display();
@@ -2931,19 +2908,25 @@ class LoginWindowObserver extends Observer {
                 break;
             default:
                 return;
-                break;
         }
     }
 }
 
 //联系人
 class ContactsWindowObserver extends Observer {
+    static window = new ContactsWindow();
+    static is_flush = true;
+
     constructor() {
         super();
+
+        if (ContactsWindowObserver.is_flush) {
+            ContactsWindowObserver.window.flushList(UserObserver.getUsers());
+            ContactsWindowObserver.is_flush = false;
+        }
     }
 
     update(splSubject) {
-        let contactsWindow = new ContactsWindow();;
         let mess = splSubject.getData();
         let users, user, user_id;
         switch (splSubject.type) {
@@ -2951,25 +2934,27 @@ class ContactsWindowObserver extends Observer {
             case USER_DOWNLINE:
             case USER_REMOVE:
                 users = UserObserver.getUsers();
-                contactsWindow.flushList(users);
+                ContactsWindowObserver.window.flushList(users);
                 break;
             case USER_QUIT:
                 //刷新用户状态
                 user = mess.user;
                 user_id = user.user_id;
-                contactsWindow.flushUserStatus(user_id, 0);
-                contactsWindow.moveUser(user_id, 0);
+                ContactsWindowObserver.window.flushUserStatus(user_id, 0);
+                ContactsWindowObserver.window.moveUser(user_id, 0);
                 break;
             case USER_ONLINE:
                 user = mess.user;
                 user_id = user.user_id;
                 if (user_id === USER.user_id) return;
-                contactsWindow.flushUserStatus(user_id, 1);
-                if (ContactsWindow.isExists(user_id)) {
-                    contactsWindow.moveUser(user_id, 1);
-                } else {
-                    contactsWindow.addUser(user, true);
-                }
+                ContactsWindowObserver.window.flushUser(user, 1);
+                break;
+            case MESSAGE_OTHER:
+            case IMAGE_OTHER:
+            case EMOTION_OTHER:
+            case MUSIC_OTHER:
+                user = mess.sender;
+                ContactsWindowObserver.window.flushUser(user, 1);
                 break;
             case ERROR://出错
             case WARNING://警告
@@ -2981,7 +2966,6 @@ class ContactsWindowObserver extends Observer {
                 break;
             default:
                 return;
-                break;
         }
     }
 }
@@ -2991,14 +2975,19 @@ class MyZoneWindowObserver extends Observer {
         super();
     }
 
+    static {
+        this.window = new MyZoneWindow();
+        this.window.init();
+    }
+
     update(splSubject) {
         let mess = splSubject.getData();
         switch (splSubject.type) {
             case USER_LOGIN:
-                myZoneWindow.flushUserInfo(mess.user);
+                MyZoneWindowObserver.window.flushUserInfo(mess.user);
                 break;
             case USER_AVATAR_SUCCESS:
-                myZoneWindow.flushUserAvatar(mess.mess);
+                MyZoneWindowObserver.window.flushUserAvatar(mess.mess);
                 avatar.hide();
                 Util.toast("上传成功，发消息试试吧;-)");
                 //TODO 更新多个窗口头像：消息列表、对话窗口
@@ -3060,14 +3049,12 @@ class VideoWindowObserver extends Observer {
                 break;
             default:
                 return;
-                break;
         }
     }
 }
 
 class MessageHelper {
     constructor() {
-        MessageHelper.queue = [];
         MessageHelper.times = 0;
         MessageHelper.limit_times = 3;
         MessageHelper.userObserver = new UserObserver();
@@ -3078,7 +3065,7 @@ class MessageHelper {
         if (typeof USER === 'object') {
             Upload.sendMessage(USER_LOGIN);
         } else {
-            let window = new LoginWindow();
+            let window = LoginWindow.getInstance();
             window.display();
         }
     }
@@ -3130,11 +3117,12 @@ class MessageHelper {
     onMessage(message) {
         let mess = DataHelper.decode(message.data);
         let id = mess.receiver_id;
+        let trace_id = mess.trace_id;
         let singleWindow, list;
         switch (mess.type) {
             case HISTORY_MESSAGE_COMMON:
                 list = mess.mess;
-                singleWindow = new CommonWindow(id);
+                singleWindow = CommonWindow.getInstance(id);
                 if (list.length <= 0) {
                     //singleWindow.flushQueryTime();
                     singleWindow.delQueryBtn();
@@ -3151,7 +3139,7 @@ class MessageHelper {
                 for (let one of list) {
                     MessageHelper.doOnMessage(one, 1);
                 }
-                singleWindow = new PersonWindow(id);
+                singleWindow = PersonWindow.getInstance(id);
                 if (list.length <= 0) {
                     //singleWindow.flushQueryTime();
                     singleWindow.delQueryBtn();
@@ -3163,31 +3151,45 @@ class MessageHelper {
                 MessageHelper.doOnMessage(mess);
         }
 
-
-        if ((MessageHelper.queue.length > 0) && (MessageHelper.times < MessageHelper.limit_times)) {
-            MessageHelper.times++;
-            MessageHelper.doOnMessage(MessageHelper.delQueue());
+        if (message_related.has(trace_id)) {
+            let list = message_related.get(trace_id);
+            for (let [mess, is_history] of list) {
+                MessageHelper.doOnMessage(mess, is_history);
+            }
+            message_related.delete(trace_id);
         }
     }
 
     static doOnMessage(mess, is_history = 0) {
         let notifier = new MessageNotifier(mess);
-        let res = true;
         notifier.attach(MessageHelper.userObserver);
         notifier.notify();
         notifier.detach(MessageHelper.userObserver);
 
         if (mess.hasOwnProperty("sender_id")) {
-            res = mess.sender = UserObserver.getUser(mess.sender_id);
+            let trace_id = mess.sender_id;
+            let user = UserObserver.getUser(mess.sender_id);
+            if (user) {
+                mess.sender = user;
+            } else {
+                let list = message_related.has(trace_id) ? message_related.get(trace_id) : [];
+                list.push([mess, is_history]);
+                message_related.set(trace_id, list);
+                return;
+            }
         }
 
         if (mess.hasOwnProperty("receiver_id") && mess.receiver_id !== '0') {
-            res = mess.receiver = UserObserver.getUser(mess.receiver_id);
-        }
-
-        if (!res) {
-            MessageHelper.addQueue(mess);
-            return;
+            let trace_id = mess.receiver_id;
+            let user = UserObserver.getUser(mess.receiver_id);
+            if (user) {
+                mess.receiver = user;
+            } else {
+                let list = message_related.has(trace_id) ? message_related.get(trace_id) : [];
+                list.push([mess, is_history]);
+                message_related.set(trace_id, list);
+                return;
+            }
         }
 
         if (!is_history) {
@@ -3202,14 +3204,6 @@ class MessageHelper {
         notifier.attach(new CommonWindowObserver(is_history));
 
         notifier.notify();
-    }
-
-    static addQueue(message) {
-        return MessageHelper.queue.push(message);
-    }
-
-    static delQueue() {
-        return MessageHelper.queue.shift();
     }
 }
 
