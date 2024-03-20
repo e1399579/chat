@@ -43,9 +43,10 @@ interface IServer {
     /**
      * 给所有完成握手的客户端发送消息
      * @param string $msg
+     * @param int $priority
      * @return void
      */
-    public function sendAll(string $msg): void;
+    public function sendAll(string $msg, int $priority = 10): void;
 
     /**
      * 开始运行

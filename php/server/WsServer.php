@@ -18,6 +18,9 @@ class WsServer implements IServer {
     const FRAME_STATUS_CODE_NORMAL = 1000;
     const FRAME_STATUS_CODE_PROTOCOL_ERROR = 1002;
 
+    const TASK_TIMEOUT_SPARE = 1;
+    const TASK_TIMEOUT_BUSY = 5;
+
     const NOTIFY_TYPE_ON_OPEN = 0b1;
     const NOTIFY_TYPE_ON_CLOSE = 0b10;
     const NOTIFY_TYPE_ON_MESSAGE = 0b100;
@@ -84,14 +87,29 @@ class WsServer implements IServer {
     protected $sockets = []; // 主进程管道socket
     protected $frame_meta_pool = []; // 帧结构元数据，列表
     protected $buffers = []; // 数据缓冲，列表
+    protected $all_messages = []; // 将要发送的全部消息列表
+    /**
+     * @var \Event
+     */
+    protected $timer; // 定时器
+    protected $child_pids = []; // 子进程PID
+    protected $max_per_sent_bytes; // 每秒最大传送字节数
+    protected $packet_header_size = 20 + 20; // IP+TCP
 
-    public function __construct($port, array $ssl = []) {
+    /**
+     * @param int $port
+     * @param array $ssl
+     * @param int $bandwidth // 网络带宽 Mbps
+     */
+    public function __construct(int $port, array $ssl = [], $bandwidth = 100) {
         $this->checkEnvironment();
+
+        $this->max_per_sent_bytes = ($bandwidth / 8 * 1024 ** 2) | 0;
 
         $path = './logs/socket';
         $this->logger = Logger::getInstance($path);
         $this->frame_max_length = 2 ** 32;
-        ini_set('memory_limit', '2G');
+        ini_set('memory_limit', '8G');
         $this->storage = new \SplObjectStorage();
 
         $this->ctx = null;
@@ -160,6 +178,7 @@ class WsServer implements IServer {
                 throw new \RuntimeException('could not fork');
             }
             if ($pid) {
+                $this->child_pids[] = $pid;
                 // 主进程：管理全部通道，传递消息，并接收子进程消息（调用）。此处在主进程中执行N次
                 // 注意：需要保留socket和bev，否则将立即停止
                 fclose($sockets[1]);
@@ -171,7 +190,7 @@ class WsServer implements IServer {
                     \EventBufferEvent::OPT_CLOSE_ON_FREE
                 );
 
-                $this->setEventOption($bev, 10, 7);
+                $this->setEventOption($bev, 10, 7, 0);
                 $bev->setCallbacks(
                     [$this, 'masterReadCallback'],
                     NULL,
@@ -183,7 +202,8 @@ class WsServer implements IServer {
                 if (!is_null($callback)) {
                     $callback();
                 }
-                cli_set_process_title('php: worker process ' . $i);
+                $title = 'php: worker process ' . $i;
+                cli_set_process_title($title);
 
                 // 子进程：接收主进程程消息，处理业务。此处在每个不同的新子进程中执行1次
                 fclose($sockets[0]);
@@ -196,7 +216,7 @@ class WsServer implements IServer {
                     \EventBufferEvent::OPT_CLOSE_ON_FREE
                 );
 
-                $this->setEventOption($bev, 10, 7);
+                $this->setEventOption($bev, 10, 8, 0);  // 内部IPC最小数据是8字节
                 $bev->setCallbacks(
                     [$this, 'workReadCallback'],
                     NULL,
@@ -224,6 +244,10 @@ class WsServer implements IServer {
         );
         $this->listener->setErrorCallback([$this, "acceptError"]);
 
+        // 定时器
+        $this->timer = \Event::timer($this->base, [$this, "smoothlySendToAll"]);
+        $this->timer->add(self::TASK_TIMEOUT_SPARE);
+
         $this->base->dispatch();
     }
 
@@ -242,9 +266,9 @@ class WsServer implements IServer {
         $this->sendToChannel($this->work, self::CALL_TYPE_SEND_TO, $key, $msg);
     }
 
-    public function sendAll(string $msg): void {
+    public function sendAll(string $msg, int $priority = 10): void {
         // 发给主进程
-        $this->sendToChannel($this->work, self::CALL_TYPE_SEND_TO_ALL, 0, $msg);
+        $this->sendToChannel($this->work, self::CALL_TYPE_SEND_TO_ALL, 0, $msg, $priority);
     }
 
     protected function checkEnvironment() {
@@ -257,10 +281,10 @@ class WsServer implements IServer {
         }
     }
 
-    protected function setEventOption(\EventBufferEvent $bev, $priority, $low): void {
-        $bev->enable(\Event::READ | \Event::WRITE | \Event::PERSIST);
-        $bev->setWatermark(\Event::READ, $low, 0);
-        $bev->setWatermark(\Event::WRITE, 0, 0);
+    protected function setEventOption(\EventBufferEvent $bev, $priority, $lowmark, $highmark): void {
+        $bev->enable(\Event::READ | \Event::WRITE);
+        $bev->setWatermark(\Event::READ, $lowmark, $highmark);
+        $bev->setWatermark(\Event::WRITE, $lowmark, $highmark);
         $bev->setPriority($priority);
     }
 
@@ -279,7 +303,7 @@ class WsServer implements IServer {
      * @param array $address
      * @return void
      */
-    public function acceptConnect(\EventListener $listener, int $fd, array $address) {
+    public function acceptConnect(\EventListener $listener, int $fd, array $address): void {
         // 使用文件描述符创建一个新的缓冲事件服务，并设置为释放时关闭底层socket
         $bev = new \EventBufferEvent(
             $this->base,
@@ -289,7 +313,7 @@ class WsServer implements IServer {
         $this->prepareConnect($bev, $fd, $address);
     }
 
-    public function acceptConnectSSL(\EventListener $listener, int $fd, array $address) {
+    public function acceptConnectSSL(\EventListener $listener, int $fd, array $address): void {
         $bev = \EventBufferEvent::sslSocket(
             $this->base,
             $fd,
@@ -300,12 +324,12 @@ class WsServer implements IServer {
         $this->prepareConnect($bev, $fd, $address);
     }
 
-    protected function prepareConnect(\EventBufferEvent $bev, $fd, $address) {
+    protected function prepareConnect(\EventBufferEvent $bev, $fd, $address): void {
         $index = $this->max_index++;
         $this->ready_connections[$index] = $bev;
         $arg = compact('index', 'address', 'fd');
 
-        $this->setEventOption($bev, 0, 2);
+        $this->setEventOption($bev, 0, 2, 0); // 根据WebSocket协议，最小数据是2字节
         $bev->setCallbacks(
             [$this, "handShake"],
             NULL,
@@ -314,7 +338,7 @@ class WsServer implements IServer {
         );
     }
 
-    public function handShake(\EventBufferEvent $bev, $arg) {
+    public function handShake(\EventBufferEvent $bev, $arg): void {
         $index = $arg['index'];
         $buffer = $bev->input->read($bev->input->length);
         $headers = $this->getHeaders($buffer);
@@ -349,7 +373,7 @@ class WsServer implements IServer {
      * @param \EventBufferEvent $bev
      * @param $arg
      */
-    public function readCallback(\EventBufferEvent $bev, $arg) {
+    public function readCallback(\EventBufferEvent $bev, $arg): void {
         $index = $arg['index'];
 
         $params = [];
@@ -400,25 +424,26 @@ class WsServer implements IServer {
         $this->sendToChannel($channel, self::NOTIFY_TYPE_ON_MESSAGE, $index, $msg);
     }
 
-    protected function chooseChannel($index) {
+    protected function chooseChannel($index): \EventBufferEvent {
         $num = count($this->channels);
         $channel_index = $index % $num;
         $channel = $this->channels[$channel_index];
         return $channel;
     }
 
-    protected function sendToChannel(\EventBufferEvent $bev, int $notify_type, int $index, string &$data) {
-        // IPC消息格式：| 数据长度 4 byte | 通知类型 1 byte | 服务标识 2 byte | 数据 |
+    protected function sendToChannel(\EventBufferEvent $bev, int $notify_type, int $index, string &$data, int $priority = 0): void {
+        // IPC消息格式：| 数据长度 4 byte | 优先级 1 byte | 通知类型 1 byte | 服务标识 2 byte | 数据 |
         $len = strlen($data);
-        $payload = pack('N', $len) . chr($notify_type) . pack('n', $index);
+        $payload = pack('N', $len) . chr($priority) . chr($notify_type) . pack('n', $index);
         $bev->write($payload . $data);
     }
 
-    protected function receiveFromChannel(\EventBufferEvent $bev) {
+    protected function receiveFromChannel(\EventBufferEvent $bev): array {
         $data_list = [];
         // 可能写入的数据有多条，但是都在一个缓存里面，故延迟处理
         $input = $bev->input;
-        $payload_length = 7;
+        $payload_length = 8;
+        $offset = 4;
         while ($length = $input->length) {
             $payload = $input->substr(0, $payload_length);
             if (strlen($payload) < $payload_length) {
@@ -438,12 +463,13 @@ class WsServer implements IServer {
                 break;
             }
 
-            $notify_type = ord(substr($payload, 4, 1));
-            $index = current(unpack('n', substr($payload, 5, 2)));
+            $priority = ord(substr($payload, $offset, 1));
+            $notify_type = ord(substr($payload, $offset + 1, 1));
+            $index = current(unpack('n', substr($payload, $offset + 2, 2)));
 
             $input->drain($payload_length);
             $data = $input->read($data_length);
-            $data_list[] = [$notify_type, $index, $data];
+            $data_list[] = [$priority, $notify_type, $index, $data];
         }
 
         return $data_list;
@@ -455,7 +481,7 @@ class WsServer implements IServer {
      * @param $events
      * @param $arg
      */
-    public function eventCallback($bev, $events, $arg) {
+    public function eventCallback($bev, $events, $arg): void {
         $index = $arg['index'];
         if ($events & \EventBufferEvent::ERROR) {
             // Fetch errors from the SSL error stack
@@ -474,7 +500,7 @@ class WsServer implements IServer {
     public function masterReadCallback(\EventBufferEvent $bev, $arg): void {
         // IPC消息
         $data_list = $this->receiveFromChannel($bev);
-        foreach ($data_list as list($notify_type, $index, $data)) {
+        foreach ($data_list as list($priority, $notify_type, $index, $data)) {
             $this->debug('master callback:' . sprintf('%08b', $notify_type));
 //            call_user_func_array([$this, $this->call_map[$notify_type]], [$index, $data]);
             switch ($notify_type) {
@@ -482,10 +508,11 @@ class WsServer implements IServer {
                     $this->sendTo($index, $data);
                     break;
                 case self::CALL_TYPE_SEND_TO_ALL:
-                    $this->sendToAll($data);
+                    $this->sendToAll($data, $priority);
                     break;
                 case self::CALL_TYPE_PREPARE_CLOSE:
                     $this->prepareClose($index);
+                    break;
                     break;
             }
         }
@@ -505,11 +532,12 @@ class WsServer implements IServer {
 
     public function workReadCallback(\EventBufferEvent $bev, $arg): void {
         $data_list = $this->receiveFromChannel($bev);
-        foreach ($data_list as list($notify_type, $index, $data)) {
+        foreach ($data_list as list($priority, $notify_type, $index, $data)) {
             $this->debug(posix_getpid() . '# work callback:' . sprintf('%08b', $notify_type));
             if ($notify_type === self::NOTIFY_TYPE_ON_OPEN) {
                 $data = json_decode($data, true);
             }
+
             $this->notify($this->notify_map[$notify_type], [$index, $data]);
         }
     }
@@ -539,15 +567,17 @@ class WsServer implements IServer {
     }
 
     /**
-     * 给所有完成握手的客户端发送消息
+     * 群发消息
      * @param string $msg
+     * @param int $priority
      */
-    protected function sendToAll(string $msg): void {
-        $msg = $this->frame($msg);
-        foreach ($this->established_connections as $index => $bev) {
-            if (isset($this->wait_for_close[$index])) continue; // 即将关闭的忽略
-
-            $this->doSend($bev, $index, $msg);
+    protected function sendToAll(string $msg, $priority = 10): void {
+        if ($priority > 0) {
+            $this->all_messages[] = $msg;
+        } else {
+            // 0 高优先级 实时发送
+            $msg = $this->frame($msg);
+            $this->doSendToAll($msg);
         }
     }
 
@@ -565,13 +595,13 @@ class WsServer implements IServer {
         unset($this->established_connections[$index]);
     }
 
-    protected function prepareClose(int $index, int $status_code = self::FRAME_STATUS_CODE_NORMAL, string $reason = '') {
+    protected function prepareClose(int $index, int $status_code = self::FRAME_STATUS_CODE_NORMAL, string $reason = ''): void {
         $bev = $this->established_connections[$index];
         $bev and $bev->write($this->frame(pack('n', $status_code) . $reason, self::FRAME_OPCODE_CLOSE));
         $this->wait_for_close[$index] = 1;
     }
 
-    protected function confirmClose($index) {
+    protected function confirmClose($index): void {
         // 发送关闭帧
         $close = $this->frame(pack('n', self::FRAME_STATUS_CODE_NORMAL), self::FRAME_OPCODE_CLOSE);
         $bev = $this->established_connections[$index];
@@ -647,7 +677,12 @@ class WsServer implements IServer {
             $arr = explode(':', $row, 2);
             isset($arr[1]) and $res[trim($arr[0])] = trim($arr[1]);
         }
-        return $res;
+        // 只提取必要信息
+        return [
+            'Sec-WebSocket-Key' => $res['Sec-WebSocket-Key'] ?? '',
+            'Sec-WebSocket-Version' => $res['Sec-WebSocket-Version'] ?? '',
+            'User-Agent' => $res['User-Agent'] ?? '',
+        ];
     }
 
     /**
@@ -896,6 +931,51 @@ class WsServer implements IServer {
         $frame .= $end . chr(strlen($last)) . $last;//连接最后一帧
         return $frame;
     }
+
+    public function smoothlySendToAll(): void {
+        // $load = sys_getloadavg();
+        $percent = (new GetProcessUsage)($this->child_pids[0]);
+        if ($percent <= 5) {
+            // 空闲时，执行发送
+            $last_bev = end($this->established_connections);
+            $is_finished = $last_bev && (0 == $last_bev->output->length); // 最后一个是否发送完毕
+            if ($is_finished) {
+                // 限流，libevent会把消息全部写入内存，防止消息多时内存瞬间溢出
+                $bytes = 0;
+                $num = count($this->established_connections);
+                foreach ($this->all_messages as $i => $msg) {
+                    $msg = $this->frame($msg);
+                    $msg_len = strlen($msg);
+                    $next_guess = ($msg_len + $this->packet_header_size) * $num;
+                    if ($bytes + $next_guess > $this->max_per_sent_bytes) break;
+
+                    unset($this->all_messages[$i]);
+                    $sent_num = $this->doSendToAll($msg);
+                    $bytes += ($msg_len + $this->packet_header_size) * $sent_num;
+                }
+            }
+            
+            $timeout = self::TASK_TIMEOUT_SPARE;
+        } else {
+            $timeout = self::TASK_TIMEOUT_BUSY;
+        }
+
+        $this->timer->add($timeout);
+    }
+
+    /**
+     * 给所有完成握手的客户端发送消息
+     * @param string $msg
+     * @return int sent num
+     */
+    protected function doSendToAll(string $msg): int {
+        $num = 0;
+        foreach ($this->established_connections as $index => $bev) {
+            if (isset($this->wait_for_close[$index])) continue; // 即将关闭的忽略
+
+            $this->doSend($bev, $index, $msg);
+            ++$num;
+        }
+        return $num;
+    }
 }
-
-

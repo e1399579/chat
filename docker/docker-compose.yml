@@ -1,7 +1,7 @@
 version: "3"
 services:
   nginx:
-    image: nginx:1.20
+    image: nginx:latest
     ports:
       - "80:80"
     networks:
@@ -11,7 +11,7 @@ services:
     volumes:
       - ./conf/nginx/nginx.conf:/etc/nginx/nginx.conf
       - ./conf/nginx/www.conf:/etc/nginx/conf.d/www.conf
-      - /mnt/hgfs/project/chat:/home
+      - /home/chat/html:/home
 
   redis:
     image: redis:latest
@@ -23,20 +23,20 @@ services:
       - TZ=Asia/Shanghai
 
   php:
-    image: test/php7
+    build: .
     ports:
       - "8080:8080"
     networks:
       - my-web
     environment:
       - TZ=Asia/Shanghai
-    command: -f Client.php -- -p 8080 -n 8
+    command: -f Client.php -- -p 8080 -n 4
     depends_on: [redis]
     sysctls:
       - net.core.somaxconn=40960
     volumes:
       - ./conf/php/local.ini:/usr/local/etc/php/conf.d/local.ini
-      - /mnt/hgfs/project/chat:/home/
+      - /home/chat/php:/home/
 
 networks:
   my-web:

@@ -23,7 +23,7 @@ const SYSTEM = 902;//系统消息
 
 const PORT = 8080;
 const PROTOCOL = 'ws://';
-const HOST = '192.168.0.10';
+const HOST = '192.168.43.165';
 const SERVER_URL = PROTOCOL + HOST + ':' + PORT;
 
 class DataHelper {
@@ -41,7 +41,9 @@ class DataHelper {
 let success_set = new Set();
 function init_sockets(num, sockets) {
     for (let i=0;i<num;i++) {
-        let socket = new WebSocket(SERVER_URL);
+        let socket = new WebSocket(SERVER_URL, [], {
+            handshakeTimeout: 6e4,
+        });
         socket.binaryType = 'arraybuffer'; //设为二进制的原始缓冲区
         socket.on('open', () => {
             socket.send(DataHelper.encode({

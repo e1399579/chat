@@ -1,19 +1,34 @@
 ## 简介
 WebSocket 聊天室
 
-## docker安装
-1. 构建PHP镜像
+## 目录结构
 ```
-cd docker
-docker build -t test/php7 .
+chat
+├── docker              Docker相关配置
+│   ├── conf
+│   │   ├── nginx       nginx网站配置.conf
+│   │   └── php         PHP运行配置.ini
+│   └── source          扩展包
+├── html                HTML页面
+│   ├── css
+│   ├── fonts
+│   ├── images
+│   ├── js
+│   ├── media
+│   └── tests
+└── php                 PHP服务脚本
+    ├── logs
+    └── server
 ```
-2. 修改默认docker配置 `docker-compose.yml` 中的目录映射
-3. 修改默认网站配置 `nginx/www.conf`
-4. 启动服务 `docker-compose up`
-5. 浏览器访问 index.html
+
+## Docker安装
+1. 修改默认docker配置 `docker-compose.yml` 中的目录映射
+2. 修改默认网站配置 `nginx/www.conf`
+3. 启动服务 `docker-compose up`
+4. 浏览器访问 index.html
 
 ## 常规安装
-1. 环境要求：Redis 2.6+、PHP 7.0+、libevent-dev、Apache/nginx
+1. 环境要求：Redis 2.6+、PHP 7.2+ zts、libevent-dev、Apache/nginx
 2. 安装扩展 `pecl install msgpack redis event` 并添加到 `php.ini` 中
 3. 启动服务 `php Client.php -d -p 8080 -n 8`
 4. 浏览器访问 index.html
@@ -38,5 +53,9 @@ docker build -t test/php7 .
 
 ## 待办
 - [ ] 重写界面
-- [ ] 前后端项目拆分
 - [ ] 细节优化
+
+## 相关链接
+[pecl-event](https://bitbucket.org/osmanov/pecl-event)
+[msgpack](https://github.com/msgpack/msgpack-php)
+[phpredis](https://github.com/phpredis/phpredis/)

@@ -36,7 +36,7 @@ try {
     $opts = getopt('dp:n:');
     $port = ($opts['p'] ?? 8080) + 0;
     $daemon = isset($opts['d']);
-    $num = ($opts['n'] ?? 8) + 0;
+    $num = ($opts['n'] ?? 4) + 0;
     $num = max(1, $num);
 //    $ssl = [
 //        'local_cert'  => '/usr/local/nginx/conf/1_chat.ridersam.cn_cert.crt',
