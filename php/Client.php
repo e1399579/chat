@@ -31,16 +31,16 @@ function daemonize() {
 
 try {
     // php Client.php
-    // php Client.php -d -p 8080 -n 8
-    // php -f Client.php -- -d -p 8080 -n 8
+    // php Client.php -d -p 8080 -n 4
+    // php -f Client.php -- -d -p 8080 -n 4
     $opts = getopt('dp:n:');
     $port = ($opts['p'] ?? 8080) + 0;
     $daemon = isset($opts['d']);
     $num = ($opts['n'] ?? 4) + 0;
     $num = max(1, $num);
 //    $ssl = [
-//        'local_cert'  => '/usr/local/nginx/conf/1_chat.ridersam.cn_cert.crt',
-//        'local_pk'    => '/usr/local/nginx/conf/2_chat.ridersam.cn.key',
+//        'local_cert'  => '/usr/local/nginx/conf/1_domain_cert.crt',
+//        'local_pk'    => '/usr/local/nginx/conf/2_domain.key',
 //        'verify_peer' => false,
 //    ];
     echo 'Server is starting.', PHP_EOL;
@@ -49,8 +49,9 @@ try {
     }
     $ssl = [];
     $server = new server\WsServer($port, $ssl);
-    $client = new server\Worker($server);
-    $client->run($num);
+    $worker = new server\Worker();
+    $worker->reset();
+    $server->run($num, $worker);
 } catch (\Exception $e) {
     die($e);
 }

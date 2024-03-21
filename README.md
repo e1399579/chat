@@ -21,11 +21,15 @@ chat
     └── server
 ```
 
+## 运行流程图
+![流程图](./doc/flowchart.png "flowchart")
+
 ## Docker安装
 1. 修改默认docker配置 `docker-compose.yml` 中的目录映射
 2. 修改默认网站配置 `nginx/www.conf`
-3. 启动服务 `docker-compose up`
-4. 浏览器访问 index.html
+3. 创建目录（保存Redis快照） `mkdir /home/chat/data`
+4. 启动服务 `docker-compose up`
+5. 浏览器访问 index.html
 
 ## 常规安装
 1. 环境要求：Redis 2.6+、PHP 7.2+ zts、libevent-dev、Apache/nginx
@@ -53,7 +57,6 @@ chat
 
 ## 待办
 - [ ] 重写界面
-- [ ] 细节优化
 
 ## 相关链接
 [pecl-event](https://bitbucket.org/osmanov/pecl-event)

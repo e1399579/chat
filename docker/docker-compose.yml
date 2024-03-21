@@ -21,6 +21,8 @@ services:
       - my-web
     environment:
       - TZ=Asia/Shanghai
+    volumes:
+      - /home/chat/data:/data
 
   php:
     build: .

@@ -2,6 +2,9 @@
 namespace server;
 
 interface IClient {
+
+    public function setServer(IServer $server): void;
+
     /**
      * 打开服务时
      * @param int $key 服务索引
@@ -32,4 +35,9 @@ interface IClient {
      * @return void
      */
     public function onClose(int $key): void;
+
+    /**
+     * 启动时，设置回调函数
+     */
+    public function onStart(): void;
 }

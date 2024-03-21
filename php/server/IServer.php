@@ -3,27 +3,6 @@
 namespace server;
 
 interface IServer {
-    /**
-     * 观察对象
-     * @param IClient $client
-     * @return void
-     */
-    public function attach(IClient $client): void;
-
-    /**
-     * 解除对象
-     * @param IClient $client
-     * @return void
-     */
-    public function detach(IClient $client): void;
-
-    /**
-     * 通知观察者
-     * @param string $method
-     * @param array $params
-     * @return void
-     */
-    public function notify(string $method, array $params): void;
 
     /**
      * 关闭连接
@@ -47,12 +26,4 @@ interface IServer {
      * @return void
      */
     public function sendAll(string $msg, int $priority = 10): void;
-
-    /**
-     * 开始运行
-     * @param int $num
-     * @param ?callable $callback
-     * @return void
-     */
-    public function run(int $num, ?callable $callback = null): void;
 }

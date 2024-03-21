@@ -2,6 +2,9 @@
 namespace server;
 
 class Worker implements IClient {
+    /**
+     * @var IServer
+     */
     protected $server;
     /**
      * @var User
@@ -87,15 +90,17 @@ class Worker implements IClient {
         self::MUSIC_PERSONAL => [self::MUSIC_SELF, self::MUSIC_OTHER],
     ];
 
-    public function __construct(IServer $server) {
-        $this->server = $server;
-        $this->server->attach($this);
+    public function __construct() {
         $this->user = new User();
 
         $path = './logs/client';
         $this->logger = Logger::getInstance($path);
 
         set_error_handler([$this, 'errorHandler']);
+    }
+
+    public function setServer(IServer $server): void {
+        $this->server = $server;
     }
 
     public function onOpen(int $key, array $headers): void {
@@ -203,7 +208,7 @@ class Worker implements IClient {
 
                 $info = ['is_active' => 0];
                 $res = $this->user->update($receiver_id, $info);
-                if (false == $res) {
+                if (false === $res) {
                     $this->response = [
                         'type' => self::WARNING,
                         'mess' => '移除失败！服务器出错',
@@ -330,13 +335,11 @@ class Worker implements IClient {
                 ];
                 $this->sendPersonalMessage($key, $extra);
                 break;
-            case self::VIDEO_PERSONAL_REQUEST:
-            case self::VIDEO_PERSONAL_ALLOW:
-                $this->sendPersonalVideoMessage($key);
-                break;
             case self::VIDEO_PERSONAL_DENY:
                 $this->sendPersonalVideoMessage($key, '拒绝了视频请求');
                 break;
+            case self::VIDEO_PERSONAL_REQUEST:
+            case self::VIDEO_PERSONAL_ALLOW:
             case self::VIDEO_PERSONAL_OPEN:
             case self::VIDEO_PERSONAL_CLOSE:
             case self::VIDEO_PERSONAL_OFFER_DESC:
@@ -477,7 +480,7 @@ class Worker implements IClient {
             'type' => $this->request_type,
             'sender_id' => $this->request['sender_id'],
             'receiver_id' => $this->request['receiver_id'],
-            'mess' => $mess ? $mess : $this->request['mess'],
+            'mess' => isset($mess[0]) ? $mess : $this->request['mess'],
             'timestamp' => $this->timestamp,
         ];
 
@@ -672,7 +675,6 @@ class Worker implements IClient {
      * 编码数据
      *
      * @param string $str
-     *
      * @return mixed
      * @link http://github.com/msgpack/msgpack-php
      */
@@ -743,12 +745,14 @@ class Worker implements IClient {
         return true;
     }
 
-    public function run($num = 1) {
+    public function onStart(): void {
+        $this->user->connect();
+    }
+
+    public function reset() {
         $this->user->connect();
         $this->user->flushOnline();
         $this->user->flushUserServiceRelation();
-        $this->server->run($num, function () {
-            $this->user->connect();
-        });
+        $this->user->close();
     }
 }

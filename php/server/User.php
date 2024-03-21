@@ -17,10 +17,14 @@ class User {
 
     public function connect() {
         $this->redis = new \Redis();
-        $res = $this->redis->connect('redis', 6379);
-        if (false == $res)
+        $res = $this->redis->pconnect('redis', 6379);
+        if (false === $res)
             throw new \RuntimeException('连接REDIS失败！');
         $this->redis->select(15);
+    }
+
+    public function close() {
+        $this->redis->close();
     }
 
     /**
