@@ -1,7 +1,8 @@
 ## 简介
 WebSocket 聊天室
 
-## 目录结构
+## 后端
+### 目录结构
 ```
 chat
 ├── docker              Docker相关配置
@@ -21,26 +22,42 @@ chat
     └── server
 ```
 
-## 运行流程图
+### 运行流程图
 ![流程图](./doc/flowchart.png "flowchart")
 
-## Docker安装
+### 安装
+#### Docker安装
 1. 修改默认docker配置 `docker-compose.yml` 中的目录映射
 2. 修改默认网站配置 `nginx/www.conf`
 3. 创建目录（保存Redis快照） `mkdir /home/chat/data`
 4. 启动服务 `docker-compose up`
 5. 浏览器访问 index.html
 
-## 常规安装
-1. 环境要求：Redis 2.6+、PHP 7.2+ zts、libevent-dev、Apache/nginx
+#### 常规安装
+1. 环境要求：Redis 2.6+、PHP 7.2+、libevent-dev、Apache/nginx
 2. 安装扩展 `pecl install msgpack redis event` 并添加到 `php.ini` 中
 3. 启动服务 `php Client.php -d -p 8080 -n 8`
-4. 浏览器访问 index.html
+4. 浏览器访问 index.html，示例：http://localhost/
 
-## 启动参数说明
+#### 启动参数说明
 1. -d 后台运行
 2. -p port 监听端口号
 3. -n num 开启的子进程数，至少为1
+
+## 前端(新版html_v2)
+### 框架/插件
+1. [Vue 2](https://v2.cn.vuejs.org/)
+2. [lemon-imui](https://www.npmjs.com/package/lemon-imui)
+3. [vue-js-modal](https://www.npmjs.com/package/vue-js-modal)
+4. [msgpackr](https://www.npmjs.com/package/msgpackr)
+5. [Babel](https://babel.nodejs.cn/docs/)
+6. [vue-notification](https://www.npmjs.com/package/vue-notification)
+
+### 安装
+1. 创建.env.local文件，设置服务器地址`VUE_APP_SERVER_URL`
+2. 安装 `npm install`
+3. 运行 `npm run serve`
+4. 浏览器访问 index.html，示例：http://localhost:8081/
 
 ## 视频聊天
 采用WebRTC技术，有以下要求：

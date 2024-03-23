@@ -1,0 +1,140 @@
+.box {
+    background: #fff;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    border-radius: 2px;
+    box-shadow: 0 0 40px #000;
+    color: #8b8c8d;
+    font-size: 0
+}
+
+.box, .box .box-part {
+    box-sizing: border-box
+}
+
+.box .box-part {
+    display: inline-block;
+    position: relative;
+    vertical-align: top;
+    height: 100%;
+    width: 50%
+}
+
+.box .box-part#bp-right {
+    background: url("../assets/panorama.jpg") no-repeat 0 0;
+    border-left: 1px solid #eee
+}
+
+.box .box-messages {
+    font-size: 20px;
+    line-height: 250px;
+    color: red;
+    text-align: center
+}
+
+.box .box-error-message {
+    position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
+    height: 0;
+    line-height: 32px;
+    padding: 0 12px;
+    text-align: center;
+    width: 100%;
+    font-size: 11px;
+    color: #fff;
+    background: #f38181
+}
+
+.box .partition {
+    width: 100%;
+    height: 100%
+}
+
+.box .partition .partition-title {
+    box-sizing: border-box;
+    padding: 30px;
+    width: 100%;
+    text-align: center;
+    letter-spacing: 1px;
+    font-size: 20px;
+    font-weight: 300
+}
+
+.box .partition .partition-form {
+    padding: 0 20px;
+    box-sizing: border-box
+}
+
+.box input[type=password], .box input[type=text] {
+    display: block;
+    box-sizing: border-box;
+    margin-bottom: 4px;
+    width: 100%;
+    font-size: 12px;
+    line-height: 2;
+    border: 0;
+    border-bottom: 1px solid #dddedf;
+    padding: 4px 8px;
+    font-family: inherit;
+    transition: all .5s;
+    outline: none
+}
+
+.box button {
+    background: #fff;
+    border-radius: 4px;
+    box-sizing: border-box;
+    padding: 10px;
+    letter-spacing: 1px;
+    font-family: Open Sans, sans-serif;
+    font-weight: 400;
+    min-width: 140px;
+    margin-top: 8px;
+    color: #8b8c8d;
+    cursor: pointer;
+    border: 1px solid #dddedf;
+    text-transform: uppercase;
+    transition: all .1s;
+    font-size: 10px;
+    outline: none
+}
+
+.box button:hover {
+    border-color: #c7c8c9;
+    color: #6f7071
+}
+
+.box .large-btn {
+    width: 100%;
+    background: #fff
+}
+
+.box .large-btn span {
+    font-weight: 600
+}
+
+.box .large-btn:hover {
+    color: #fff !important
+}
+
+.box .github-btn {
+    margin-top: 30px;
+    border-color: #dba226;
+    color: #dba226
+}
+
+.box .github-btn:hover {
+    border-color: #dba226;
+    background: #dba226
+}
+
+.pop-out-enter-active, .pop-out-leave-active {
+    transition: all .5s
+}
+
+.pop-out-enter, .pop-out-leave-active {
+    opacity: 0;
+    transform: translateY(24px)
+}
