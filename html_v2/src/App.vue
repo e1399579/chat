@@ -1,6 +1,17 @@
 <template>
     <main>
-        <lemon-imui :user="user" ref="im" @pull-messages="getHistory" @send="send"></lemon-imui>
+        <lemon-imui :user="user" ref="im"
+                    @pull-messages="getHistory"
+                    @message-click="messageClick"
+                    @change-contact="changeContact"
+                    @send="send">
+            <template #message-title="contact">
+                <div class="flex space-between">
+                    <span>{{contact.displayName}} ({{contact.online_total}})</span>
+                    <b @click="changeDrawer(contact)">···</b>
+                </div>
+            </template>
+        </lemon-imui>
         <!--注册/登录弹框-->
         <modal name="login-modal" :clickToClose="false" :height="250" :width="500">
             <dialog class="box" open>
@@ -8,7 +19,7 @@
                     <div id="partition-register" class="partition">
                         <div class="partition-title">请登录/注册</div>
                         <div class="partition-form">
-                            <form autocomplete="false">
+                            <form autocomplete="off">
                                 <input type="text" id="username" v-model="username" placeholder="起个名吧，亲:)"
                                        maxlength="30" autocomplete/>
                                 <input type="password" id="password" v-model="password" placeholder="密码：默认123456"
@@ -34,6 +45,7 @@
 
 <script>
 import './css/login.css';
+import './css/main.css';
 
 import {DataHelper} from './js/util.js';
 
@@ -46,6 +58,7 @@ const MESSAGE_PERSONAL = 103;//私信
 const USER_ONLINE = 200;//用户上线
 const USER_ONLINE_TOTAL = 213; // 用户在线数量
 const USER_QUIT = 201;//用户退出
+const USER_QUERY = 203; //用户查询
 const USER_REGISTER = 204;//用户注册
 const USER_INCORRECT = 208;//用户名/密码错误
 const HISTORY_MESSAGE_COMMON = 800; //历史公共消息
@@ -66,20 +79,15 @@ export default {
             socket: null,
             reconnect_times: 0,
             online_total: 0,
+            online_users: new Map(),
             login_mess: "",
             contact_query_time: new Map(),
             pull_callback: new Map(),
             send_callback: new Map(),
+            query_next: new Map(),
         }
     },
     watch: {
-        // 监听人数，修改标题
-        online_total: function (new_num) {
-            this.im.updateContact({
-                id: '0',
-                displayName: `大厅 (${new_num})`,
-            });
-        }
     },
     mounted() {
         const {im} = this.$refs;
@@ -112,10 +120,12 @@ export default {
             lastContent: "",
             //最近一条消息的发送时间
             lastSendTime: 0,
+            online_total: 0,
         }]);
         this.contact_query_time.set('0', {timestamp: (new Date()).getTime() / 1000});
     },
     methods: {
+        // 回调方法
         onOpen() {
             // 从cookie中获取信息
             let user = JSON.parse(this.getCookie('user'));
@@ -182,10 +192,15 @@ export default {
                         toContactId: "0",
                         fromUser: ""
                     });
-                    if (this.user.id !== mess.user.user_id) ++this.online_total;
+                    if (this.user.id !== mess.user.user_id) {
+                        ++this.online_total;
+                        this.online_users.set(mess.user.user_id, mess.user);
+                    }
+                    this.updateContact("0", {online_total:this.online_total});
                     break;
                 case USER_ONLINE_TOTAL:
                     this.online_total = mess.mess; // 置为实际数量
+                    this.updateContact("0", {online_total:this.online_total});
                     break;
                 case USER_QUIT: {
                     let user = mess.user;
@@ -199,24 +214,50 @@ export default {
                         fromUser: ""
                     });
                     this.online_total = Math.max(--this.online_total, 1);
+                    this.online_users.delete(user.user_id);
+                    this.updateContact("0", {online_total:this.online_total});
+                    break;
+                }
+                case USER_QUERY: {
+                    let user = mess.user;
+                    let user_id = user.user_id;
+                    this.addUser(user);
+                    // 执行下一步
+                    let resolve = this.query_next.get(user_id);
+                    if (resolve) {
+                        resolve(user);
+                    }
                     break;
                 }
 
                 // 公共、个人消息
                 case MESSAGE_OTHER: {//other @me
-                    this.im.appendMessage({
-                        id: DataHelper.buildTraceId(),
-                        status: "succeed",
-                        type: "text",
-                        sendTime: mess.timestamp,
-                        content: mess.mess,
-                        toContactId: mess.receiver_id,
-                        fromUser: {
-                            id: mess.sender_id,
-                            displayName: "",
-                            avatar: ""
+                    let sender_id = mess.sender_id;
+                    let sender = this.online_users.get(sender_id);
+                    // 若找不到用户，则查询异步处理
+                    let promise = new Promise((resolve) => {
+                        if (sender) {
+                            resolve(sender);
+                        } else {
+                            this.query_next.set(sender_id, resolve);
+                            this.sendMessage(USER_QUERY, sender_id, "", sender_id);
                         }
                     });
+                    promise.then((sender) => {
+                        // 显示联系人
+                        this.im.appendContact({
+                            id: sender_id,
+                            displayName: sender.username,
+                            avatar: sender.avatar,
+                            index: "",
+                            unread: 1,
+                            lastContent: mess.mess,
+                            lastSendTime: 0,
+                            online_total: 0,
+                        });
+                        this.receiveMessage(mess, sender);
+                    });
+
                     break;
                 }
                 case MESSAGE_COMMON: {//公共消息
@@ -311,6 +352,7 @@ export default {
             // Util.toast("连接服务器出错");
         },
 
+        // 工具方法
         trace(arg) {
             if (!DEBUG)
                 return;
@@ -349,7 +391,7 @@ export default {
                 mess,
             })));
         },
-        receiveMessage(mess) {
+        receiveMessage(mess, sender = null) {
             this.im.appendMessage({
                 id: DataHelper.buildTraceId(),
                 status: "succeed",
@@ -360,14 +402,26 @@ export default {
                 fromUser: {
                     //如果 id == this.user.id消息会显示在右侧，否则在左侧
                     id: mess.sender_id,
-                    displayName: '',
-                    avatar: '',
+                    displayName: sender ? sender.username : '',
+                    avatar: sender ? sender.avatar : '',
                 }
             });
         },
+        updateContact(contact_id, option) {
+            this.im.updateContact({
+                id: contact_id,
+                ...option,
+            });
+        },
+        addUser(user) {
+            this.online_users.set(user.user_id, user);
+        },
+        getUser(user_id) {
+            this.online_users.get(user_id);
+        },
 
+        // 交互方法
         login(e) {
-            console.log(this.username, this.password);
             e.preventDefault();
             // 登录/注册
             this.socket.send(DataHelper.encode({
@@ -395,6 +449,69 @@ export default {
 
             //执行到next消息会停止转圈，如果接口调用失败，可以修改消息的状态 next({status:'failed'});
             next();
+        },
+        changeDrawer() {
+            let self = this;
+            this.im.changeDrawer({
+                position: "rightInside",
+                offsetY: 33,
+                height: this.$el.clientHeight - 33,
+                render: () => {
+                    // JSX see https://v2.cn.vuejs.org/v2/guide/render-function.html
+                    // https://github.com/vuejs/babel-plugin-transform-vue-jsx/issues/38
+                    let elements = [];
+                    this.online_users.forEach((user) => {
+                        elements.push(
+                            <div class="slot-group-member" v-lemon-contextmenu_click={[
+                                {
+                                    text: "发消息",
+                                    click(e, instance, hide) {
+                                        self.chatWith(user);
+                                        hide();
+                                    },
+                                },
+                            ]}
+                            >
+                                <div class="slot-group-avatar"></div>
+                                <div class="slot-group-name">{user.username}</div>
+                            </div>
+                        );
+                    });
+                    return (
+                        <div class="slot-group">
+                            <div class="slot-group-title">群通知</div>
+                            <div class="slot-group-notice">公告内容</div>
+                            <div class="slot-group-title">群成员</div>
+                            <input class="slot-search" placeholder="搜索群成员"/>
+                            <div class="slot-group-panel flex">
+                                {elements}
+                            </div>
+                        </div>
+                    );
+                },
+            });
+        },
+        chatWith(user) {
+            this.im.appendContact({
+                id: user.user_id,
+                displayName: user.username,
+                avatar: "",
+                index: "",
+                unread: 0,
+                lastContent: "临时会话",
+                lastSendTime: 0,
+                online_total: 0,
+            });
+            this.im.changeContact(user.user_id);
+        },
+        messageClick(e, key, message) {
+            let contact_id = message.toContactId;
+            // 标记为已读
+            this.updateContact(contact_id, {unread: 0});
+        },
+        changeContact(contact) {
+            // 标记为已读
+            this.updateContact(contact.id, {unread: 0});
         },
     }
 }
