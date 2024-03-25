@@ -1,5 +1,5 @@
 ## 简介
-WebSocket 聊天室
+WebSocket 聊天室，基于原生PHP和libevent
 
 ## 后端
 ### 目录结构

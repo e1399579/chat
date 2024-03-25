@@ -34,16 +34,21 @@
 }
 
 .slot-group-member {
-    height: 48px;
-    width: 48px;
+    height: 50px;
+    width: 50px;
     margin: 10px 0;
 }
 
 .slot-group-avatar {
-    border: 1px solid red;
-    height: 30px;
-    width: 30px;
-    border-radius: 5px;
+    height: 32px;
+    width: 32px;
+
+}
+
+.slot-group-avatar img {
+    width: 100%;
+    height: 100%;
+    border-radius: 4px;
 }
 
 .slot-group-name {
@@ -76,4 +81,13 @@
     font-size: 14px;
     border: 1px solid #bbb;
     padding: 5px 10px;
+}
+
+.lemon-editor__emoji-item {
+    width: 47px !important;
+}
+
+.lemon-message-text .lemon-message__content img {
+    width: 47px !important;
+    height: 47px !important;
 }

@@ -29,3 +29,9 @@ String.prototype.replaceMulti = function (search, replace) {
     });
     return str;
 };
+
+Date.prototype.format = function (format = 'Y-m-d H:i:s') {
+    let search = ['Y', 'm', 'd', 'H', 'i', 's'];
+    let replace = [this.getFullYear(), this.getMonth() + 1, this.getDate(), this.getHours(), this.getMinutes(), this.getSeconds()];
+    return format.replaceMulti(search, replace);
+};

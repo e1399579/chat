@@ -136,6 +136,7 @@ class Worker implements IClient {
             $user_id = $this->request['sender_id'];
             $res = $this->auth($key, $user_id);
             if (false === $res) {
+                $this->logger->error('非法操作', compact('key', 'user_id'));
                 return;
             }
         }
