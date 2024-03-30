@@ -30,8 +30,9 @@ chat
 1. 修改默认docker配置 `docker-compose.yml` 中的目录映射
 2. 修改默认网站配置 `nginx/www.conf`
 3. 创建目录（保存Redis快照） `mkdir /home/chat/data`
-4. 启动服务 `docker-compose up`
-5. 浏览器访问 index.html
+4. 创建目录（保存上传文件） `mkdir /home/chat/php/upload`
+5. 启动服务 `docker-compose up`
+6. 浏览器访问 index.html，示例：http://localhost/
 
 #### 常规安装
 1. 环境要求：Redis 2.6+、PHP 7.2+、libevent-dev、Apache/nginx
@@ -52,9 +53,10 @@ chat
 4. [msgpackr](https://www.npmjs.com/package/msgpackr)
 5. [Babel](https://babel.nodejs.cn/docs/)
 6. [vue-notification](https://www.npmjs.com/package/vue-notification)
+7. [v-viewer@legacy](https://github.com/mirari/v-viewer/tree/v2)
 
 ### 安装
-1. 创建.env.local文件，设置服务器地址`VUE_APP_SERVER_URL`
+1. 创建.env.local文件，设置WebSocket服务器地址`VUE_APP_SERVER_URL`，设置文件服务器地址`VUE_APP_UPLOAD_URL`
 2. 安装 `npm install`
 3. 运行 `npm run serve`
 4. 浏览器访问 index.html，示例：http://localhost:8081/

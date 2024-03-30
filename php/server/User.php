@@ -8,11 +8,17 @@ class User {
     protected $redis;
     protected $userSet = 'user';//在线用户ID集合
     protected $fileStore = 'file:md5'; //文件库:md5 => path
+    protected $fileStore2 = 'file:hash';
     protected $userService = 'user_service'; // user_id=>socket key
     protected $serviceUser = 'service_user'; // socket key=>user_id
 
-    public function __construct() {
+    protected $dbIndex; // 库序号
 
+    protected $indexNum; // 消息索引数量
+
+    public function __construct($dbIndex = 15, $indexNum = 5) {
+        $this->dbIndex = 15;
+        $this->indexNum = 5;
     }
 
     public function connect() {
@@ -20,7 +26,7 @@ class User {
         $res = $this->redis->pconnect('redis', 6379);
         if (false === $res)
             throw new \RuntimeException('连接REDIS失败！');
-        $this->redis->select(15);
+        $this->redis->select($this->dbIndex);
     }
 
     public function close() {
@@ -139,12 +145,40 @@ class User {
         return $this->redis->hMset($hKey, $info);
     }
 
+    public function getMessageIndexKey($message_id) {
+        $number = crc32($message_id);
+        $choose = $number % $this->indexNum;
+        return 'message:index:' . $choose;
+    }
+
+    public function addMessageIndex($message_id, $data) {
+        // Limits: Every hash can store up to 4,294,967,295 (2^32 - 1) field-value pairs
+        $key = $this->getMessageIndexKey($message_id);
+        $value = json_encode($data);
+        return $this->redis->hSet($key, $message_id, $value);
+    }
+
+    public function getMessageIndex($message_id) {
+        $key = $this->getMessageIndexKey($message_id);
+        return $this->redis->hGet($key, $message_id);
+    }
+
+    public function deleteMessage($message_id) {
+        $index_data = $this->getMessageIndex($message_id);
+        $key = $index_data['key'];
+        $timestamp = $index_data['timestamp'];
+        return $this->redis->zRemRangeByScore($key, $timestamp, $timestamp);
+    }
+
     public function getCommonMessageKey($common_id) {
         return 'message:common_id:' . $common_id;
     }
 
-    public function addCommonMessage($common_id, $timestamp, $message) {
+    public function addCommonMessage($common_id, $timestamp, $message, $message_id = '') {
         $key = $this->getCommonMessageKey($common_id);
+        if (!empty($message_id)) {
+            $this->addMessageIndex($message_id, compact('key', 'timestamp'));
+        }
         return $this->redis->zAdd($key, $timestamp, $message);
     }
 
@@ -153,8 +187,11 @@ class User {
         return 'message:users:[' . implode(',', $users) . ']';
     }
 
-    public function addPersonalMessage(array $users, $timestamp, $message) {
+    public function addPersonalMessage(array $users, $timestamp, $message, $message_id = '') {
         $key = $this->getPersonalMessageKey($users);
+        if (!empty($message_id)) {
+            $this->addMessageIndex($message_id, compact('key', 'timestamp'));
+        }
         return $this->redis->zAdd($key, $timestamp, $message);
     }
 
@@ -184,6 +221,14 @@ class User {
 
     public function getFileByMd5($md5) {
         return $this->redis->hGet($this->fileStore, $md5);
+    }
+
+    public function addFilePath($hash, $path) {
+        return $this->redis->hSet($this->fileStore2, $hash, $path);
+    }
+
+    public function getFilePath($hash) {
+        return $this->redis->hGet($this->fileStore2, $hash);
     }
 
     public function addUserServiceRelation($user_id, $key) {

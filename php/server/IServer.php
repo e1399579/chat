@@ -15,9 +15,10 @@ interface IServer {
      * 发送消息
      * @param int $key
      * @param string $msg
+     * @param string $data_type
      * @return void
      */
-    public function send(int $key, string $msg): void;
+    public function send(int $key, string $msg, string $data_type = 'TEXT'): void;
 
     /**
      * 给所有完成握手的客户端发送消息
@@ -25,5 +26,5 @@ interface IServer {
      * @param int $priority
      * @return void
      */
-    public function sendAll(string $msg, int $priority = 10): void;
+    public function sendAll(string $msg, int $priority = 10, string $data_type = 'TEXT'): void;
 }

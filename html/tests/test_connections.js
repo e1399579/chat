@@ -6,7 +6,7 @@
 
 const ws = require('ws');
 const WebSocket = ws.WebSocket;
-const msgpack = require('msgpackr');
+// const msgpack = require('msgpackr');
 
 let success = 0, fail = 0, closed = 0;
 let test_num = process.argv.length > 2 ? parseInt(process.argv[2]) : 255;
@@ -28,13 +28,13 @@ const SERVER_URL = PROTOCOL + HOST + ':' + PORT;
 
 class DataHelper {
     static encode(obj) {
-        //return JSON.stringify(obj);
-        return msgpack.pack(obj);
+        return JSON.stringify(obj);
+        // return msgpack.pack(obj);
     }
 
     static decode(str) {
-        //return JSON.parse(str);
-        return msgpack.unpack(new Uint8Array(str)); //ArrayBuffer->Uint8Array
+        return JSON.parse(str);
+        // return msgpack.unpack(new Uint8Array(str)); //ArrayBuffer->Uint8Array
     }
 }
 

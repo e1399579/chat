@@ -1,14 +1,19 @@
 import Vue from 'vue'
 import App from './App.vue'
-import LemonIMUI from 'lemon-imui';
-import 'lemon-imui/dist/index.css';
+import LemonIMUI from 'lemon-imui-rx';
+import 'lemon-imui-rx/dist/index.css';
+import lemonMessageMusic from './components/lemon-message-music.vue';
+Vue.component(lemonMessageMusic.name, lemonMessageMusic);
 import VModal from 'vue-js-modal';
 import Notifications from 'vue-notification';
+import 'viewerjs/dist/viewer.css';
+import VueViewer from 'v-viewer';
 
 Vue.config.productionTip = false;
 Vue.use(LemonIMUI);
 Vue.use(VModal);
 Vue.use(Notifications);
+Vue.use(VueViewer);
 
 new Vue({
   render: h => h(App),

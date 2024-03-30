@@ -7,8 +7,15 @@
     justify-content: space-between;
 }
 
+.pointer {
+    cursor: pointer;
+}
+
+.user-select-none {
+    user-select: none;
+}
+
 .slot-group {
-    width: 170px;
     border-left: 1px solid #ddd;
     height: 100%;
     box-sizing: border-box;

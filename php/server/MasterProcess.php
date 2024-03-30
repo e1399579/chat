@@ -4,6 +4,7 @@ namespace server;
 class MasterProcess extends AProcess implements IService {
     const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
     //0x0附加数据帧 0x1文本数据帧 0x2二进制数据帧 0x3-7无定义，保留 0x8连接关闭 0x9ping 0xApong 0xB-F无定义，保留
+    // see https://www.rfc-editor.org/rfc/rfc6455.html#section-5.2
     const FRAME_OPCODE_CONTINUATION = 0x0;
     const FRAME_OPCODE_TEXT = 0x1;
     const FRAME_OPCODE_BINARY = 0x2;
@@ -218,7 +219,7 @@ class MasterProcess extends AProcess implements IService {
 
             //握手成功，通知客户端连接已经建立
             $data = json_encode($headers);
-            $this->sendToChannel($this->chooseChannel($index), self::NOTIFY_TYPE_ON_OPEN, $index, $data);
+            $this->sendToChannel($this->chooseChannel($index), self::NOTIFY_TYPE_ON_OPEN, $index, $data, 0, self::FRAME_OPCODE_TEXT);
         } else {
             $this->disConnect($index); //关闭连接
         }
@@ -263,7 +264,7 @@ class MasterProcess extends AProcess implements IService {
 
                 // 通知事件
                 $data = '';
-                $this->sendToChannel($channel, self::NOTIFY_TYPE_ON_CLOSE, $index, $data);
+                $this->sendToChannel($channel, self::NOTIFY_TYPE_ON_CLOSE, $index, $data, 0, self::FRAME_OPCODE_TEXT);
             }
 
             return;
@@ -280,7 +281,7 @@ class MasterProcess extends AProcess implements IService {
         }
 
         // 通知子进程
-        $this->sendToChannel($channel, self::NOTIFY_TYPE_ON_MESSAGE, $index, $msg);
+        $this->sendToChannel($channel, self::NOTIFY_TYPE_ON_MESSAGE, $index, $msg, 0, $params['opcode']);
     }
 
     protected function chooseChannel(int $index): \EventBufferEvent {
@@ -307,22 +308,22 @@ class MasterProcess extends AProcess implements IService {
         if ($events & (\EventBufferEvent::EOF | \EventBufferEvent::ERROR)) {
             $this->disConnect($index);
             $data = '';
-            $this->sendToChannel($this->chooseChannel($index), self::NOTIFY_TYPE_ON_CLOSE, $index, $data);
+            $this->sendToChannel($this->chooseChannel($index), self::NOTIFY_TYPE_ON_CLOSE, $index, $data, 0, self::FRAME_OPCODE_TEXT);
         }
     }
 
     public function channelReadCallback(\EventBufferEvent $bev, $arg): void {
         // IPC消息
-        $data_list = $this->receiveFromChannel($bev);
+        $data_list = $this->receiveFromChannel($bev, $opcode);
         foreach ($data_list as list($priority, $notify_type, $index, $data)) {
             $this->debug('master callback:' . sprintf('%08b', $notify_type));
 //            call_user_func_array([$this, $this->call_map[$notify_type]], [$index, $data]);
             switch ($notify_type) {
                 case self::CALL_TYPE_SEND_TO:
-                    $this->sendTo($index, $data);
+                    $this->sendTo($index, $data, $opcode);
                     break;
                 case self::CALL_TYPE_SEND_TO_ALL:
-                    $this->sendToAll($data, $priority);
+                    $this->sendToAll($data, $priority, $opcode);
                     break;
                 case self::CALL_TYPE_PREPARE_CLOSE:
                     $this->prepareClose($index);
@@ -331,17 +332,17 @@ class MasterProcess extends AProcess implements IService {
         }
     }
 
-    protected function sendTo(int $index, string $msg): void {
+    protected function sendTo(int $index, string $msg, int $opcode): void {
         if (!isset($this->established_connections[$index])) {
             return;
         }
 
         $bev = $this->established_connections[$index];
-        $msg = $this->frame($msg);
-        $this->doSend($bev, $index, $msg);
+        $msg = $this->frame($msg, $opcode);
+        $this->doSend($bev, $index, $msg, $opcode);
     }
 
-    protected function doSend(\EventBufferEvent $bev, int $index, string $msg): void {
+    protected function doSend(\EventBufferEvent $bev, int $index, string $msg, int $opcode): void {
         $len = strlen($msg);
         $res = $bev->write($msg);
         if (false === $res) {
@@ -349,7 +350,7 @@ class MasterProcess extends AProcess implements IService {
             $this->logger->error("{$index}# write error:" . $error);
 
             $this->disConnect($index);
-            $this->sendToChannel($this->chooseChannel($index), self::NOTIFY_TYPE_ON_ERROR, $index, $error);
+            $this->sendToChannel($this->chooseChannel($index), self::NOTIFY_TYPE_ON_ERROR, $index, $error, 0, $opcode);
         } else {
             $this->debug($index . '# ' . $len . ' bytes sent');
         }
@@ -359,14 +360,15 @@ class MasterProcess extends AProcess implements IService {
      * 群发消息
      * @param string $msg
      * @param int $priority
+     * @param int $opcode
      */
-    protected function sendToAll(string $msg, int $priority = 10): void {
+    protected function sendToAll(string $msg, int $priority = 10, int $opcode = self::FRAME_OPCODE_TEXT): void {
         if ($priority > 0) {
-            $this->all_messages[] = $msg;
+            $this->all_messages[] = [$opcode, $msg];
         } else {
             // 0 高优先级 实时发送
-            $msg = $this->frame($msg);
-            $this->doSendToAll($msg);
+            $msg = $this->frame($msg, $opcode);
+            $this->doSendToAll($msg, $opcode);
         }
     }
 
@@ -628,8 +630,10 @@ class MasterProcess extends AProcess implements IService {
         } while (0 === $FIN); //连续帧
 //        echo 'END.', PHP_EOL, PHP_EOL;
 
-        // 最后一帧，检查控制帧（Control Frames）操作码
-        $opcode = $first_byte_ord & 0b1111;
+        // 检查控制帧（Control Frames）操作码（当FIN=1时，opcode可能是0 Continuation Frame，此处以首帧为准）
+        // 发送文件时，BUFFER[0]可能的结构 00000010 00000010 ... 00000000 00000000 ... 10000000 10000000 ... 10000000
+        $opcode = ord($this->buffers[$index][0]) & 0b1111;
+        $params['opcode'] = $opcode;
         switch ($opcode) {
             case self::FRAME_OPCODE_PING:
                 $params['is_ping'] = true;
@@ -718,14 +722,14 @@ class MasterProcess extends AProcess implements IService {
                 // 限流，libevent会把消息全部写入内存，防止消息多时内存瞬间溢出
                 $bytes = 0;
                 $num = count($this->established_connections);
-                foreach ($this->all_messages as $i => $msg) {
-                    $msg = $this->frame($msg);
+                foreach ($this->all_messages as $i => list($opcode, $msg)) {
+                    $msg = $this->frame($msg, $opcode);
                     $msg_len = strlen($msg);
                     $next_guess = ($msg_len + $this->packet_header_size) * $num;
                     if ($bytes + $next_guess > $this->max_per_sent_bytes) break;
 
                     unset($this->all_messages[$i]);
-                    $sent_num = $this->doSendToAll($msg);
+                    $sent_num = $this->doSendToAll($msg, $opcode);
                     $bytes += ($msg_len + $this->packet_header_size) * $sent_num;
                 }
             }
@@ -741,14 +745,15 @@ class MasterProcess extends AProcess implements IService {
     /**
      * 给所有完成握手的客户端发送消息
      * @param string $msg
+     * @param int $opcode
      * @return int sent num
      */
-    protected function doSendToAll(string $msg): int {
+    protected function doSendToAll(string $msg, int $opcode): int {
         $num = 0;
         foreach ($this->established_connections as $index => $bev) {
             if (isset($this->wait_for_close[$index])) continue; // 即将关闭的忽略
 
-            $this->doSend($bev, $index, $msg);
+            $this->doSend($bev, $index, $msg, $opcode);
             ++$num;
         }
         return $num;

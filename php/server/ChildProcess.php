@@ -7,6 +7,23 @@ class ChildProcess extends AProcess implements ISubject, IServer {
      */
     protected $storage; // 业务处理对象存储容器
 
+    const OPCODE_CONTINUATION = 0x0;
+
+    const OPCODE_TEXT = 0x1;
+
+    const OPCODE_BINARY = 0x2;
+
+    protected $opcode_map = [
+        self::OPCODE_CONTINUATION => 'BINARY',
+        self::OPCODE_TEXT => 'TEXT',
+        self::OPCODE_BINARY => 'BINARY',
+    ];
+
+    protected $data_type_map = [
+        'TEXT' => self::OPCODE_TEXT,
+        'BINARY' => self::OPCODE_BINARY,
+    ];
+
     public function __construct() {
         parent::__construct();
         $this->storage = new \SplObjectStorage();
@@ -60,34 +77,38 @@ class ChildProcess extends AProcess implements ISubject, IServer {
     }
 
     public function channelReadCallback(\EventBufferEvent $bev, $arg): void {
-        $data_list = $this->receiveFromChannel($bev);
+        $data_list = $this->receiveFromChannel($bev, $opcode);
         foreach ($data_list as list($priority, $notify_type, $index, $data)) {
             $this->debug(posix_getpid() . '# work callback:' . sprintf('%08b', $notify_type));
             if ($notify_type === self::NOTIFY_TYPE_ON_OPEN) {
                 $data = json_decode($data, true);
             }
 
-            $this->notify($this->notify_map[$notify_type], [$index, $data]);
+            $data_type = $this->opcode_map[$opcode];
+            $this->notify($this->notify_map[$notify_type], [$index, $data, $data_type]);
         }
     }
 
     public function close(int $key): void {
         $data = '';
-        $this->sendToChannel($this->channels[0], self::CALL_TYPE_PREPARE_CLOSE, $key, $data);
+        $this->sendToChannel($this->channels[0], self::CALL_TYPE_PREPARE_CLOSE, $key, $data, 0, self::OPCODE_TEXT);
     }
 
     /**
      * 发送消息
      * @param int $key socket index
      * @param string $msg 消息
+     * @param string $data_type
      */
-    public function send(int $key, string $msg): void {
+    public function send(int $key, string $msg, string $data_type = 'TEXT'): void {
         // 发给主进程
-        $this->sendToChannel($this->channels[0], self::CALL_TYPE_SEND_TO, $key, $msg);
+        $opcode = $this->data_type_map[$data_type];
+        $this->sendToChannel($this->channels[0], self::CALL_TYPE_SEND_TO, $key, $msg, 0, $opcode);
     }
 
-    public function sendAll(string $msg, int $priority = 10): void {
+    public function sendAll(string $msg, int $priority = 10, string $data_type = 'TEXT'): void {
         // 发给主进程
-        $this->sendToChannel($this->channels[0], self::CALL_TYPE_SEND_TO_ALL, 0, $msg, $priority);
+        $opcode = $this->data_type_map[$data_type];
+        $this->sendToChannel($this->channels[0], self::CALL_TYPE_SEND_TO_ALL, 0, $msg, $priority, $opcode);
     }
 }

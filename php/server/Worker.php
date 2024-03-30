@@ -60,6 +60,12 @@ class Worker implements IClient {
     const MUSIC_OTHER = 502; //他人音乐
     const MUSIC_PERSONAL = 503; //私信音乐
 
+    // 文件
+    const FILE_COMMON = 1000;
+    const FILE_SELF = 1001;
+    const FILE_OTHER = 1002;
+    const FILE_PERSONAL = 1003;
+
     const VIDEO_PERSONAL_REQUEST = 600; //私信视频请求
     const VIDEO_PERSONAL_OFFLINE = 601; //离线
     const VIDEO_PERSONAL_ALLOW = 602; //请求通过
@@ -83,11 +89,15 @@ class Worker implements IClient {
     const WARNING = 901;//警告消息
     const SYSTEM = 902;//系统消息
 
+    const FILE_UPLOAD_SUCCESS = 903; // 文件上传成功
+    const FILE_UPLOAD_FAIL = 904; // 文件上传失败
+
     protected $types = [
         self::MESSAGE_PERSONAL => [self::MESSAGE_SELF, self::MESSAGE_OTHER],
         self::IMAGE_PERSONAL => [self::IMAGE_SELF, self::IMAGE_OTHER],
         self::EMOTION_PERSONAL => [self::EMOTION_SELF, self::EMOTION_OTHER],
         self::MUSIC_PERSONAL => [self::MUSIC_SELF, self::MUSIC_OTHER],
+        self::FILE_PERSONAL => [self::FILE_SELF, self::FILE_OTHER],
     ];
 
     public function __construct() {
@@ -109,10 +119,43 @@ class Worker implements IClient {
         $this->debug(var_export($headers, true));
     }
 
-    public function onMessage(int $key, string $message): void {
+    public function onMessage(int $key, string $message, string $data_type = 'TEXT'): void {
+        $this->timestamp = microtime(true);
+        // 检查消息类型
+        if ($data_type === 'BINARY') {
+            $finfo = new \finfo(\FILEINFO_MIME);
+            $mime = $finfo->buffer($message);
+            $this->debug(var_export(compact('key', 'mime'), true));
+            // image/png; charset=binary
+            // audio/mpeg; charset=binary
+            // text/plain; charset=us-ascii
+            // application/vnd.openxmlformats-officedocument.wordprocessingml.document; charset=binary
+            // application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; charset=binary
+            $match = preg_match('#image/|audio/|text/|application/vnd\.openxmlformats#', $mime);
+            if ($match) {
+                // 处理文件
+                $data = $this->getHashFile($message, $mime);
+                $this->response = [
+                    'type' => self::FILE_UPLOAD_SUCCESS,
+                    'mess' => $data,
+                    'timestamp' => $this->timestamp,
+                ];
+                $this->sendMessage($key);
+                $this->clearData();
+            } else {
+                $this->response = [
+                    'type' => self::FILE_UPLOAD_FAIL,
+                    'mess' => '不支持的文件类型：' . $mime,
+                    'timestamp' => $this->timestamp,
+                ];
+                $this->sendMessage($key);
+                $this->clearData();
+            }
+            return;
+        }
+
         //发送消息-处理业务
         $this->request = $this->decode($message);
-        $this->timestamp = microtime(true);
         if (!isset($this->request['type'])) {
             $this->logger->error(sprintf('数据不完整，共 %s bytes', strlen($message)));
             $this->response = [
@@ -257,7 +300,7 @@ class Worker implements IClient {
 
                 $info['avatar'] = $path = $this->getUniqueFile($this->request['mess'], 'avatar');
                 $res = $this->user->update($this->request['sender_id'], $info);
-                if (false == $res) {
+                if (false === $res) {
                     $this->response = [
                         'type' => self::USER_AVATAR_FAIL,
                         'mess' => '头像上传失败！',
@@ -297,7 +340,10 @@ class Worker implements IClient {
                 $this->sendCommonMessage($key);
                 break;
             case self::IMAGE_COMMON: //公共图片
-                $this->response['mess'] = $this->getUniqueFile($this->request['mess']);//图片直接存为文件，节省编码时间
+            case self::FILE_COMMON:
+            case self::MUSIC_COMMON:
+//                $this->response['mess'] = $this->getUniqueFile($this->request['mess']);//图片直接存为文件，节省编码时间
+                $this->response['mess'] = $this->request['mess'];
                 $this->sendCommonMessage($key);
                 break;
             case self::EMOTION_COMMON: //公共表情
@@ -309,7 +355,10 @@ class Worker implements IClient {
                 $this->sendPersonalMessage($key);
                 break;
             case self::IMAGE_PERSONAL: //私信图片
-                $this->response['mess'] = $this->getUniqueFile($this->request['mess']);
+            case self::FILE_PERSONAL:
+            case self::MUSIC_PERSONAL:
+//                $this->response['mess'] = $this->getUniqueFile($this->request['mess']);
+                $this->response['mess'] = $this->request['mess'];
                 $this->sendPersonalMessage($key);
                 break;
             case self::EMOTION_PERSONAL: //私信表情
@@ -317,25 +366,25 @@ class Worker implements IClient {
                 $this->response['mess'] = "/images/emotion/{$content[0]}/{$content[1]}";
                 $this->sendPersonalMessage($key);
                 break;
-            case self::MUSIC_COMMON:
-                $data = $this->request['mess']['data'];
-                $name = $this->request['mess']['name'];
-                $this->response['mess'] = $this->getUniqueFile($data, 'music');
-                $extra = [
-                    'name' => $name,
-                ];
-                $this->sendCommonMessage($key, $extra);
-                break;
-            case self::MUSIC_PERSONAL:
-                $data = $this->request['mess']['data'];
-                $name = $this->request['mess']['name'];
-                $this->response['mess'] = $this->getUniqueFile($data, 'music');
-
-                $extra = [
-                    'name' => $name,
-                ];
-                $this->sendPersonalMessage($key, $extra);
-                break;
+//            case self::MUSIC_COMMON:
+//                $data = $this->request['mess']['data'];
+//                $name = $this->request['mess']['name'];
+//                $this->response['mess'] = $this->getUniqueFile($data, 'music');
+//                $extra = [
+//                    'name' => $name,
+//                ];
+//                $this->sendCommonMessage($key, $extra);
+//                break;
+//            case self::MUSIC_PERSONAL:
+//                $data = $this->request['mess']['data'];
+//                $name = $this->request['mess']['name'];
+//                $this->response['mess'] = $this->getUniqueFile($data, 'music');
+//
+//                $extra = [
+//                    'name' => $name,
+//                ];
+//                $this->sendPersonalMessage($key, $extra);
+//                break;
             case self::VIDEO_PERSONAL_DENY:
                 $this->sendPersonalVideoMessage($key, '拒绝了视频请求');
                 break;
@@ -416,13 +465,19 @@ class Worker implements IClient {
     }
 
     public function filterRequest() {
-        if (!in_array($this->request_type,
-            [self::VIDEO_PERSONAL_OFFER_DESC, self::VIDEO_PERSONAL_ANSWER_DESC, self::VIDEO_PERSONAL_CANDIDATE])
-        ) {
-            array_walk_recursive($this->request, function (&$item, $key) {
-                $item = addslashes(htmlspecialchars(trim($item)));
-            });
-        }
+//        if (!in_array($this->request_type,
+//            [
+//                self::IMAGE_COMMON,
+//                self::IMAGE_PERSONAL,
+//                self::VIDEO_PERSONAL_OFFER_DESC,
+//                self::VIDEO_PERSONAL_ANSWER_DESC,
+//                self::VIDEO_PERSONAL_CANDIDATE,
+//            ])
+//        ) {
+//            array_walk_recursive($this->request, function (&$item, $key) {
+//                $item = addslashes(htmlspecialchars(trim($item)));
+//            });
+//        }
     }
 
     public function sendCommonMessage($key, $extra = [], $is_store = true) {
@@ -444,6 +499,7 @@ class Worker implements IClient {
             'mess' => $this->response['mess'] ?? $this->request['mess'],
             'timestamp' => $this->timestamp,
         ], $extra);
+        if (!empty($this->request['id'])) $this->response['id'] = $this->request['id'];
         $is_store and $this->user->addCommonMessage($this->request['receiver_id'], $this->timestamp, $this->encode($this->response));
 
         $this->sendAllMessage(0);
@@ -457,6 +513,7 @@ class Worker implements IClient {
             'mess' => $this->response['mess'] ?? $this->request['mess'],
             'timestamp' => $this->timestamp,
         ], $extra);
+        if (!empty($this->request['id'])) $this->response['id'] = $this->request['id'];
         $users = [$this->request['sender_id'], $this->request['receiver_id']];
         $this->user->addPersonalMessage($users, $this->timestamp, $this->encode($this->response));
 
@@ -506,6 +563,18 @@ class Worker implements IClient {
         $this->user->addFile($md5, $path);
 
         return $path;
+    }
+
+    public function getHashFile(&$data, $mime) {
+        $hash = hash('sha256', $data);
+        $path = $this->user->getFilePath($hash);
+        if (empty($path)) {
+            $path = $this->saveFile($data, $mime);
+            $this->user->addFilePath($hash, $path);
+        }
+        $size = strlen($data);
+
+        return compact('hash', 'path', 'size');
     }
 
     public function onError(int $key, string $err): void {
@@ -672,6 +741,32 @@ class Worker implements IClient {
         ];
     }
 
+    public function saveFile(&$data, $mime) {
+        list($name, ) = explode(';', $mime, 2);
+        $suffix_map = [
+            'image/png' => '.png',
+            'image/jpeg' => '.jpg',
+            'image/gif' => '.gif',
+            'audio/mpeg' => '.mp3',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => '.docx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => '.xlsx',
+        ];
+        $flag_map = [
+            'image/png' => 'image',
+            'image/jpeg' => 'image',
+            'image/gif' => 'image',
+            'audio/mpeg' => 'music',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'document',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'document',
+        ];
+        $suffix = $suffix_map[$name];
+        $flag = $flag_map[$name];
+        $path = $this->getFilePath($suffix, $flag);
+        file_put_contents($path['real'], $data);
+
+        return $path['relative'];
+    }
+
     /**
      * 编码数据
      *
@@ -680,8 +775,8 @@ class Worker implements IClient {
      * @link http://github.com/msgpack/msgpack-php
      */
     public function decode(&$str) {
-        //return json_decode($str, true);
-        return msgpack_unpack($str);
+        return json_decode($str, true);
+//        return msgpack_unpack($str);
     }
 
     /**
@@ -693,8 +788,8 @@ class Worker implements IClient {
      * @link http://github.com/msgpack/msgpack-php
      */
     public function encode(&$data) {
-        //return json_encode($data, JSON_UNESCAPED_UNICODE);
-        return msgpack_pack($data);
+        return json_encode($data, JSON_UNESCAPED_UNICODE);
+//        return msgpack_pack($data);
     }
 
     public function debug($content) {
@@ -724,7 +819,6 @@ class Worker implements IClient {
                 $content = "[$errno] $errstr" . PHP_EOL . " Fatal error on line $errline in file $errfile";
                 $this->logger->error($content);
                 exit(1);
-                break;
 
             case E_USER_WARNING:
                 $content = "WARNING [$errno] $errstr";

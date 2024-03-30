@@ -17,9 +17,10 @@ interface IClient {
      * 有消息时
      * @param int $key
      * @param string $message
+     * @param string $data_type TEXT|BINARY
      * @return void
      */
-    public function onMessage(int $key, string $message): void;
+    public function onMessage(int $key, string $message, string $data_type = 'TEXT'): void;
 
     /**
      * 出错时

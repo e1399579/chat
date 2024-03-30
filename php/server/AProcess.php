@@ -79,14 +79,14 @@ abstract class AProcess {
         $this->channels[] = $bev;
     }
 
-    protected function sendToChannel(\EventBufferEvent $bev, int $notify_type, int $index, string &$data, int $priority = 0): void {
-        // IPC消息格式：| 数据长度 4 byte | 优先级 1 byte | 通知类型 1 byte | 服务标识 2 byte | 数据 |
+    protected function sendToChannel(\EventBufferEvent $bev, int $notify_type, int $index, string &$data, int $priority = 0, int $opcode = 0x1): void {
+        // IPC消息格式：| 数据长度 4 byte | opcode 4 bit & 优先级 4 bit | 通知类型 1 byte | 服务标识 2 byte | 数据 |
         $len = strlen($data);
-        $payload = pack('N', $len) . chr($priority) . chr($notify_type) . pack('n', $index);
+        $payload = pack('N', $len) . chr(($opcode << 4) | ($priority & 0b1111)) . chr($notify_type) . pack('n', $index);
         $bev->write($payload . $data);
     }
 
-    protected function receiveFromChannel(\EventBufferEvent $bev): array {
+    protected function receiveFromChannel(\EventBufferEvent $bev, &$opcode = 0): array {
         $data_list = [];
         // 可能写入的数据有多条，但是都在一个缓存里面，故延迟处理
         $input = $bev->input;
@@ -111,7 +111,9 @@ abstract class AProcess {
                 break;
             }
 
-            $priority = ord(substr($payload, $offset, 1));
+            $byte_ord = ord(substr($payload, $offset, 1));
+            $opcode = $byte_ord >> 4; // 去掉后4位
+            $priority = $byte_ord & 0b1111; // 去掉前4位
             $notify_type = ord(substr($payload, $offset + 1, 1));
             $index = current(unpack('n', substr($payload, $offset + 2, 2)));
 

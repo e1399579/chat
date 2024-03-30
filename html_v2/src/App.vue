@@ -6,10 +6,32 @@
                     @message-click="messageClick"
                     @change-contact="changeContact"
                     @send="send">
+            <!--聊天窗口标题-->
             <template #message-title="contact">
                 <div class="flex space-between">
                     <span>{{contact.displayName}}<span v-if="contact.is_group"> ({{contact.online_total}})</span></span>
-                    <b @click="changeDrawer(contact)">···</b>
+                    <b @click="toggleDrawer(contact)" class="pointer user-select-none">···</b>
+                </div>
+            </template>
+            <!--聊天窗口右侧栏-->
+            <template #drawer="contact">
+                <div class="slot-group" v-if="contact.is_group">
+                    <div class="slot-group-title">群通知</div>
+                    <hr/>
+                    <div class="slot-group-notice">公告内容</div>
+                    <hr/>
+                    <div class="slot-group-title">群成员</div>
+                    <input class="slot-search" placeholder="搜索群成员"/>
+                    <div class="slot-group-panel flex">
+                        <template v-for="item of online_users.values()">
+                            <div class="slot-group-member" :key="item.user_id" v-lemon-contextmenu="groupMenu(item, chatWith, im.closeDrawer)">
+                                <div class="slot-group-avatar">
+                                    <img :src="item.avatar ? item.avatar : default_avatar_url" alt="avatar" />
+                                </div>
+                                <div class="slot-group-name">{{item.username}}</div>
+                            </div>
+                        </template>
+                    </div>
                 </div>
             </template>
         </lemon-imui>
@@ -44,6 +66,14 @@
 
         <!--提示框-->
         <notifications group="tip" position="top center" />
+
+        <!--图片预览-->
+        <template>
+            <!-- component -->
+            <viewer :images="images">
+                <img v-for="src in images" :key="src" :src="src">
+            </viewer>
+        </template>
     </main>
 </template>
 
@@ -51,7 +81,7 @@
 import './css/login.css';
 import './css/main.css';
 
-import {DataHelper} from './js/util.js';
+import {DataHelper, generateUUID} from './js/util.js';
 import emoji from './js/emoji.js';
 import default_avatar from './assets/chat.png';
 
@@ -59,23 +89,44 @@ const DEBUG = true;
 const DEFAULT_AVATAR = default_avatar;
 const MAX_LIMITS = 100; //断线最大重连次数
 const COOKIE_EXPIRE_DAYS = 7; //cookie过期天数
+const MAX_IMAGE_SIZE = 1024 * 1024 * 4; //最大上传图片尺寸
+const MAX_MUSIC_SIZE = 1024 * 1024 * 16; //最大音乐尺寸
+const MAX_FILE_SIZE = 1024 * 1024 * 50; //最大音乐尺寸
 
-const USER_LOGIN = 205; // 用户登录
 const MESSAGE_COMMON = 100;//公共消息
 const MESSAGE_SELF = 101;//本人消息
 const MESSAGE_OTHER = 102;//他人消息
 const MESSAGE_PERSONAL = 103;//私信
+
 const USER_ONLINE = 200;//用户上线
-const USER_DISABLED = 206;//用户禁用
-const USER_DOWNLINE = 207;//用户下线
-const USER_REMOVE = 209;//用户移除
-const USER_ONLINE_TOTAL = 213; // 用户在线数量
 const USER_QUIT = 201;//用户退出
 const USER_QUERY = 203; //用户查询
 const USER_REGISTER = 204;//用户注册
+const USER_LOGIN = 205; // 用户登录
+const USER_DISABLED = 206;//用户禁用
+const USER_DOWNLINE = 207;//用户下线
 const USER_INCORRECT = 208;//用户名/密码错误
+const USER_REMOVE = 209;//用户移除
+const USER_ONLINE_TOTAL = 213; // 用户在线数量
+
+const IMAGE_COMMON = 300;//公共图片
+const IMAGE_SELF = 301;//本人图片
+const IMAGE_OTHER = 302;//他人图片
+const IMAGE_PERSONAL = 303;//私信图片
+
+const MUSIC_COMMON = 500; //公共音乐
+const MUSIC_SELF = 501; //本人音乐
+const MUSIC_OTHER = 502; //他人音乐
+const MUSIC_PERSONAL = 503; //私信音乐
+
+const FILE_COMMON = 1000;
+const FILE_SELF = 1001;
+const FILE_OTHER = 1002;
+const FILE_PERSONAL = 1003;
+
 const HISTORY_MESSAGE_COMMON = 800; //历史公共消息
 const HISTORY_MESSAGE_PERSONAL = 801; //历史个人消息
+const FILE_UPLOAD_SUCCESS = 903; // 文件上传成功
 
 export default {
     name: 'App',
@@ -84,6 +135,8 @@ export default {
         return {
             im: null,
             server_url: process.env.VUE_APP_SERVER_URL,
+            upload_url: process.env.VUE_APP_UPLOAD_URL,
+            default_avatar_url: default_avatar,
             username: "",
             password: "",
             user: {id: 0, displayName: '', avatar: DEFAULT_AVATAR, is_active: 1},
@@ -97,6 +150,8 @@ export default {
             pull_next: new Map(),
             send_next: new Map(),
             query_next: new Map(),
+            upload_next: new Map(),
+            images: [],
         }
     },
     watch: {
@@ -104,10 +159,11 @@ export default {
     mounted() {
         const {im} = this.$refs;
         this.im = im;
+        generateUUID();
 
         // 连接服务器，监听事件
         this.socket = new WebSocket(this.server_url);
-        this.socket.binaryType = 'arraybuffer'; //设为二进制的原始缓冲区
+        // this.socket.binaryType = 'arraybuffer'; //设为二进制的原始缓冲区
 
         this.socket.addEventListener('open', this.onOpen);
         this.socket.addEventListener('message', this.onMessage);
@@ -118,7 +174,42 @@ export default {
         this.im.initMenus([{name: "messages"}, {name: "contacts"}]);
 
         // 初始化表情包
-        im.initEmoji(emoji);
+        this.im.initEmoji(emoji);
+
+        // 初始化工具栏
+        this.im.initEditorTools([
+            {
+                name: 'emoji'
+            },
+            {
+                name: 'uploadImage'
+            },
+            {
+                name: 'uploadDoc',
+                title: "上传文档",
+                click: () => {
+                    this.im.$refs.editor.selectFile(".doc,.docx,.xls,.xlsx");
+                },
+                render: () => {
+                    return <span>📄</span>;
+                },
+            },
+            {
+                name: "uploadMusic",
+                title: "上传音乐",
+                click: () => {
+                    this.im.$refs.editor.selectFile(".mp3");
+                },
+                render: () => {
+                    return <span>🎵</span>;
+                },
+            },
+        ]);
+
+        // 自定义消息-音乐
+        this.im.setLastContentRender('music', (message) => {
+            return <span>[音乐]{message.fileName}</span>;
+        });
 
         // 大厅
         this.im.initContacts([{
@@ -132,7 +223,7 @@ export default {
             online_total: 0,
             is_group: true,
         }]);
-        this.contact_query_time.set('0', {timestamp: (new Date()).getTime() / 1000});
+        this.contact_query_time.set('0', ((new Date()).getTime() + performance.now()) / 1000);
     },
     methods: {
         // 回调方法
@@ -150,7 +241,7 @@ export default {
         },
         onMessage(message) {
             let mess = DataHelper.decode(message.data);
-            mess.timestamp = parseInt(mess.timestamp * 1000);
+            mess.timestamp = mess.timestamp * 1000;
             this.trace("receive", mess);
             // let id = mess.receiver_id;
             // let trace_id = mess.trace_id;
@@ -158,6 +249,9 @@ export default {
             switch (mess.type) {
                 // 用户状态
                 case MESSAGE_SELF://myself @other // TODO 修改消息样式
+                case IMAGE_SELF:
+                case FILE_SELF:
+                case MUSIC_SELF:
                     break;
                 case USER_REGISTER://需要注册
                     this.$modal.show('login-modal');
@@ -212,7 +306,8 @@ export default {
                     this.online_total = mess.mess; // 置为实际数量
                     this.updateContact("0", {online_total:this.online_total});
                     break;
-                case USER_QUIT: {
+                case USER_QUIT:
+                {
                     let user = mess.user;
                     this.im.appendMessage({
                         id: DataHelper.buildTraceId(),
@@ -228,7 +323,8 @@ export default {
                     this.updateContact("0", {online_total:this.online_total});
                     break;
                 }
-                case USER_QUERY: {
+                case USER_QUERY:
+                {
                     let user = mess.user;
                     let user_id = user.user_id;
                     this.addUser(user);
@@ -241,7 +337,8 @@ export default {
                 }
                 case USER_DOWNLINE://下线
                 case USER_REMOVE://移除
-                case USER_DISABLED: {//禁用
+                case USER_DISABLED: //禁用
+                {
                     this.user.is_active = 0;
                     this.disconnect_mess = this.disconnect_mess = mess.mess;
                     this.$modal.show('disconnect-modal');
@@ -250,7 +347,14 @@ export default {
 
                 // 公共、个人消息
                 case MESSAGE_COMMON: //公共消息
-                case MESSAGE_OTHER: {//other @me
+                case MESSAGE_OTHER: //other @me
+                case IMAGE_COMMON:
+                case IMAGE_OTHER:
+                case MUSIC_COMMON:
+                case MUSIC_OTHER:
+                case FILE_COMMON:
+                case FILE_OTHER:
+                {
                     let sender_id = mess.sender_id;
                     if (sender_id === this.user.id) return; // 自己发的，忽略，避免重复
                     let sender = this.getUser(sender_id);
@@ -273,7 +377,8 @@ export default {
                 }
 
                 case HISTORY_MESSAGE_COMMON:
-                case HISTORY_MESSAGE_PERSONAL: {
+                case HISTORY_MESSAGE_PERSONAL:
+                {
                     let contact_id = mess.receiver_id;
                     let resolve = this.pull_next.get(contact_id);
                     if (resolve) {
@@ -281,7 +386,21 @@ export default {
                     }
                     break;
                 }
-                default: {
+
+                // 文件上传
+                case FILE_UPLOAD_SUCCESS:
+                {
+                    // let hash = mess.mess.hash;
+                    // let path = mess.mess.path;
+
+                    let {hash, path, size} = mess.mess;
+                    let resolve = this.upload_next.get(hash);
+                    resolve(path, size);
+                    break;
+                }
+
+                default:
+                {
                     this.$notify({
                         group: 'tip',
                         text: '未知的消息类型：' + mess.type,
@@ -363,7 +482,7 @@ export default {
             exp.setTime(exp.getTime() + COOKIE_EXPIRE_DAYS * 24 * 60 * 60 * 1000);
             document.cookie = name + "=" + escape(value) + ";expires=" + exp.toGMTString();
         },
-        sendMessage(type, receiver_id = 0, mess = "", trace_id = "") {
+        sendMessage(type, receiver_id = 0, mess = "", id = "", trace_id = "") {
             let defaults = {
                 type: MESSAGE_COMMON,
                 receiver_id: 0,
@@ -376,24 +495,73 @@ export default {
                 receiver_id,
                 mess,
             });
+            if (id) data.id = id;
             this.trace("send", data);
             this.socket.send(DataHelper.encode(data));
         },
-        receiveMessage(mess, sender = null) {
-            this.im.appendMessage({
-                id: DataHelper.buildTraceId(),
+        parseMessage(mess, sender = null) {
+            let type, content, fileSize, fileName;
+            switch (mess.type) {
+                case MESSAGE_COMMON:
+                case MESSAGE_SELF:
+                case MESSAGE_OTHER:
+                {
+                    type = "text";
+                    content = mess.mess;
+                    fileSize = 0;
+                    fileName = "";
+                    break;
+                }
+                case IMAGE_COMMON:
+                case IMAGE_SELF:
+                case IMAGE_OTHER:
+                {
+                    type = "image";
+                    content = this.upload_url + mess.mess.path;
+                    fileSize = mess.mess.size;
+                    fileName = mess.mess.name;
+                    break;
+                }
+                case FILE_COMMON:
+                case FILE_SELF:
+                case FILE_OTHER:
+                {
+                    type = "file";
+                    content = this.upload_url + mess.mess.path;
+                    fileSize = mess.mess.size;
+                    fileName = mess.mess.name;
+                    break;
+                }
+                case MUSIC_COMMON:
+                case MUSIC_SELF:
+                case MUSIC_OTHER:
+                {
+                    type = "music";
+                    content = this.upload_url + mess.mess.path;
+                    fileSize = mess.mess.size;
+                    fileName = mess.mess.name;
+                    break;
+                }
+            }
+            return {
+                id: mess.id,
                 status: "succeed",
-                type: "text",
+                type,
                 sendTime: mess.timestamp,
-                content: mess.mess,
+                content,
                 toContactId: mess.receiver_id,
+                fileSize,
+                fileName,
                 fromUser: {
                     //如果 id == this.user.id消息会显示在右侧，否则在左侧
                     id: mess.sender_id,
                     displayName: sender ? sender.username : '',
-                    avatar: sender ? sender.avatar : '',
+                    avatar: sender && sender.avatar ? sender.avatar : DEFAULT_AVATAR,
                 }
-            });
+            };
+        },
+        receiveMessage(mess, sender = null) {
+            this.im.appendMessage(this.parseMessage(mess, sender));
         },
         updateContact(contact_id, option) {
             this.im.updateContact({
@@ -437,7 +605,7 @@ export default {
         getHistory(contact, next) {
             let _query_time = this.contact_query_time.get(contact.id);
             // 精确到4位，和服务器保持一致，并去除边界的一条
-            let query_time = _query_time > 0 ? _query_time - 0.0001 : (new Date()).getTime() / 1000;
+            let query_time = _query_time > 0 ? _query_time - 0.0001 : ((new Date()).getTime() + performance.now()) / 1000;
             let type = (contact.id === '0') ? HISTORY_MESSAGE_COMMON : HISTORY_MESSAGE_PERSONAL;
             // 异步查询历史消息
             let promise = new Promise((resolve, reject) => {
@@ -465,20 +633,15 @@ export default {
                     }
                 }
                 let promise_list = [];
-                let i = 0;
                 query_id_list.forEach((user_id) => {
-                    // 并发时似乎有BUG，延时处理
                     let promise2 = new Promise((resolve) => {
-                        window.setTimeout(() => {
-                            this.query_next.set(user_id, resolve);
-                            this.sendMessage(USER_QUERY, user_id, "", user_id);
-                        }, i * 2);
+                        this.query_next.set(user_id, resolve);
+                        this.sendMessage(USER_QUERY, user_id, "", "", user_id);
                     });
                     promise2.then((user) => {
                         this.updateContactFromUser(user);
                     });
                     promise_list.push(promise2);
-                    i++;
                 });
                 // 用户信息全部查询完毕，再处理消息
                 Promise.all(promise_list).then(() => {
@@ -486,21 +649,10 @@ export default {
                     for (let one of list) {
                         let sender_id = one.sender_id;
                         let user = this.getUser(sender_id);
-                        messages.push({
-                            id: DataHelper.buildTraceId(),
-                            status: 'succeed',
-                            type: 'text',
-                            sendTime: parseInt(one.timestamp * 1000),
-                            content: one.mess,
-                            toContactId: contact_id,
-                            fromUser: {
-                                id: one.sender_id,
-                                displayName: user.username,
-                                avatar: user.avatar ? user.avatar : DEFAULT_AVATAR,
-                            }
-                        });
+                        one.timestamp = one.timestamp * 1000;
+                        messages.push(this.parseMessage(one, user));
                     }
-                    let is_end = (list.length <= 0);
+                    let is_end = (list.length < 10);
                     // 将第二个参数设为true，表示已到末尾
                     next(messages, is_end);
 
@@ -511,71 +663,102 @@ export default {
                 });
             });
         },
-        send(message, next) {
-            // 发送消息
+        // 发送消息
+        send(message, next, file) {
             try {
-                let receiver_id = message.toContactId;
-                let type = (message.toContactId === '0') ? MESSAGE_COMMON : MESSAGE_PERSONAL;
-                this.sendMessage(type, receiver_id, message.content);
+                this.trace('auto send', message, file);
 
-                next();
+                // 有文件时，修正type
+                if (file) {
+                    let music_types = [
+                        "audio/mpeg",
+                    ];
+                    if (music_types.includes(file.type)) {
+                        message.type = "music";
+                    }
+                }
+
+                let receiver_id = message.toContactId;
+                let is_personal = (receiver_id !== '0') + 0;
+                let type_map = {
+                    "image": [IMAGE_COMMON, IMAGE_PERSONAL],
+                    "file": [FILE_COMMON, FILE_PERSONAL],
+                    "text": [MESSAGE_COMMON, MESSAGE_PERSONAL],
+                    "music": [MUSIC_COMMON, MUSIC_PERSONAL],
+                };
+                let type = type_map[message.type][is_personal];
+
+                // 文本直接发送
+                if (!file) {
+                    this.sendMessage(type, receiver_id, message.content, message.id);
+                    return next();
+                }
+
+                // 文件处理
+                // TODO 文件压缩
+                // audio/mpeg image/png
+                let limit_size;
+                switch (message.type) {
+                    case "image":
+                    default:
+                        limit_size = MAX_IMAGE_SIZE;
+                        break;
+                    case "music":
+                        limit_size = MAX_MUSIC_SIZE;
+                        break;
+                    case "file":
+                        limit_size = MAX_FILE_SIZE;
+                        break;
+                }
+                if (file.size > limit_size) {
+                    this.$notify({
+                        group: 'tip',
+                        text: '文件太大，限制：<' + (limit_size / 1024 ** 2) + 'M',
+                        type: 'error',
+                    });
+                    return next({status:'failed'});
+                }
+
+                let message_id = message.id;
+                let func = async () => {
+                    let buffer = await file.arrayBuffer();
+                    let hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+                    let hashArray = Array.from(new Uint8Array(hashBuffer)); // 将缓冲区转换为字节数组
+                    const hash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join(""); // 将字节数组转换为十六进制字符串
+                    this.trace(hash);
+                    let promise = new Promise((resolve) => {
+                        this.socket.send(file); // WebSocket发送文件时无法携带其他信息
+                        this.upload_next.set(hash, resolve);
+                    });
+                    promise.then((path) => {
+                        this.upload_next.delete(hash);
+                        let data = {
+                            name: file.name,
+                            path,
+                            size: file.size,
+                        };
+                        this.sendMessage(type, receiver_id, data, message.id);
+                        // 更新此条消息的URL
+                        this.im.updateMessage({
+                            id: message_id,
+                            content: this.upload_url + path,
+                        });
+                        next();
+                    });
+                }
+                func();
             } catch (e) {
                 this.trace(e);
                 next({status:'failed'});
             }
         },
-        changeDrawer() {
-            let self = this;
+        // 抽屉，显示群组/私聊成员
+        toggleDrawer() {
+            // let self = this;
             this.im.changeDrawer({
                 position: "rightInside",
                 offsetY: 33,
                 height: this.$el.clientHeight - 33,
-                render: () => {
-                    // JSX see https://v2.cn.vuejs.org/v2/guide/render-function.html
-                    // https://github.com/vuejs/babel-plugin-transform-vue-jsx/issues/38
-                    let elements = [];
-                    this.online_users.forEach((user) => {
-                        if (user.user_id === this.user.id) {
-                            elements.push(
-                                <div class="slot-group-member">
-                                    <div class="slot-group-avatar">
-                                        <img src={user.avatar ? user.avatar : DEFAULT_AVATAR} alt="avatar" />
-                                    </div>
-                                    <div class="slot-group-name">{user.username}</div>
-                                </div>
-                            );
-                        } else {
-                            elements.push(
-                                <div class="slot-group-member" v-lemon-contextmenu_click={[
-                                    {
-                                        text: "发消息",
-                                        click(e, instance, hide) {
-                                            self.chatWith(user);
-                                            hide();
-                                        },
-                                    },
-                                ]}
-                                >
-                                    <div class="slot-group-avatar">
-                                        <img src={user.avatar ? user.avatar : DEFAULT_AVATAR} alt="avatar" />
-                                    </div>
-                                    <div class="slot-group-name">{user.username}</div>
-                                </div>
-                            );
-                        }
-                    });
-                    return (
-                        <div class="slot-group">
-                            <div class="slot-group-title">群通知</div>
-                            <div class="slot-group-notice">公告内容</div>
-                            <div class="slot-group-title">群成员</div>
-                            <input class="slot-search" placeholder="搜索群成员"/>
-                            <div class="slot-group-panel flex">
-                                {elements}
-                            </div>
-                        </div>
-                    );
-                },
             });
         },
         chatWith(user) {
@@ -586,11 +769,58 @@ export default {
             let contact_id = message.toContactId;
             // 标记为已读
             this.updateContact(contact_id, {unread: 0});
+
+            this.trace(e, key, message);
+            if (message.type === "image") {
+                this.imagePreview(message.content);
+            }
         },
         changeContact(contact) {
             this.updateContact(contact.id, {unread: 0});
         },
+
+        // 图片预览
+        imagePreview(url) {
+            let images = document.querySelectorAll(".lemon-message__content img");
+            let index = 0;
+            this.images = [];
+            images.forEach((image, i) => {
+                this.images.push(image.src);
+                if (image.src === url) {
+                    index = i;
+                }
+            });
+            console.log(this.images);
+            this.$viewerApi({
+                images: this.images,
+                options: {
+                    toolbar: true,
+                    initialViewIndex: index,
+                },
+            });
+        },
+
+        // 打开公告
+        openNotice() {
+            return '';
+        },
+
+        // 添加成员
+        openAddGroupUser() {},
+
+        // 成员菜单
+        groupMenu(item, before, after) {
+            return (item.user_id === this.user.id) ? [] : [
+                {
+                    text: "发消息",
+                    click(e, instance, hide) {
+                        before(item);
+                        hide();
+                        after();
+                    },
+                },
+            ];
+        },
     }
 }
 </script>
-
