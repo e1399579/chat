@@ -11,6 +11,7 @@ class User {
     protected $fileStore2 = 'file:hash';
     protected $userService = 'user_service'; // user_id=>socket key
     protected $serviceUser = 'service_user'; // socket key=>user_id
+    protected $groupsSet = 'groups'; // 群组集合
 
     protected $dbIndex; // 库序号
 
@@ -240,6 +241,10 @@ class User {
         return $this->redis->hGet($this->userService, $user_id);
     }
 
+    public function getServiceKeys($user_id_list) {
+        return $this->redis->hMGet($this->userService, $user_id_list);
+    }
+
     public function getUserIdByServiceKey($key) {
         return $this->redis->hGet($this->serviceUser, $key);
     }
@@ -251,5 +256,175 @@ class User {
 
     public function flushUserServiceRelation() {
         $this->redis->del([$this->userService, $this->serviceUser]);
+    }
+
+    public function getUserContactsKey($user_id) {
+        return 'user_contacts:user_id:' . $user_id;
+    }
+
+    public function addUserContact($user_id, $friend_id) {
+        $user_contacts_key = $this->getUserContactsKey($user_id);
+        $timestamp = microtime(true);
+        return $this->redis->zAdd($user_contacts_key, $timestamp, $friend_id);
+    }
+
+    public function delUserContact($user_id, $friend_id) {
+        $user_contacts_key = $this->getUserContactsKey($user_id);
+        return $this->redis->zRem($user_contacts_key, $friend_id);
+    }
+
+    public function getUserContacts($user_id, $with_score = false) {
+        $user_contacts_key = $this->getUserContactsKey($user_id);
+        return $this->redis->zRange($user_contacts_key, 0, -1, $with_score);
+    }
+
+    public function getUserContactsInfo($user_id, $info) {
+        $user_contacts = $this->getUserContacts($user_id, true);
+        $data = [];
+        foreach ($user_contacts as $friend_id => $timestamp) {
+            $user = $this->getUserById($friend_id, $info);
+            $user and $user['join_timestamp'] = $timestamp;
+            $data[] = $user;
+        }
+        return $data;
+    }
+
+    public function getGroupMembersKey($group_id) {
+        return 'group_members:group_id:' . $group_id;
+    }
+
+    public function getUserGroupKey($user_id) {
+        return 'user_groups:user_id:' . $user_id;
+    }
+
+    public function addGroup($admin_id, $name, $members, $extra = []) {
+        // 创建群组基本信息
+        $group_id = uniqid();
+        $create_time = microtime(true);
+        $data = compact('name', 'admin_id', 'create_time') + $extra;
+        $this->redis->hSet($this->groupsSet, $group_id, json_encode($data, JSON_UNESCAPED_UNICODE));
+
+        $group_members_key = $this->getGroupMembersKey($group_id);
+        $this->redis->zAdd($this->getUserGroupKey($admin_id), $create_time, $group_id);
+        $args = [$group_members_key, $create_time, $admin_id]; // 合并操作
+        foreach ($members as $member) {
+            $timestamp = microtime(true);
+            // 添加群组成员
+            $args[] = $timestamp;
+            $args[] = $member;
+
+            // 添加成员关联
+            $this->addUserGroup($member, $group_id, $timestamp);
+        }
+        call_user_func_array([$this->redis, 'zAdd'], $args);
+
+        $data['id'] = $group_id;
+        return $data;
+    }
+
+    public function updateGroup($group_id, $info) {
+        $data = $this->getGroup($group_id);
+        $merged = array_merge($data, $info);
+        return $this->redis->hSet($this->groupsSet, $group_id, json_encode($merged, JSON_UNESCAPED_UNICODE));
+    }
+
+    public function delGroup($group_id) {
+        // 查询群组成员
+        $members = $this->getGroupMembers($group_id);
+        $group_members_key = $this->getGroupMembersKey($group_id);
+        $args = [$group_members_key];
+        foreach ($members as $member) {
+            // 删除群组成员
+            $args[] = $member;
+
+            // 删除成员关联
+            $this->delUserGroup($member, $group_id);
+        }
+        call_user_func_array([$this->redis, 'zRem'], $args);
+
+        // 删除群组
+        return $this->redis->hDel($this->groupsSet, $group_id);
+    }
+
+    public function jonGroup($group_id, $members) {
+        $group_members_key = $this->getGroupMembersKey($group_id);
+        $args = [$group_members_key];
+        foreach ($members as $member) {
+            $timestamp = microtime(true);
+            // 添加群组成员
+            $args[] = $timestamp;
+            $args[] = $member;
+
+            // 添加成员关联
+            $this->addUserGroup($member, $group_id, $timestamp);
+        }
+        return call_user_func_array([$this->redis, 'zAdd'], $args);
+    }
+
+    public function exitGroup($user_id, $group_id) {
+        $group_members_key = $this->getGroupMembersKey($group_id);
+        $this->redis->zRem($group_members_key, $user_id); // 删除群组成员
+        return $this->delUserGroup($user_id, $group_id); // 删除成员关联
+    }
+
+    public function addUserGroup($user_id, $group_id, $timestamp) {
+        $user_groups_key = $this->getUserGroupKey($user_id);
+        return $this->redis->zAdd($user_groups_key, $timestamp, $group_id);
+    }
+
+    public function delUserGroup($user_id, $group_id) {
+        $user_groups_key = $this->getUserGroupKey($user_id);
+        return $this->redis->zRem($user_groups_key, $group_id);
+    }
+
+    public function getGroup($group_id) {
+        $str = $this->redis->hGet($this->groupsSet, $group_id);
+        return json_decode($str, true);
+    }
+
+    public function getGroupMembers($group_id, $with_scores = false) {
+        $group_members_key = $this->getGroupMembersKey($group_id);
+        return $this->redis->zRange($group_members_key, 0, -1, $with_scores);
+    }
+
+    public function getGroupMembersInfo($group_id, $info) {
+        $members = $this->getGroupMembers($group_id, true);
+        $data = [];
+        foreach ($members as $member => $timestamp) {
+            $user = $this->getUserById($member, $info);
+            $user and $user['join_timestamp'] = $timestamp;
+            $data[] = $user;
+        }
+        return $data;
+    }
+
+    public function getUserGroups($user_id) {
+        $user_groups_key = $this->getUserGroupKey($user_id);
+        return $this->redis->zRange($user_groups_key, 0, -1);
+    }
+
+    public function getUserGroupsInfo($user_id) {
+        $groups = $this->getUserGroups($user_id);
+        if (empty($groups)) return [];
+        $list = $this->redis->hMGet($this->groupsSet, $groups);
+        array_walk($list, function (&$item, $key) {
+            $item = json_decode($item, true);
+        });
+        return $list;
+    }
+
+    public function getGroupMemberRank($group_id, $user_id) {
+        $group_members_key = $this->getGroupMembersKey($group_id);
+        return $this->redis->zRank($group_members_key, $user_id);
+    }
+
+    public function isGroupMember($group_id, $user_id) {
+        $group_members_key = $this->getGroupMembersKey($group_id);
+        return (bool) $this->redis->zScore($group_members_key, $user_id);
+    }
+
+    public function isGroupAdmin($group_id, $user_id) {
+        $group = $this->getGroup($group_id);
+        return (isset($group['admin_id']) && ($group['admin_id'] === $user_id));
     }
 }

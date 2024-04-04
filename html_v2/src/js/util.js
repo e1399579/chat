@@ -22,6 +22,14 @@ export class DataHelper {
     static buildTraceId() {
         return Math.random().toString(36).substr(2,10);
     }
+
+    static async sha256(blob) {
+        // @see https://developer.mozilla.org/zh-CN/docs/Web/API/SubtleCrypto/digest
+        let buffer = await blob.arrayBuffer();
+        let hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+        let hashArray = Array.from(new Uint8Array(hashBuffer)); // 将缓冲区转换为字节数组
+        return hashArray.map((b) => b.toString(16).padStart(2, "0")).join(""); // 将字节数组转换为十六进制字符串
+    }
 }
 
 String.prototype.replaceMulti = function (search, replace) {

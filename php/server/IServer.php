@@ -27,4 +27,13 @@ interface IServer {
      * @return void
      */
     public function sendAll(string $msg, int $priority = 10, string $data_type = 'TEXT'): void;
+
+    /**
+     * 给多人发送消息
+     * @param array $keys
+     * @param string $msg
+     * @param string $data_type
+     * @return void
+     */
+    public function sendMultiple(array $keys, string $msg, string $data_type = 'TEXT'): void;
 }

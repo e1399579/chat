@@ -111,4 +111,11 @@ class ChildProcess extends AProcess implements ISubject, IServer {
         $opcode = $this->data_type_map[$data_type];
         $this->sendToChannel($this->channels[0], self::CALL_TYPE_SEND_TO_ALL, 0, $msg, $priority, $opcode);
     }
+
+    public function sendMultiple(array $keys, string $msg, string $data_type = 'TEXT'): void {
+        // 发给主进程
+        $opcode = $this->data_type_map[$data_type];
+        $data = json_encode([$keys, $msg]);
+        $this->sendToChannel($this->channels[0], self::CALL_TYPE_SEND_TO_MULTIPLY, 0, $data, 0, $opcode);
+    }
 }

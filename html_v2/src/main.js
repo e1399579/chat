@@ -8,12 +8,14 @@ import VModal from 'vue-js-modal';
 import Notifications from 'vue-notification';
 import 'viewerjs/dist/viewer.css';
 import VueViewer from 'v-viewer';
+import ImageCrop from 'vue-image-crop-upload/upload-2';
 
 Vue.config.productionTip = false;
 Vue.use(LemonIMUI);
 Vue.use(VModal);
 Vue.use(Notifications);
 Vue.use(VueViewer);
+Vue.component('image-crop', ImageCrop);
 
 new Vue({
   render: h => h(App),

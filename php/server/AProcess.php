@@ -17,12 +17,14 @@ abstract class AProcess {
     const CALL_TYPE_SEND_TO = 0b1;
     const CALL_TYPE_SEND_TO_ALL = 0b10;
     const CALL_TYPE_PREPARE_CLOSE = 0b100;
+    const CALL_TYPE_SEND_TO_MULTIPLY = 0b1000;
 
-    protected $call_map = [
-        self::CALL_TYPE_SEND_TO => 'sendTo',
-        self::CALL_TYPE_SEND_TO_ALL => 'sendToAll',
-        self::CALL_TYPE_PREPARE_CLOSE => 'prepareClose',
-    ];
+//    protected $call_map = [
+//        self::CALL_TYPE_SEND_TO => 'sendTo',
+//        self::CALL_TYPE_SEND_TO_ALL => 'sendToAll',
+//        self::CALL_TYPE_PREPARE_CLOSE => 'prepareClose',
+//        self::CALL_TYPE_SEND_TO_MULTIPLY => 'sendToMultiple',
+//    ];
 
     protected $debug = false; // 调试
         /**

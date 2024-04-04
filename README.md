@@ -47,13 +47,14 @@ chat
 
 ## 前端(新版html_v2)
 ### 框架/插件
-1. [Vue 2](https://v2.cn.vuejs.org/)
-2. [lemon-imui](https://www.npmjs.com/package/lemon-imui)
-3. [vue-js-modal](https://www.npmjs.com/package/vue-js-modal)
-4. [msgpackr](https://www.npmjs.com/package/msgpackr)
-5. [Babel](https://babel.nodejs.cn/docs/)
-6. [vue-notification](https://www.npmjs.com/package/vue-notification)
-7. [v-viewer@legacy](https://github.com/mirari/v-viewer/tree/v2)
+1. 框架 [Vue 2](https://v2.cn.vuejs.org/)
+2. 主界面 [lemon-imui](https://www.npmjs.com/package/lemon-imui)
+3. 登录框 [vue-js-modal](https://www.npmjs.com/package/vue-js-modal)
+4. 数据压缩 [msgpackr](https://www.npmjs.com/package/msgpackr)
+5. JS编译器 [Babel](https://babel.nodejs.cn/docs/)
+6. 提示框 [vue-notification](https://www.npmjs.com/package/vue-notification)
+7. 图片预览 [v-viewer@legacy](https://github.com/mirari/v-viewer/tree/v2)
+8. 头像裁剪 [vue-image-crop-upload](https://www.npmjs.com/package/vue-image-crop-upload)
 
 ### 安装
 1. 创建.env.local文件，设置WebSocket服务器地址`VUE_APP_SERVER_URL`，设置文件服务器地址`VUE_APP_UPLOAD_URL`

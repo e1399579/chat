@@ -66,6 +66,15 @@ class Worker implements IClient {
     const FILE_OTHER = 1002;
     const FILE_PERSONAL = 1003;
 
+    // 群聊
+    const GROUP_CREATE = 1100;
+    const GROUP_QUERY_LIST = 1101;
+    const GROUP_QUERY_MEMBER = 1102;
+    const GROUP_QUERY_INFO = 1103;
+    const GROUP_JOIN = 1104;
+    const GROUP_EXIT = 1105;
+    const GROUP_DEL = 1106;
+
     const VIDEO_PERSONAL_REQUEST = 600; //私信视频请求
     const VIDEO_PERSONAL_OFFLINE = 601; //离线
     const VIDEO_PERSONAL_ALLOW = 602; //请求通过
@@ -185,14 +194,14 @@ class Worker implements IClient {
         }
 
         switch ($this->request_type) {
-            case self::USER_REGISTER: //注册
+            case self::USER_REGISTER: //注册，若已有账户则登录
                 $username = $this->request['username'];
                 $password = $this->request['password'];
                 if (empty($username)) {
                     $this->register($key);
                     break;
                 }
-                $info = ['user_id', 'username', 'role_id', 'is_active', 'password'];
+                $info = ['user_id', 'username', 'role_id', 'is_active', 'password', 'avatar'];
                 $user = $this->user->getUserByName($username, $info);
 
                 $headers = ['ip' => $this->serviceIp[$key], 'agent' => $this->serviceAgent[$key]];
@@ -298,7 +307,8 @@ class Worker implements IClient {
                     unlink(APP_PATH . '/' . $user['avatar']);
                 }
 
-                $info['avatar'] = $path = $this->getUniqueFile($this->request['mess'], 'avatar');
+//                $info['avatar'] = $path = $this->getUniqueFile($this->request['mess'], 'avatar');
+                $info['avatar'] = $path = $this->request['mess']['path'];
                 $res = $this->user->update($this->request['sender_id'], $info);
                 if (false === $res) {
                     $this->response = [
@@ -315,6 +325,9 @@ class Worker implements IClient {
                     'timestamp' => $this->timestamp,
                 ];
                 $this->sendMessage($key);
+                break;
+            case self::USER_LIST:
+                $this->flushUsers($key);
                 break;
             case self::USER_QUERY:
                 $user = $this->request['receiver_id'] ? $this->user->getUserById($this->request['receiver_id']) : [];
@@ -337,19 +350,19 @@ class Worker implements IClient {
                 $this->sendMessage($key);
                 break;
             case self::MESSAGE_COMMON: //公共消息
-                $this->sendCommonMessage($key);
+                $this->sendCommonMessage($this->request['receiver_id'], $key);
                 break;
             case self::IMAGE_COMMON: //公共图片
             case self::FILE_COMMON:
             case self::MUSIC_COMMON:
 //                $this->response['mess'] = $this->getUniqueFile($this->request['mess']);//图片直接存为文件，节省编码时间
                 $this->response['mess'] = $this->request['mess'];
-                $this->sendCommonMessage($key);
+                $this->sendCommonMessage($this->request['receiver_id'], $key);
                 break;
             case self::EMOTION_COMMON: //公共表情
                 $content = explode('_', $this->request['mess']);
                 $this->response['mess'] = "/images/emotion/{$content[0]}/{$content[1]}";
-                $this->sendCommonMessage($key);
+                $this->sendCommonMessage($this->request['receiver_id'], $key);
                 break;
             case self::MESSAGE_PERSONAL: //私信
                 $this->sendPersonalMessage($key);
@@ -385,6 +398,126 @@ class Worker implements IClient {
 //                ];
 //                $this->sendPersonalMessage($key, $extra);
 //                break;
+            case self::GROUP_CREATE:
+                $admin_id = $this->request['sender_id'];
+                $name = $this->request['mess']['name'];
+                $members = $this->request['mess']['members'];
+                $avatar = $this->request['mess']['avatar'] ?? '';
+                $extra = $avatar ? compact('avatar') : [];
+                if (count($members) < 2) {
+                    $this->response = [
+                        'type' => self::WARNING,
+                        'mess' => '创建失败！群聊人数不能少于2人',
+                        'timestamp' => $this->timestamp,
+                    ];
+                    $this->sendMessage($key);
+                } else {
+                    $group = $this->user->addGroup($admin_id, $name, $members, $extra);
+                    $this->response = [
+                        'type' => $this->request_type,
+                        'sender_id' => $this->request['sender_id'],
+                        'receiver_id' => $group['id'],
+                        'mess' => $group,
+                        'timestamp' => $this->timestamp,
+                    ];
+
+                    // 添加一条记录
+                    $this->user->addCommonMessage($group['id'], $this->timestamp, $this->encode($this->response));
+
+                    // 给所有成员发消息
+                    $keys = $this->user->getServiceKeys(array_merge([$admin_id], $members));
+                    $this->sendMultiMessage($keys);
+                }
+                break;
+            case self::GROUP_QUERY_LIST:
+                $user_id = $this->request['sender_id'];
+                $data = $this->user->getUserGroupsInfo($user_id);
+                $this->response = [
+                    'type' => $this->request_type,
+                    'sender_id' => $this->request['sender_id'],
+                    'receiver_id' => $this->request['receiver_id'],
+                    'mess' => $data,
+                    'timestamp' => $this->timestamp,
+                ];
+                $this->sendMessage($key);
+                break;
+            case self::GROUP_QUERY_MEMBER:
+                $group_id = $this->request['mess'];
+                $info = ['user_id', 'username', 'role_id', 'is_active', 'avatar'];
+                $members = $this->user->getGroupMembersInfo($group_id, $info);
+                $this->response = [
+                    'type' => $this->request_type,
+                    'sender_id' => $this->request['sender_id'],
+                    'receiver_id' => $this->request['receiver_id'],
+                    'mess' => compact('group_id', 'members'),
+                    'timestamp' => $this->timestamp,
+                ];
+                $this->sendMessage($key);
+                break;
+            case self::GROUP_QUERY_INFO:
+                $group_id = $this->request['mess'];
+                $info = $this->user->getGroup($group_id);
+                $info and $info['id'] = $group_id;
+                $this->response = [
+                    'type' => $this->request_type,
+                    'sender_id' => $this->request['sender_id'],
+                    'receiver_id' => $this->request['receiver_id'],
+                    'mess' => $info,
+                    'timestamp' => $this->timestamp,
+                ];
+                $this->sendMessage($key);
+                break;
+            case self::GROUP_JOIN:
+                $group_id = $this->request['mess']['group_id'];
+                $members = $this->request['mess']['members'];
+                $this->user->jonGroup($group_id, $members);
+                $this->response = [
+                    'type' => $this->request_type,
+                    'sender_id' => $this->request['sender_id'],
+                    'receiver_id' => $this->request['receiver_id'],
+                    'mess' => '加入成功',
+                    'timestamp' => $this->timestamp,
+                ];
+                $this->sendMessage($key);
+                // TODO 给其他成员发消息
+                break;
+            case self::GROUP_EXIT:
+                $user_id = $this->request['sender_id'];
+                $group_id = $this->request['mess'];
+                $this->user->exitGroup($user_id, $group_id);
+                $this->response = [
+                    'type' => $this->request_type,
+                    'sender_id' => $this->request['sender_id'],
+                    'receiver_id' => $this->request['receiver_id'],
+                    'mess' => '退出成功',
+                    'timestamp' => $this->timestamp,
+                ];
+                $this->sendMessage($key);
+                // TODO 给其他成员发消息
+                break;
+            case self::GROUP_DEL:
+                $user_id = $this->request['sender_id'];
+                $group_id = $this->request['mess'];
+                $is_admin = $this->user->isGroupAdmin($group_id, $user_id);
+                if ($is_admin) {
+                    $this->user->delGroup($group_id);
+                    $this->response = [
+                        'type' => $this->request_type,
+                        'sender_id' => $this->request['sender_id'],
+                        'receiver_id' => $this->request['receiver_id'],
+                        'mess' => '解散成功',
+                        'timestamp' => $this->timestamp,
+                    ];
+                } else {
+                    $this->response = [
+                        'type' => self::WARNING,
+                        'mess' => '解散失败！您没有该权限',
+                        'timestamp' => $this->timestamp,
+                    ];
+                }
+                $this->sendMessage($key);
+                // TODO 给其他成员发消息
+                break;
             case self::VIDEO_PERSONAL_DENY:
                 $this->sendPersonalVideoMessage($key, '拒绝了视频请求');
                 break;
@@ -403,7 +536,7 @@ class Worker implements IClient {
                 $this->sendPersonalVideoMessage($key, '视频聊天结束');
                 break;
             case self::VIDEO_COMMON_REQUEST:
-                $this->sendCommonMessage($key, [], false);
+                $this->sendCommonMessage($this->request['receiver_id'], $key, [], false);
                 break;
             case self::HISTORY_MESSAGE_COMMON:
                 $timestamp = empty($this->request['mess']) ? $this->timestamp : $this->request['mess'];
@@ -480,7 +613,7 @@ class Worker implements IClient {
 //        }
     }
 
-    public function sendCommonMessage($key, $extra = [], $is_store = true) {
+    public function sendCommonMessage($receiver_id, $key, $extra = [], $is_store = true) {
         if (empty($this->request['mess'])) {
             $this->response = [
                 'type' => self::WARNING,
@@ -500,9 +633,18 @@ class Worker implements IClient {
             'timestamp' => $this->timestamp,
         ], $extra);
         if (!empty($this->request['id'])) $this->response['id'] = $this->request['id'];
-        $is_store and $this->user->addCommonMessage($this->request['receiver_id'], $this->timestamp, $this->encode($this->response));
+        $is_store and $this->user->addCommonMessage($this->request['receiver_id'], $this->timestamp,
+            $this->encode($this->response), $this->response['id'] ?? '');
 
-        $this->sendAllMessage(0);
+        if (empty($receiver_id)) {
+            // receiver_id=0 大厅
+            $this->sendAllMessage(0);
+        } else {
+            // 群聊
+            $members = $this->user->getGroupMembers($receiver_id);
+            $keys = $this->user->getServiceKeys($members);
+            $this->sendMultiMessage($keys);
+        }
     }
 
     public function sendPersonalMessage($key, $extra = []) {
@@ -515,7 +657,8 @@ class Worker implements IClient {
         ], $extra);
         if (!empty($this->request['id'])) $this->response['id'] = $this->request['id'];
         $users = [$this->request['sender_id'], $this->request['receiver_id']];
-        $this->user->addPersonalMessage($users, $this->timestamp, $this->encode($this->response));
+        $this->user->addPersonalMessage($users, $this->timestamp,
+            $this->encode($this->response), $this->response['id'] ?? '');
 
         $receiver_id = $this->request['receiver_id'];
         $receiver_key = $this->user->getServiceKeyByUserId($receiver_id);
@@ -686,6 +829,11 @@ class Worker implements IClient {
     public function sendAllMessage($priority = 10) {
         $this->response['trace_id'] = $this->request['trace_id'] ?? '';
         $this->server->sendAll($this->encode($this->response), $priority);
+    }
+
+    public function sendMultiMessage($keys) {
+        $this->response['trace_id'] = $this->request['trace_id'] ?? '';
+        $this->server->sendMultiple($keys, $this->encode($this->response));
     }
 
     /**

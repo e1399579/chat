@@ -236,52 +236,55 @@ class MasterProcess extends AProcess implements IService {
     public function messageReadCallback(\EventBufferEvent $bev, $arg): void {
         $index = $arg['index'];
 
-        $params = [];
-        $msg = $this->prepareData($index, $bev, $params);
-        if ($params['is_pending']) {
-            return;
-        }
-
-        if ($params['is_ping']) {
-            $this->logger->info('ping: ' . $msg);
-            $pong = $this->frame($msg, self::FRAME_OPCODE_PONG);
-            $bev->write($pong);
-            return;
-        }
-
-        if ($params['is_pong']) {
-            $this->logger->info('pong: ' . $msg);
-            return;
-        }
-
-        $channel = $this->chooseChannel($index);
-        if ($params['is_closed']) {
-            if (isset($this->wait_for_close[$index])) {
-                $this->disConnect($index);
-                unset($this->wait_for_close[$index]);
-            } else {
-                $this->confirmClose($index);
-
-                // 通知事件
-                $data = '';
-                $this->sendToChannel($channel, self::NOTIFY_TYPE_ON_CLOSE, $index, $data, 0, self::FRAME_OPCODE_TEXT);
+        // 可能有好几条消息合并，一直读到没有数据或出现特殊标志为止
+        do {
+            $params = [];
+            $msg = $this->prepareData($index, $bev, $params);
+            if ($params['is_pending']) {
+                return;
             }
 
-            return;
-        }
+            if ($params['is_ping']) {
+                $this->logger->info('ping: ' . $msg);
+                $pong = $this->frame($msg, self::FRAME_OPCODE_PONG);
+                $bev->write($pong);
+                return;
+            }
 
-        if ($params['is_exception']) {
-            $this->prepareClose($index, self::FRAME_STATUS_CODE_PROTOCOL_ERROR, 'Data parse error');
-            return;
-        }
+            if ($params['is_pong']) {
+                $this->logger->info('pong: ' . $msg);
+                return;
+            }
 
-        if (!isset($msg[0])) {
-            $this->debug('空消息，不作处理');
-            return;
-        }
+            $channel = $this->chooseChannel($index);
+            if ($params['is_closed']) {
+                if (isset($this->wait_for_close[$index])) {
+                    $this->disConnect($index);
+                    unset($this->wait_for_close[$index]);
+                } else {
+                    $this->confirmClose($index);
 
-        // 通知子进程
-        $this->sendToChannel($channel, self::NOTIFY_TYPE_ON_MESSAGE, $index, $msg, 0, $params['opcode']);
+                    // 通知事件
+                    $data = '';
+                    $this->sendToChannel($channel, self::NOTIFY_TYPE_ON_CLOSE, $index, $data, 0, self::FRAME_OPCODE_TEXT);
+                }
+
+                return;
+            }
+
+            if ($params['is_exception']) {
+                $this->prepareClose($index, self::FRAME_STATUS_CODE_PROTOCOL_ERROR, 'Data parse error');
+                return;
+            }
+
+            if (!isset($msg[0])) {
+                $this->debug('空消息，不作处理');
+                return;
+            }
+
+            // 通知子进程
+            $this->sendToChannel($channel, self::NOTIFY_TYPE_ON_MESSAGE, $index, $msg, 0, $params['opcode']);
+        } while ($params['remain_length'] > 0);
     }
 
     protected function chooseChannel(int $index): \EventBufferEvent {
@@ -328,6 +331,10 @@ class MasterProcess extends AProcess implements IService {
                 case self::CALL_TYPE_PREPARE_CLOSE:
                     $this->prepareClose($index);
                     break;
+                case self::CALL_TYPE_SEND_TO_MULTIPLY:
+                    list($keys, $msg) = json_decode($data, true);
+                    $this->sendToMultiple($keys, $msg, $opcode);
+                    break;
             }
         }
     }
@@ -369,6 +376,12 @@ class MasterProcess extends AProcess implements IService {
             // 0 高优先级 实时发送
             $msg = $this->frame($msg, $opcode);
             $this->doSendToAll($msg, $opcode);
+        }
+    }
+
+    protected function sendToMultiple(array $keys, string $msg, int $opcode): void {
+        foreach ($keys as $key) {
+            $this->sendTo($key, $msg, $opcode);
         }
     }
 
@@ -500,13 +513,14 @@ class MasterProcess extends AProcess implements IService {
             'is_pong' => false,
             'is_exception' => false,
             'is_pending' => false,
+            'remain_length' => 0,
         ];
 //        echo 'IN:', PHP_EOL;
 
         // 使用缓冲解决粘包问题
         $this->buffers[$index] = $this->buffers[$index] ?? '';
         $input = $bev->input;
-        $this->buffers[$index] .= $input->read($input->length); // 读取全部数据
+        $this->buffers[$index] .= $input->length ? $input->read($input->length) : ''; // 读取全部数据
 
         if (isset($this->frame_meta_pool[$index])) {
             list($offset, $frame_struct_list) = $this->frame_meta_pool[$index];
@@ -661,6 +675,9 @@ class MasterProcess extends AProcess implements IService {
         // 清除buffer、结构数据
         $this->buffers[$index] = substr($this->buffers[$index], $offset);
         unset($this->frame_meta_pool[$index]);
+
+        // 剩余字节
+        $params['remain_length'] = strlen($this->buffers[$index]);
 
         return $decoded;
     }
