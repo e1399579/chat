@@ -8,20 +8,42 @@
                     @menu-avatar-click="changeAvatar"
                     @send="send">
 
+            <!--搜索、创建群聊-->
             <template #sidebar-message-fixedtop="">
                 <div class="flex space-between search-bar">
                     <input type="text" class="input-medium" placeholder="搜索" />
                     <button @click="addGroup">➕</button>
                 </div>
             </template>
-            <!--聊天窗口标题-->
+
+            <!--最近消息（可删除，默认无状态显示）-->
+            <template #sidebar-message="contact">
+                <lemon-badge
+                    :count="contact.unread"
+                    class="lemon-contact__avatar">
+                    <lemon-avatar :size="40" :src="contact.avatar" />
+                </lemon-badge>
+                <div class="lemon-contact__inner">
+                    <p class="lemon-contact__label">
+                        <span class="online-status" v-if="contact.is_online"></span>
+                        <span class="lemon-contact__name">{{contact.displayName}}</span>
+                        <span class="lemon-contact__time">{{contact.lastSendTime ? timeFormat(contact.lastSendTime) : ""}} </span>
+                    </p>
+                    <p class="lemon-contact__content">
+                        <span v-html="contact.lastContent"></span>
+                    </p>
+                </div>
+            </template>
+
+            <!--聊天窗口标题（可删除，默认无人数显示）-->
             <template #message-title="contact">
                 <div class="flex space-between">
                     <span>{{contact.displayName}}<span v-if="contact.is_group"> ({{contact.id ? contact.members.size : contact.online_total}})</span></span>
                     <b @click="toggleDrawer(contact)" class="pointer user-select-none">···</b>
                 </div>
             </template>
-            <!--聊天窗口右侧栏-->
+
+            <!--聊天窗口右侧栏（可删除，默认群成员显示）-->
             <template #drawer="contact">
                 <div class="slot-group" v-if="contact.is_group">
                     <div class="slot-group-title">群通知</div>
@@ -47,6 +69,7 @@
                 </div>
             </template>
         </lemon-imui>
+
         <!--注册/登录弹框-->
         <modal name="login-modal" :clickToClose="false" :height="250" :width="500">
             <dialog class="box" open>
@@ -125,6 +148,17 @@
                 </div>
             </div>
         </modal>
+
+        <!--WebRTC-->
+        <modal name="rtc-modal" :clickToClose="false" :height="'auto'" :width="1000" :scrollable="true" draggable="true">
+            <div class="camera-box flex horizontal-center vertical-center">
+                <video class="local-video" autoplay muted :srcObject.prop="local_video"></video>
+                <video class="remote-video" autoplay :srcObject.prop="remote_video"
+                       v-for="[index, remote_video] of remote_videos" :key="index"></video>
+                <button class="hang-up-button" @click="hangUp"></button>
+            </div>
+        </modal>
+        <v-dialog />
     </main>
 </template>
 
@@ -134,6 +168,7 @@ import './css/main.css';
 
 import {DataHelper, generateUUID} from './js/util.js';
 import emoji from './js/emoji.js';
+import WebRTC from "./js/webrtc.js";
 
 const DEBUG = true;
 const DEFAULT_AVATAR = "/static/chat.png";
@@ -187,6 +222,14 @@ const GROUP_QUERY_INFO = 1103;
 // const GROUP_EXIT = 1105;
 // const GROUP_DEL = 1106;
 
+// RTC
+const RTC_CREATE = 600;
+const RTC_JOIN = 601;
+const RTC_MESSAGE = 602;
+const RTC_OFFLINE = 603;
+const RTC_CLOSE = 604;
+const RTC_EXIT = 605;
+
 const HISTORY_MESSAGE_COMMON = 800; //历史公共消息
 const HISTORY_MESSAGE_PERSONAL = 801; //历史个人消息
 const FILE_UPLOAD_SUCCESS = 903; // 文件上传成功
@@ -215,6 +258,14 @@ export default {
             upload_next: new Map(),
             query_member_next: new Map(),
             query_group_next: new Map(),
+            rtc: null,
+            local_video: null,
+            remote_videos: new Map(),
+            candidates: new Map(),
+            rtc_key_sender: new Map(),
+            rtc_sender_key: new Map(),
+            rtc_room_id: "",
+            rtc_running: false,
             images: [],
             image_crop: {
                 show: false,
@@ -265,6 +316,18 @@ export default {
         // 初始化表情包
         this.im.initEmoji(emoji);
 
+        // 初始化RTC
+        this.rtc = new WebRTC();
+        this.rtc.setCallbacks({
+            onMediaOpen: this.onMediaOpen,
+            onTrack: this.onTrack,
+            onNegotiateReady: this.onNegotiateReady,
+            onCallerIncoming: this.onCallerIncoming,
+            onIceCandidate: this.onIceCandidate,
+            onLocalMediaClose: this.onLocalMediaClose,
+            onRemoteMediaClose: this.onRemoteMediaClose,
+        });
+
         // 初始化工具栏
         this.im.initEditorTools([
             {
@@ -291,6 +354,30 @@ export default {
                 },
                 render: () => {
                     return <span>🎵</span>;
+                },
+            },
+            {
+                name: "videoChat",
+                title: "视频聊天",
+                click: () => {
+                    this.$modal.show('rtc-modal');
+                    this.rtc_room_id = "";
+                    let contact = this.im.getCurrentContact();
+                    this.rtc.open().then(() => {
+                        this.rtc_running = true;
+                        // 请求CREATE ROOM
+                        let is_group = contact.is_group;
+                        let data = {
+                            is_group,
+                        };
+                        this.sendMessage(RTC_CREATE, contact.id, data);
+                    }).catch((e) => {
+                        this.trace(e);
+                        this.rtc_running = true;
+                    });
+                },
+                render: () => {
+                    return <span>🎥</span>;
                 },
             },
         ]);
@@ -416,6 +503,7 @@ export default {
                         this.online_total = Math.max(--this.online_total, 1);
                         this.online_users.delete(user.user_id);
                         this.updateContact("0", {online_total:this.online_total, unread: "+1"});
+                        this.updateContact(user.user_id, {is_online: false});
                     }
                     break;
                 }
@@ -496,18 +584,174 @@ export default {
                         }
                     }
 
-                    // 查询发信人
-                    let sender = this.getUser(sender_id);
-                    if (sender) {
-                        this.addPersonalContact(sender);
-                        this.receiveMessage(mess, sender);
-                    } else {
-                        // 若找不到用户，则查询异步处理
-                        this.getUserAsync(sender_id, (user) => {
-                            this.addPersonalContact(user);
-                            this.receiveMessage(mess, user);
+                    // 查询发信人，若找不到用户，则查询异步处理
+                    this.getUserAsync(sender_id, (user) => {
+                        this.addPersonalContact(user);
+                        this.receiveMessage(mess, user);
+                    });
+                    break;
+                }
+
+                // RTC
+                case RTC_CREATE:
+                {
+                    let data = mess.mess;
+                    let sender_id = mess.sender_id;
+                    if (sender_id === this.user.id) {
+                        // 本人创建，仅更新room_id
+                        this.rtc_room_id = data.room_id;
+                        return;
+                    } else if (this.rtc_running) {
+                        // 已经在聊天，忽略
+                        let message = this.user.displayName + " 正在聊天中";
+                        this.sendMessage(RTC_MESSAGE, sender_id, {
+                            type: "deny",
+                            message,
                         });
+                        return;
                     }
+
+                    // 弹窗提示
+                    let is_group = data.is_group;
+                    let title = is_group ? '多人聊天' : '单人聊天';
+                    this.getUserAsync(sender_id, (user) => {
+                        this.$modal.show('dialog', {
+                            title: title,
+                            text: `<b>${user.username}</b> 邀请您通话，是否接听？`,
+                            buttons: [
+                                {
+                                    title: '拒绝',
+                                    handler: () => {
+                                        this.$modal.hide('dialog');
+                                        this.sendMessage(RTC_MESSAGE, sender_id, {
+                                            type: "deny",
+                                            message: this.user.displayName + " 拒绝了您的通话请求",
+                                        });
+                                    }
+                                },
+                                {
+                                    title: '接听',
+                                    handler: () => {
+                                        this.$modal.hide('dialog');
+                                        // 接受，显示弹窗
+                                        this.$modal.show('rtc-modal');
+                                        this.rtc_room_id = data.room_id; // 更新room_id
+                                        // 打开摄像头，创建连接，添加轨道，设置local，稍后(onNegotiateReady)发送offer
+                                        this.rtc.open().then(() => {
+                                            this.rtc_running = true;
+                                            let key = this.rtc.create();
+                                            this.remote_videos.set(key, null);
+                                            this.rtc.addTrack(key);
+                                            // 创建key<=>sender关联，后面要用
+                                            this.rtc_key_sender.set(key, sender_id);
+                                            this.rtc_sender_key.set(sender_id, key);
+
+                                            // 请求加入房间
+                                            this.sendMessage(RTC_JOIN, '0', data);
+                                        }).catch((e) => {
+                                            this.trace(e);
+                                            this.rtc_running = true;
+                                        });
+                                    }
+                                },
+                            ]
+                        });
+                    });
+                    break;
+                }
+                case RTC_JOIN:
+                {
+                    let data = mess.mess;
+                    let sender_id = mess.sender_id;
+                    this.rtc_room_id = data.room_id;
+                    if (sender_id === this.user.id) return;
+                    // 创建连接，添加轨道，设置local，稍后(onNegotiateReady)发送offer
+                    let key = this.rtc.create();
+                    this.remote_videos.set(key, null);
+                    this.rtc.addTrack(key);
+                    // 创建key<=>sender关联，后面要用
+                    this.rtc_key_sender.set(key, sender_id);
+                    this.rtc_sender_key.set(sender_id, key);
+                    break;
+                }
+                case RTC_MESSAGE:
+                {
+                    let sender_id = mess.sender_id;
+                    let data = mess.mess;
+                    let type = data.type;
+                    switch (type) {
+                        case "offer":
+                        {
+                            // 创建连接，设置remote，打开摄像头，添加轨道，稍后(onCallerIncoming)发送answer
+                            let description = data.description;
+                            this.rtc.handleVideoOfferMsg(description, {
+                                sender_id,
+                            }).then((key) => {
+                                // 创建key<=>sender关联，后面要用
+                                this.rtc_key_sender.set(key, sender_id);
+                                this.rtc_sender_key.set(sender_id, key);
+                            });
+                            break;
+                        }
+                        case "answer":
+                        {
+                            // 设置remote
+                            let key = this.rtc_sender_key.get(sender_id);
+                            this.rtc.handleVideoAnswerMsg(key, data.description);
+                            break;
+                        }
+                        case "new-ice-candidate":
+                        {
+                            let candidate = data.candidate;
+                            if (this.rtc_sender_key.has(sender_id)) {
+                                let key = this.rtc_sender_key.get(sender_id);
+                                this.rtc.handleNewICECandidateMsg(key, candidate);
+                            } else {
+                                // 还未建立连接（作为callee时出现），先保存起来，一会再处理
+                                this.trace('record candidate', sender_id, candidate);
+                                let candidates;
+                                if (this.candidates.has(sender_id)) {
+                                    candidates = this.candidates.get(sender_id);
+                                    candidates.push(candidate);
+                                } else {
+                                    candidates = [candidate];
+                                }
+                                this.candidates.set(sender_id, candidates);
+                            }
+                            break;
+                        }
+                        case "deny":
+                        {
+                            let message = data.message;
+                            this.$notify({
+                                group: 'tip',
+                                text: message,
+                                type: 'error',
+                            });
+                            break;
+                        }
+                    }
+                    break;
+                }
+                case RTC_CLOSE:
+                case RTC_OFFLINE:
+                {
+                    // 关闭远端video
+                    let sender_id = mess.sender_id;
+                    if (this.rtc_sender_key.has(sender_id)) {
+                        let key = this.rtc_sender_key.get(sender_id);
+                        this.rtc.close(key);
+                    }
+                    break;
+                }
+                case RTC_EXIT:
+                {
+                    this.$notify({
+                        group: 'tip',
+                        text: '聊天已经结束',
+                        type: 'warn',
+                    });
+                    this.hangUp(false);
                     break;
                 }
 
@@ -541,14 +785,9 @@ export default {
                     // 创建群聊通知
                     let admin_id = group.admin_id;
                     // 管理员昵称可能变化，这里查询最新昵称
-                    let admin = this.getUser(admin_id);
-                    if (admin) {
-                        this.receiveMessage(mess, admin);
-                    } else {
-                        this.getUserAsync(admin_id, (user) => {
-                            this.receiveMessage(mess, user);
-                        });
-                    }
+                    this.getUserAsync(admin_id, (user) => {
+                        this.receiveMessage(mess, user);
+                    });
                     break;
                 }
                 case GROUP_QUERY_LIST:
@@ -558,7 +797,7 @@ export default {
                         let group = groups[group_id];
                         group.id = group_id;
                         this.groups.set(group_id, group);
-                        this.addGroupContact(group);
+                        this.addGroupContact(group, " ");
                     }
                     break;
                 }
@@ -644,6 +883,12 @@ export default {
         },
 
         // 工具方法
+        timeFormat(timestamp) {
+            let date = new Date(timestamp);
+            let is_today = ((new Date()).getTime() - date.getTime() < 8.64e7);
+            let format = is_today ? 'H:i' : 'y.m.d H:i';
+            return date.format(format);
+        },
         trace() {
             if (!DEBUG)
                 return;
@@ -670,10 +915,10 @@ export default {
             exp.setTime(exp.getTime() + COOKIE_EXPIRE_DAYS * 24 * 60 * 60 * 1000);
             document.cookie = name + "=" + escape(value) + ";expires=" + exp.toGMTString();
         },
-        sendMessage(type, receiver_id = 0, mess = "", id = "", trace_id = "") {
+        sendMessage(type, receiver_id = '0', mess = null, id = "", trace_id = "") {
             let defaults = {
                 type: MESSAGE_COMMON,
-                receiver_id: 0,
+                receiver_id: '0',
                 mess: "",
                 trace_id: trace_id ? trace_id : DataHelper.buildTraceId(),
             };
@@ -795,6 +1040,7 @@ export default {
 
                 // 新加字段
                 is_group: false,
+                is_online: this.online_users.has(user.user_id),
                 query_time: ((new Date()).getTime() + performance.now()) / 1000,
             };
             this.im.appendContact(data);
@@ -806,16 +1052,21 @@ export default {
             return this.online_users.get(user_id);
         },
         getUserAsync(user_id, callback = new Function()) {
-            this.sendMessage(USER_QUERY, user_id, user_id);
-            let promise = new Promise((resolve) => {
-                this.query_next.set(user_id, resolve);
-            });
-            promise.then((user) => {
-                this.query_next.delete(user.user_id);
-                // 添加联系人
-                this.addPersonalContact(user);
-                return user;
-            }).then(callback);
+            let user = this.getUser(user_id);
+            if (user) {
+                callback(user);
+            } else {
+                this.sendMessage(USER_QUERY, user_id, user_id);
+                let promise = new Promise((resolve) => {
+                    this.query_next.set(user_id, resolve);
+                });
+                promise.then((user) => {
+                    this.query_next.delete(user.user_id);
+                    // 添加联系人
+                    this.addPersonalContact(user);
+                    return user;
+                }).then(callback);
+            }
         },
         addGroupContact(group, lastMessage = "", members = new Map()) {
             let data = {
@@ -996,6 +1247,7 @@ export default {
             this.im.changeDrawer({
                 position: "rightInside",
                 offsetY: 33,
+                width: 242,
                 height: this.$el.clientHeight - 33,
             });
         },
@@ -1044,7 +1296,7 @@ export default {
 
         // 图片预览
         imagePreview(url) {
-            let images = document.querySelectorAll(".lemon-message__content img");
+            let images = document.querySelectorAll(".lemon-message__content img[src^=http]");
             let index = 0;
             this.images = [];
             images.forEach((image, i) => {
@@ -1148,6 +1400,82 @@ export default {
             };
             this.sendMessage(GROUP_CREATE, 0, mess);
             this.$modal.hide('group-modal');
+        },
+
+        // WebRTC
+        hangUp(notify = true) {
+            this.$modal.hide('rtc-modal');
+            this.rtc_running = false;
+            this.rtc.closeAll();
+
+            // 通知其他人
+            notify && this.sendMessage(RTC_CLOSE, '0', {
+                room_id: this.rtc_room_id,
+            });
+        },
+        onMediaOpen(stream) {
+            this.trace('media open', ...arguments);
+            this.local_video = stream;
+        },
+        onNegotiateReady(key, description) {
+            this.trace('negotiate ready', ...arguments);
+            // 发送offer到远端
+            let data = {
+                type: "offer",
+                description,
+            };
+            let sender_id = this.rtc_key_sender.get(key);
+            this.sendMessage(RTC_MESSAGE, sender_id, data);
+        },
+        onIceCandidate(key, candidate) {
+            this.trace('candidate', ...arguments);
+            if (candidate === null) return;
+            let sender_id = this.rtc_key_sender.get(key);
+            this.trace('ice', sender_id);
+            this.sendMessage(RTC_MESSAGE, sender_id, {
+                type: "new-ice-candidate",
+                candidate,
+            });
+            // 若有Interactive Connectivity Establishment candidates，则处理
+            if (this.candidates.has(sender_id)) {
+                let candidates = this.candidates.get(sender_id);
+                this.trace('handle candidates', candidates);
+                for (let candidate of candidates) {
+                    this.rtc.handleNewICECandidateMsg(key, candidate);
+                }
+                this.candidates.set(sender_id, []);
+            }
+        },
+        onCallerIncoming(key, description, args) {
+            this.trace('caller incoming', ...arguments);
+            let sender_id = args.sender_id;
+            // 发送answer到远端
+            let data = {
+                type: "answer",
+                description,
+            };
+            this.sendMessage(RTC_MESSAGE, sender_id, data);
+        },
+        onTrack(key, streams) {
+            this.trace('track', ...arguments);
+            this.remote_videos.set(key, streams[0]);
+            this.$forceUpdate();
+        },
+        onLocalMediaClose() {
+            this.trace('local media close');
+            if (this.local_video) {
+                this.local_video.getTracks().forEach((track) => track.stop());
+                this.local_video = null;
+                this.candidates.clear();
+            }
+        },
+        onRemoteMediaClose(key) {
+            this.trace('remote media close', ...arguments);
+            if (this.remote_videos.has(key)) {
+                this.remote_videos.get(key) && this.remote_videos.get(key).getTracks().forEach((track) => track.stop());
+                this.remote_videos.delete(key);
+                this.$forceUpdate();
+            }
         },
     }
 }

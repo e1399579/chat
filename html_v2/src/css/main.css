@@ -11,6 +11,10 @@
     justify-content: flex-end;
 }
 
+.horizontal-center {
+    justify-content: center;
+}
+
 .vertical-center {
     align-items: center;
 }
@@ -36,6 +40,19 @@
     padding: 0 14px;
 }
 
+.search-bar input {
+    width: 170px;
+}
+
+.online-status {
+    width: 6px;
+    height: 6px;
+    background: #67c23a;
+    border-radius: 50%;
+    margin: 6px;
+    display: inline-block;
+}
+
 .slot-group {
     border-left: 1px solid #ddd;
     height: 100%;
@@ -54,13 +71,19 @@
 }
 
 .slot-group-panel {
-    width: 200px;
+    width: 227px;
     height: 396px;
     overflow-y: scroll;
 }
 
+.slot-group-panel::-webkit-scrollbar {
+    width: 5px;
+    height: 20px;
+}
+
 .slot-group-panel .lemon-contact {
-    height: 102px;
+    height: 92px;
+    padding: 5px;
 }
 
 .slot-group-avatar img {
@@ -135,4 +158,26 @@
 
 .group-name {
     width: 530px;
+}
+
+.hang-up-button {
+    width: 30px;
+    height: 30px;
+    background-image: url("../../public/static/webrtc/hang-up.png");
+    background-size: cover;
+    background-color: transparent;
+    border: 0;
+    padding-left: 10px;
+}
+
+.local-video {
+    width: 480px;
+    max-height: 360px;
+    transform: scale(-1, 1);
+}
+
+.remote-video {
+    width: 480px;
+    max-height: 360px;
+    transform: scale(-1, 1);
 }

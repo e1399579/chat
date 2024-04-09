@@ -41,8 +41,11 @@ String.prototype.replaceMulti = function (search, replace) {
 };
 
 Date.prototype.format = function (format = 'Y-m-d H:i:s') {
-    let search = ['Y', 'm', 'd', 'H', 'i', 's'];
-    let replace = [this.getFullYear(), this.getMonth() + 1, this.getDate(), this.getHours(), this.getMinutes(), this.getSeconds()];
+    let search = ['Y', 'm', 'd', 'H', 'i', 's', 'y'];
+    let replace = [this.getFullYear(), (this.getMonth() + 1).toString().padStart(2, '0'),
+        this.getDate().toString().padStart(2, '0'), this.getHours().toString().padStart(2, '0'),
+        this.getMinutes().toString().padStart(2, '0'), this.getSeconds().toString().padStart(2, '0'),
+        this.getFullYear().toString().padStart(4, '0').substring(2)];
     return format.replaceMulti(search, replace);
 };
 

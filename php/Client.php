@@ -47,7 +47,8 @@ try {
     if ($daemon) {
         daemonize();
     }
-    $ssl = [];
+    $config = parse_ini_file('./local.ini', true);
+    $ssl = isset($config['ssl']['local_cert'], $config['ssl']['local_pk']) ? $config['ssl'] : [];
     $server = new server\WsServer($port, $ssl);
     $worker = new server\Worker();
     $worker->reset();

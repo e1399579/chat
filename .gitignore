@@ -2,3 +2,5 @@
 php/logs/
 php/upload/
 php/nohup.out
+php/local.ini
+ssl

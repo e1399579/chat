@@ -11,7 +11,7 @@ class User {
     protected $fileStore2 = 'file:hash';
     protected $userService = 'user_service'; // user_id=>socket key
     protected $serviceUser = 'service_user'; // socket key=>user_id
-    protected $groupsSet = 'groups'; // 群组集合
+    protected $groupsMap = 'groups'; // 群组[id => info]
 
     protected $dbIndex; // 库序号
 
@@ -302,7 +302,7 @@ class User {
         $group_id = uniqid();
         $create_time = microtime(true);
         $data = compact('name', 'admin_id', 'create_time') + $extra;
-        $this->redis->hSet($this->groupsSet, $group_id, json_encode($data, JSON_UNESCAPED_UNICODE));
+        $this->redis->hSet($this->groupsMap, $group_id, json_encode($data, JSON_UNESCAPED_UNICODE));
 
         $group_members_key = $this->getGroupMembersKey($group_id);
         $this->redis->zAdd($this->getUserGroupKey($admin_id), $create_time, $group_id);
@@ -325,7 +325,7 @@ class User {
     public function updateGroup($group_id, $info) {
         $data = $this->getGroup($group_id);
         $merged = array_merge($data, $info);
-        return $this->redis->hSet($this->groupsSet, $group_id, json_encode($merged, JSON_UNESCAPED_UNICODE));
+        return $this->redis->hSet($this->groupsMap, $group_id, json_encode($merged, JSON_UNESCAPED_UNICODE));
     }
 
     public function delGroup($group_id) {
@@ -343,10 +343,10 @@ class User {
         call_user_func_array([$this->redis, 'zRem'], $args);
 
         // 删除群组
-        return $this->redis->hDel($this->groupsSet, $group_id);
+        return $this->redis->hDel($this->groupsMap, $group_id);
     }
 
-    public function jonGroup($group_id, $members) {
+    public function joinGroup($group_id, $members) {
         $group_members_key = $this->getGroupMembersKey($group_id);
         $args = [$group_members_key];
         foreach ($members as $member) {
@@ -378,7 +378,7 @@ class User {
     }
 
     public function getGroup($group_id) {
-        $str = $this->redis->hGet($this->groupsSet, $group_id);
+        $str = $this->redis->hGet($this->groupsMap, $group_id);
         return json_decode($str, true);
     }
 
@@ -406,7 +406,7 @@ class User {
     public function getUserGroupsInfo($user_id) {
         $groups = $this->getUserGroups($user_id);
         if (empty($groups)) return [];
-        $list = $this->redis->hMGet($this->groupsSet, $groups);
+        $list = $this->redis->hMGet($this->groupsMap, $groups);
         array_walk($list, function (&$item, $key) {
             $item = json_decode($item, true);
         });
@@ -426,5 +426,41 @@ class User {
     public function isGroupAdmin($group_id, $user_id) {
         $group = $this->getGroup($group_id);
         return (isset($group['admin_id']) && ($group['admin_id'] === $user_id));
+    }
+
+    public function getRTCRoomKey($room_id) {
+        return 'rtc_room:' . $room_id;
+    }
+
+    public function addRTCRoom($room_id, $user_id) {
+        // 清除之前数据
+        $this->redis->del($this->getRTCRoomKey($room_id));
+        return $this->joinRTCRoom($room_id, $user_id);
+    }
+
+    public function getRTCRoom($room_id) {
+        $key = $this->getRTCRoomKey($room_id);
+        return $this->redis->zRange($key, 0, -1);
+    }
+
+    public function joinRTCRoom($room_id, $user_id) {
+        $key = $this->getRTCRoomKey($room_id);
+        $timestamp = microtime(true);
+        return $this->redis->zAdd($key, $timestamp, $user_id);
+    }
+
+    public function exitRTCRoom($room_id, $user_id) {
+        $key = $this->getRTCRoomKey($room_id);
+        return $this->redis->zRem($key, $user_id);
+    }
+
+    public function delRTCRoom($room_id) {
+        $key = $this->getRTCRoomKey($room_id);
+        return $this->redis->del($key);
+    }
+
+    public function flushRTCRoom() {
+        $keys = $this->redis->keys($this->getRTCRoomKey('') . '*');
+        return $keys ? $this->redis->del($keys) : true;
     }
 }

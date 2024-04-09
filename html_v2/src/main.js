@@ -12,7 +12,7 @@ import ImageCrop from 'vue-image-crop-upload/upload-2';
 
 Vue.config.productionTip = false;
 Vue.use(LemonIMUI);
-Vue.use(VModal);
+Vue.use(VModal, { dialog: true });
 Vue.use(Notifications);
 Vue.use(VueViewer);
 Vue.component('image-crop', ImageCrop);

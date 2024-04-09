@@ -18,7 +18,6 @@ class Worker implements IClient {
     protected $request = [];
     protected $response = [];
     protected $timestamp;
-    protected $request_type;
     /**
      * @var Logger
      */
@@ -75,21 +74,13 @@ class Worker implements IClient {
     const GROUP_EXIT = 1105;
     const GROUP_DEL = 1106;
 
-    const VIDEO_PERSONAL_REQUEST = 600; //私信视频请求
-    const VIDEO_PERSONAL_OFFLINE = 601; //离线
-    const VIDEO_PERSONAL_ALLOW = 602; //请求通过
-    const VIDEO_PERSONAL_DENY = 603; //请求拒绝
-    const VIDEO_PERSONAL_OPEN = 604; //打开摄像头
-    const VIDEO_PERSONAL_CLOSE = 605; //关闭摄像头
-    const VIDEO_PERSONAL_END = 606; //传输结束
-
-    const VIDEO_PERSONAL_OFFER_DESC = 607;
-    const VIDEO_PERSONAL_ANSWER_DESC = 608;
-    const VIDEO_PERSONAL_CANDIDATE = 609;
-
-    const VIDEO_COMMON_REQUEST = 700;
-    const VIDEO_COMMON_NOTIFY = 701;
-    const VIDEO_PERSONAL_NOTIFY = 702;
+    // Web Real-Time Communication
+    const RTC_CREATE = 600;
+    const RTC_JOIN = 601;
+    const RTC_MESSAGE = 602;
+    const RTC_OFFLINE = 603;
+    const RTC_CLOSE = 604;
+    const RTC_EXIT = 605;
 
     const HISTORY_MESSAGE_COMMON = 800; //历史公共消息
     const HISTORY_MESSAGE_PERSONAL = 801; //历史个人消息
@@ -179,11 +170,11 @@ class Worker implements IClient {
         }
 
         unset($message);
-        $this->request_type = $this->request['type'] + 0;
+        $request_type = $this->request['type'] + 0;
 
         $this->filterRequest();
 
-        if ($this->request_type != self::USER_REGISTER) {
+        if ($request_type != self::USER_REGISTER) {
             //除了注册，所有操作都需要进行验证
             $user_id = $this->request['sender_id'];
             $res = $this->auth($key, $user_id);
@@ -193,7 +184,7 @@ class Worker implements IClient {
             }
         }
 
-        switch ($this->request_type) {
+        switch ($request_type) {
             case self::USER_REGISTER: //注册，若已有账户则登录
                 $username = $this->request['username'];
                 $password = $this->request['password'];
@@ -350,34 +341,36 @@ class Worker implements IClient {
                 $this->sendMessage($key);
                 break;
             case self::MESSAGE_COMMON: //公共消息
-                $this->sendCommonMessage($this->request['receiver_id'], $key);
+                $this->response['mess'] = $this->request['mess'];
+                $this->sendCommonMessage($request_type, $this->request['receiver_id'], $key);
                 break;
             case self::IMAGE_COMMON: //公共图片
             case self::FILE_COMMON:
             case self::MUSIC_COMMON:
 //                $this->response['mess'] = $this->getUniqueFile($this->request['mess']);//图片直接存为文件，节省编码时间
                 $this->response['mess'] = $this->request['mess'];
-                $this->sendCommonMessage($this->request['receiver_id'], $key);
+                $this->sendCommonMessage($request_type, $this->request['receiver_id'], $key);
                 break;
             case self::EMOTION_COMMON: //公共表情
                 $content = explode('_', $this->request['mess']);
                 $this->response['mess'] = "/images/emotion/{$content[0]}/{$content[1]}";
-                $this->sendCommonMessage($this->request['receiver_id'], $key);
+                $this->sendCommonMessage($request_type, $this->request['receiver_id'], $key);
                 break;
             case self::MESSAGE_PERSONAL: //私信
-                $this->sendPersonalMessage($key);
+                $this->response['mess'] = $this->request['mess'];
+                $this->sendPersonalMessage($request_type, $key);
                 break;
             case self::IMAGE_PERSONAL: //私信图片
             case self::FILE_PERSONAL:
             case self::MUSIC_PERSONAL:
 //                $this->response['mess'] = $this->getUniqueFile($this->request['mess']);
                 $this->response['mess'] = $this->request['mess'];
-                $this->sendPersonalMessage($key);
+                $this->sendPersonalMessage($request_type, $key);
                 break;
             case self::EMOTION_PERSONAL: //私信表情
                 $content = explode('_', $this->request['mess']);
                 $this->response['mess'] = "/images/emotion/{$content[0]}/{$content[1]}";
-                $this->sendPersonalMessage($key);
+                $this->sendPersonalMessage($request_type, $key);
                 break;
 //            case self::MUSIC_COMMON:
 //                $data = $this->request['mess']['data'];
@@ -414,7 +407,7 @@ class Worker implements IClient {
                 } else {
                     $group = $this->user->addGroup($admin_id, $name, $members, $extra);
                     $this->response = [
-                        'type' => $this->request_type,
+                        'type' => $request_type,
                         'sender_id' => $this->request['sender_id'],
                         'receiver_id' => $group['id'],
                         'mess' => $group,
@@ -433,7 +426,7 @@ class Worker implements IClient {
                 $user_id = $this->request['sender_id'];
                 $data = $this->user->getUserGroupsInfo($user_id);
                 $this->response = [
-                    'type' => $this->request_type,
+                    'type' => $request_type,
                     'sender_id' => $this->request['sender_id'],
                     'receiver_id' => $this->request['receiver_id'],
                     'mess' => $data,
@@ -446,7 +439,7 @@ class Worker implements IClient {
                 $info = ['user_id', 'username', 'role_id', 'is_active', 'avatar'];
                 $members = $this->user->getGroupMembersInfo($group_id, $info);
                 $this->response = [
-                    'type' => $this->request_type,
+                    'type' => $request_type,
                     'sender_id' => $this->request['sender_id'],
                     'receiver_id' => $this->request['receiver_id'],
                     'mess' => compact('group_id', 'members'),
@@ -459,7 +452,7 @@ class Worker implements IClient {
                 $info = $this->user->getGroup($group_id);
                 $info and $info['id'] = $group_id;
                 $this->response = [
-                    'type' => $this->request_type,
+                    'type' => $request_type,
                     'sender_id' => $this->request['sender_id'],
                     'receiver_id' => $this->request['receiver_id'],
                     'mess' => $info,
@@ -470,9 +463,9 @@ class Worker implements IClient {
             case self::GROUP_JOIN:
                 $group_id = $this->request['mess']['group_id'];
                 $members = $this->request['mess']['members'];
-                $this->user->jonGroup($group_id, $members);
+                $this->user->joinGroup($group_id, $members);
                 $this->response = [
-                    'type' => $this->request_type,
+                    'type' => $request_type,
                     'sender_id' => $this->request['sender_id'],
                     'receiver_id' => $this->request['receiver_id'],
                     'mess' => '加入成功',
@@ -486,7 +479,7 @@ class Worker implements IClient {
                 $group_id = $this->request['mess'];
                 $this->user->exitGroup($user_id, $group_id);
                 $this->response = [
-                    'type' => $this->request_type,
+                    'type' => $request_type,
                     'sender_id' => $this->request['sender_id'],
                     'receiver_id' => $this->request['receiver_id'],
                     'mess' => '退出成功',
@@ -502,7 +495,7 @@ class Worker implements IClient {
                 if ($is_admin) {
                     $this->user->delGroup($group_id);
                     $this->response = [
-                        'type' => $this->request_type,
+                        'type' => $request_type,
                         'sender_id' => $this->request['sender_id'],
                         'receiver_id' => $this->request['receiver_id'],
                         'mess' => '解散成功',
@@ -518,25 +511,60 @@ class Worker implements IClient {
                 $this->sendMessage($key);
                 // TODO 给其他成员发消息
                 break;
-            case self::VIDEO_PERSONAL_DENY:
-                $this->sendPersonalVideoMessage($key, '拒绝了视频请求');
+            case self::RTC_CREATE:
+                $data = $this->request['mess'];
+                $is_group = $data['is_group'];
+                // 创建房间
+                $user_id = $this->request['sender_id'];
+                $room_id = $user_id; // 暂时以房主id创建
+                $this->user->addRTCRoom($room_id, $user_id);
+
+                $data['room_id'] = $room_id;
+                $this->response['mess'] = $data;
+                if ($is_group) {
+                    $this->sendCommonMessage($request_type, $this->request['receiver_id'], $key, [], false);
+                } else {
+                    $this->sendRTCMessage($request_type, $key, [$user_id, $this->request['receiver_id']]);
+                }
                 break;
-            case self::VIDEO_PERSONAL_REQUEST:
-            case self::VIDEO_PERSONAL_ALLOW:
-            case self::VIDEO_PERSONAL_OPEN:
-            case self::VIDEO_PERSONAL_CLOSE:
-            case self::VIDEO_PERSONAL_OFFER_DESC:
-            case self::VIDEO_PERSONAL_ANSWER_DESC:
-            case self::VIDEO_PERSONAL_CANDIDATE:
-            case self::VIDEO_COMMON_NOTIFY:
-            case self::VIDEO_PERSONAL_NOTIFY:
-                $this->sendPersonalVideoMessage($key);
+            case self::RTC_JOIN:
+                // 新用户加入，转发消息给其他人（不包括房主，因为创建时已经联系过了）
+                $data = $this->request['mess'];
+                $user_id = $this->request['sender_id'];
+                $room_id = $data['room_id'];
+                $members = $this->user->getRTCRoom($room_id); // 未加入之前的成员
+                $this->user->joinRTCRoom($room_id, $user_id);
+                array_shift($members); // 排除房主
+                if (!empty($members)) {
+                    $this->response['mess'] = $this->request['mess'];
+                    $this->sendRTCMessage($request_type, $key, $members);
+                }
                 break;
-            case self::VIDEO_PERSONAL_END:
-                $this->sendPersonalVideoMessage($key, '视频聊天结束');
+            case self::RTC_MESSAGE:
+                // 转发消息
+                $receiver_id = $this->request['receiver_id'];
+                $this->response['mess'] = $this->request['mess'];
+                $this->sendRTCMessage($request_type, $key, [$receiver_id]);
                 break;
-            case self::VIDEO_COMMON_REQUEST:
-                $this->sendCommonMessage($this->request['receiver_id'], $key, [], false);
+            case self::RTC_CLOSE:
+                $data = $this->request['mess'];
+                $room_id = $data['room_id'];
+                // 查询成员
+                $members = $this->user->getRTCRoom($room_id);
+                $user_id = $this->request['sender_id'];
+                if ($room_id === $user_id) {
+                    // 房主退出，解散
+                    $this->user->delRTCRoom($room_id);
+                    $type = self::RTC_EXIT;
+                } else {
+                    // 移除成员
+                    $this->user->exitRTCRoom($room_id, $user_id);
+                    $type = self::RTC_CLOSE;
+                }
+                $this->response['mess'] = $data;
+                // 通知其他人
+                $members = array_diff($members, [$user_id]);
+                $members and $this->sendRTCMessage($type, $key, $members);
                 break;
             case self::HISTORY_MESSAGE_COMMON:
                 $timestamp = empty($this->request['mess']) ? $this->timestamp : $this->request['mess'];
@@ -548,7 +576,7 @@ class Worker implements IClient {
                 }
                 unset($row);
                 $this->response = [
-                    'type' => $this->request_type,
+                    'type' => $request_type,
                     'sender_id' => $this->request['sender_id'],
                     'receiver_id' => $this->request['receiver_id'],
                     'mess' => $mess,
@@ -570,7 +598,7 @@ class Worker implements IClient {
                 }
                 unset($row);
                 $this->response = [
-                    'type' => $this->request_type,
+                    'type' => $request_type,
                     'sender_id' => $this->request['sender_id'],
                     'receiver_id' => $this->request['receiver_id'], //标识是哪个联系人的，防止多个窗口混淆
                     'mess' => $mess,
@@ -613,7 +641,7 @@ class Worker implements IClient {
 //        }
     }
 
-    public function sendCommonMessage($receiver_id, $key, $extra = [], $is_store = true) {
+    public function sendCommonMessage($type, $receiver_id, $key, $extra = [], $is_store = true) {
         if (empty($this->request['mess'])) {
             $this->response = [
                 'type' => self::WARNING,
@@ -626,10 +654,10 @@ class Worker implements IClient {
         }
 
         $this->response = array_merge([
-            'type' => $this->request_type,
+            'type' => $type,
             'sender_id' => $this->request['sender_id'],
             'receiver_id' => $this->request['receiver_id'],
-            'mess' => $this->response['mess'] ?? $this->request['mess'],
+            'mess' => $this->response['mess'],
             'timestamp' => $this->timestamp,
         ], $extra);
         if (!empty($this->request['id'])) $this->response['id'] = $this->request['id'];
@@ -647,12 +675,12 @@ class Worker implements IClient {
         }
     }
 
-    public function sendPersonalMessage($key, $extra = []) {
+    public function sendPersonalMessage($type, $key, $extra = []) {
         $this->response = array_merge([
-            'type' => $this->request_type,
+            'type' => $type,
             'sender_id' => $this->request['sender_id'],
             'receiver_id' => $this->request['receiver_id'],
-            'mess' => $this->response['mess'] ?? $this->request['mess'],
+            'mess' => $this->response['mess'],
             'timestamp' => $this->timestamp,
         ], $extra);
         if (!empty($this->request['id'])) $this->response['id'] = $this->request['id'];
@@ -663,10 +691,10 @@ class Worker implements IClient {
         $receiver_id = $this->request['receiver_id'];
         $receiver_key = $this->user->getServiceKeyByUserId($receiver_id);
         if (false !== $receiver_key) {
-            $this->response['type'] = $this->types[$this->request_type][0];//转换成本人
+            $this->response['type'] = $this->types[$type][0];//转换成本人
             $this->sendMessage($key);//给当前客户端发送消息
 
-            $this->response['type'] = $this->types[$this->request_type][1];//转换成他人
+            $this->response['type'] = $this->types[$type][1];//转换成他人
             $this->sendMessage($receiver_key);//给接收者发送消息
         } else {
             //用户已经离线
@@ -676,22 +704,22 @@ class Worker implements IClient {
         }
     }
 
-    public function sendPersonalVideoMessage($key, $mess = '') {
+    public function sendRTCMessage($type, $key, $members) {
         $this->response = [
-            'type' => $this->request_type,
+            'type' => $type,
             'sender_id' => $this->request['sender_id'],
             'receiver_id' => $this->request['receiver_id'],
-            'mess' => isset($mess[0]) ? $mess : $this->request['mess'],
+            'mess' => $this->response['mess'],
             'timestamp' => $this->timestamp,
         ];
 
-        $receiver_id = $this->request['receiver_id'];
-        $receiver_key = $this->user->getServiceKeyByUserId($receiver_id);
-        if (false !== $receiver_key) {
-            $this->sendMessage($receiver_key);
-        } else {
-            $this->response['type'] = self::VIDEO_PERSONAL_OFFLINE;
-            $this->response['mess'] = '对方已经离线...';
+        $keys = $this->user->getServiceKeys($members);
+        $this->sendMultiMessage($keys);
+        $online = array_keys($keys);
+        $offline = array_diff($members, $online);
+        if (count($offline) > 0) {
+            $this->response['type'] = self::RTC_OFFLINE;
+            $this->response['mess'] = $offline;
             $this->sendMessage($key);
         }
     }
@@ -996,6 +1024,7 @@ class Worker implements IClient {
         $this->user->connect();
         $this->user->flushOnline();
         $this->user->flushUserServiceRelation();
+        $this->user->flushRTCRoom();
         $this->user->close();
     }
 }
