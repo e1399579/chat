@@ -319,13 +319,10 @@ export default {
         // 初始化RTC
         this.rtc = new WebRTC();
         this.rtc.setCallbacks({
-            onMediaOpen: this.onMediaOpen,
             onTrack: this.onTrack,
             onNegotiateReady: this.onNegotiateReady,
-            onCallerIncoming: this.onCallerIncoming,
             onIceCandidate: this.onIceCandidate,
-            onLocalMediaClose: this.onLocalMediaClose,
-            onRemoteMediaClose: this.onRemoteMediaClose,
+            onRemoteSteamClose: this.onRemoteSteamClose,
         });
 
         // 初始化工具栏
@@ -363,7 +360,8 @@ export default {
                     this.$modal.show('rtc-modal');
                     this.rtc_room_id = "";
                     let contact = this.im.getCurrentContact();
-                    this.rtc.open().then(() => {
+                    this.rtc.open().then((stream) => {
+                        this.setLocalStream(stream);
                         this.rtc_running = true;
                         // 请求CREATE ROOM
                         let is_group = contact.is_group;
@@ -637,7 +635,8 @@ export default {
                                         this.$modal.show('rtc-modal');
                                         this.rtc_room_id = data.room_id; // 更新room_id
                                         // 打开摄像头，创建连接，添加轨道，设置local，稍后(onNegotiateReady)发送offer
-                                        this.rtc.open().then(() => {
+                                        this.rtc.open().then((stream) => {
+                                            this.setLocalStream(stream);
                                             this.rtc_running = true;
                                             let key = this.rtc.create();
                                             this.remote_videos.set(key, null);
@@ -682,14 +681,14 @@ export default {
                     switch (type) {
                         case "offer":
                         {
-                            // 创建连接，设置remote，打开摄像头，添加轨道，稍后(onCallerIncoming)发送answer
+                            // 创建连接，设置remote，打开摄像头，添加轨道，发送answer
                             let description = data.description;
-                            this.rtc.handleVideoOfferMsg(description, {
-                                sender_id,
-                            }).then((key) => {
+                            this.rtc.handleVideoOfferMsg(description).then(({key, description}) => {
                                 // 创建key<=>sender关联，后面要用
                                 this.rtc_key_sender.set(key, sender_id);
                                 this.rtc_sender_key.set(sender_id, key);
+
+                                this.sendAnswer(sender_id, description);
                             });
                             break;
                         }
@@ -1406,26 +1405,44 @@ export default {
         hangUp(notify = true) {
             this.$modal.hide('rtc-modal');
             this.rtc_running = false;
+            this.rtc_key_sender.clear();
+            this.rtc_sender_key.clear();
             this.rtc.closeAll();
+            this.closeLocalStream();
 
             // 通知其他人
             notify && this.sendMessage(RTC_CLOSE, '0', {
                 room_id: this.rtc_room_id,
             });
         },
-        onMediaOpen(stream) {
-            this.trace('media open', ...arguments);
+        setLocalStream(stream) {
+            this.trace('set local stream', ...arguments);
             this.local_video = stream;
+        },
+        closeLocalStream() {
+            this.trace('close local stream');
+            if (this.local_video) {
+                this.local_video.getTracks().forEach((track) => track.stop());
+                this.local_video = null;
+                this.candidates.clear();
+            }
+        },
+        sendAnswer(sender_id, description) {
+            this.trace('send answer', ...arguments);
+            // 发送answer到远端
+            this.sendMessage(RTC_MESSAGE, sender_id, {
+                type: "answer",
+                description,
+            });
         },
         onNegotiateReady(key, description) {
             this.trace('negotiate ready', ...arguments);
             // 发送offer到远端
-            let data = {
+            let sender_id = this.rtc_key_sender.get(key);
+            this.sendMessage(RTC_MESSAGE, sender_id, {
                 type: "offer",
                 description,
-            };
-            let sender_id = this.rtc_key_sender.get(key);
-            this.sendMessage(RTC_MESSAGE, sender_id, data);
+            });
         },
         onIceCandidate(key, candidate) {
             this.trace('candidate', ...arguments);
@@ -1446,31 +1463,13 @@ export default {
                 this.candidates.set(sender_id, []);
             }
         },
-        onCallerIncoming(key, description, args) {
-            this.trace('caller incoming', ...arguments);
-            let sender_id = args.sender_id;
-            // 发送answer到远端
-            let data = {
-                type: "answer",
-                description,
-            };
-            this.sendMessage(RTC_MESSAGE, sender_id, data);
-        },
         onTrack(key, streams) {
             this.trace('track', ...arguments);
             this.remote_videos.set(key, streams[0]);
             this.$forceUpdate();
         },
-        onLocalMediaClose() {
-            this.trace('local media close');
-            if (this.local_video) {
-                this.local_video.getTracks().forEach((track) => track.stop());
-                this.local_video = null;
-                this.candidates.clear();
-            }
-        },
-        onRemoteMediaClose(key) {
-            this.trace('remote media close', ...arguments);
+        onRemoteSteamClose(key) {
+            this.trace('remote stream close', ...arguments);
             if (this.remote_videos.has(key)) {
                 this.remote_videos.get(key) && this.remote_videos.get(key).getTracks().forEach((track) => track.stop());
                 this.remote_videos.delete(key);

@@ -26,15 +26,11 @@ export default class WebRTC {
     }
 
     setCallbacks(callbacks) {
-        const {onMediaOpen, onTrack, onNegotiateReady, onCallerIncoming, onIceCandidate,
-            onLocalMediaClose, onRemoteMediaClose} = callbacks;
-        this.callbacks.onMediaOpen = onMediaOpen;
+        const {onTrack, onNegotiateReady, onIceCandidate, onRemoteSteamClose} = callbacks;
         this.callbacks.onTrack = onTrack;
         this.callbacks.onNegotiateReady = onNegotiateReady;
-        this.callbacks.onCallerIncoming = onCallerIncoming;
         this.callbacks.onIceCandidate = onIceCandidate;
-        this.callbacks.onLocalMediaClose = onLocalMediaClose;
-        this.callbacks.onRemoteMediaClose = onRemoteMediaClose;
+        this.callbacks.onRemoteSteamClose = onRemoteSteamClose;
     }
 
     async open() {
@@ -42,10 +38,8 @@ export default class WebRTC {
             if (!this.stream) {
                 // [Caller] a. invite: 2. access the webcam and microphone
                 this.stream = await navigator.mediaDevices.getUserMedia(this.constraints);
-
-                // set local video srcObject
-                this.callbacks.onMediaOpen(this.stream);
             }
+            return this.stream;
         } catch (e) {
             console.error(e);
             switch (e.name) {
@@ -135,7 +129,6 @@ export default class WebRTC {
     }
 
     close(key) {
-        if (!this.pcs.has(key)) return;
         let pc = this.pcs.get(key);
         pc.ontrack = null;
         pc.onremovetrack = null;
@@ -151,7 +144,7 @@ export default class WebRTC {
         this.pcs.delete(key);
 
         // stop video track
-        this.callbacks.onRemoteMediaClose(key);
+        this.callbacks.onRemoteSteamClose(key);
     }
 
     closeAll() {
@@ -159,7 +152,6 @@ export default class WebRTC {
             this.close(key);
         });
         this.pcs.clear();
-        this.callbacks.onLocalMediaClose();
         this.stream = null;
     }
 
@@ -167,7 +159,7 @@ export default class WebRTC {
         return this.pcs.size;
     }
 
-    async handleVideoOfferMsg(description, args = null) {
+    async handleVideoOfferMsg(description) {
         // [Callee] received video-offer: 1. Create an RTCPeerConnection
         let key = this.create();
         let pc = this.pcs.get(key);
@@ -181,18 +173,17 @@ export default class WebRTC {
         await pc.setLocalDescription();
         // [Callee] a. received video-offer: 6. send the answer
         // type: video-answer
-        this.callbacks.onCallerIncoming(key, pc.localDescription, args);
-        return key;
+        return {key, description: pc.localDescription};
     }
 
     async handleVideoAnswerMsg(key, description) {
         // [Caller] c. received video-answer : 1. create(set) an SDP
         let pc = this.pcs.get(key);
-        await pc.setRemoteDescription(description);
+        return await pc.setRemoteDescription(description);
     }
 
     async handleNewICECandidateMsg(key, candidate) {
         let pc = this.pcs.get(key);
-        await pc.addIceCandidate(candidate);
+        return await pc.addIceCandidate(candidate);
     }
 }
