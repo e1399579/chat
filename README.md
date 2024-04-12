@@ -91,7 +91,7 @@ php:
 2. -p port 监听端口号
 3. -n num 开启的子进程数，至少为1
 
-## 前端(新版html_v2)
+## 前端(新版)
 ### 框架/插件
 1. 框架 [Vue 2](https://v2.cn.vuejs.org/)
 2. 主界面 [lemon-imui](https://www.npmjs.com/package/lemon-imui)
