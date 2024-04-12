@@ -16,7 +16,8 @@
     "vue": "^2.6.14",
     "vue-image-crop-upload": "^3.0.3",
     "vue-js-modal": "^2.0.1",
-    "vue-notification": "^1.3.20"
+    "vue-notification": "^1.3.20",
+    "weui-icon": "^1.0.2"
   },
   "devDependencies": {
     "@babel/core": "^7.12.16",

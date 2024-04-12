@@ -4,3 +4,4 @@ php/upload/
 php/nohup.out
 php/local.ini
 ssl
+html_v2/.env.production

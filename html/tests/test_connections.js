@@ -11,6 +11,7 @@ const WebSocket = ws.WebSocket;
 let success = 0, fail = 0, closed = 0;
 let test_num = process.argv.length > 2 ? parseInt(process.argv[2]) : 255;
 let sockets = [];
+process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
 
 const USER_ONLINE = 200;//用户上线
 const USER_QUIT = 201;//用户退出
@@ -22,8 +23,8 @@ const WARNING = 901;//警告消息
 const SYSTEM = 902;//系统消息
 
 const PORT = 8080;
-const PROTOCOL = 'ws://';
-const HOST = '192.168.43.165';
+const PROTOCOL = 'wss://';
+const HOST = 'www.e1399579.publicvm.com';
 const SERVER_URL = PROTOCOL + HOST + ':' + PORT;
 
 class DataHelper {

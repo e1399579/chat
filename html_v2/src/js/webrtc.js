@@ -1,7 +1,7 @@
 // @see https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Perfect_negotiation
 
 export default class WebRTC {
-    constructor(config = null, constraints = null) {
+    constructor(config = null) {
         // @see https://gist.github.com/mondain/b0ec1cf5f60ae726202e
         // @see https://gist.github.com/sagivo/3a4b2f2c7ac6e1b5267c2f1f59ac6c6b
         // @see https://freestun.net/
@@ -18,7 +18,7 @@ export default class WebRTC {
                 },
             ],
         };
-        this.constraints = constraints ? constraints : { audio: true, video: true };
+        this.constraints = { audio: true, video: true };
 
         this.callbacks = {};
         this.pcs = new Map();
@@ -31,6 +31,10 @@ export default class WebRTC {
         this.callbacks.onNegotiateReady = onNegotiateReady;
         this.callbacks.onIceCandidate = onIceCandidate;
         this.callbacks.onRemoteSteamClose = onRemoteSteamClose;
+    }
+
+    setConstraints(constraints) {
+        this.constraints = constraints;
     }
 
     async open() {
@@ -61,7 +65,7 @@ export default class WebRTC {
     create() {
         // [Caller] a. invite: 1. create an RTCPeerConnection
         let pc = new RTCPeerConnection(this.config);
-        let key = this.pcs.size;
+        let key = this.getPeerConnectionLastId();
         this.pcs.set(key, pc);
         pc.ontrack = ({ track, streams }) => {
             track.onunmute = () => {
@@ -155,7 +159,7 @@ export default class WebRTC {
         this.stream = null;
     }
 
-    getPeerConnectionNum() {
+    getPeerConnectionLastId() {
         return this.pcs.size;
     }
 

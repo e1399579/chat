@@ -49,6 +49,15 @@ Date.prototype.format = function (format = 'Y-m-d H:i:s') {
     return format.replaceMulti(search, replace);
 };
 
+Date.prototype.formatUTC = function (format = 'Y-m-d H:i:s') {
+    let search = ['Y', 'm', 'd', 'H', 'i', 's', 'y'];
+    let replace = [this.getUTCFullYear(), (this.getUTCMonth() + 1).toString().padStart(2, '0'),
+        this.getUTCDate().toString().padStart(2, '0'), this.getUTCHours().toString().padStart(2, '0'),
+        this.getUTCMinutes().toString().padStart(2, '0'), this.getUTCSeconds().toString().padStart(2, '0'),
+        this.getUTCFullYear().toString().padStart(4, '0').substring(2)];
+    return format.replaceMulti(search, replace);
+};
+
 export function generateUUID() {
     let time = new Date().getTime();
     time += performance.now();

@@ -1,5 +1,8 @@
 .flex {
     display: flex;
+}
+
+.flex-wrap {
     flex-wrap: wrap;
 }
 
@@ -25,6 +28,20 @@
 
 .user-select-none {
     user-select: none;
+}
+
+.text-ellipsis {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.inline-block {
+    display: inline-block;
 }
 
 .input-medium {
@@ -93,9 +110,6 @@
 }
 
 .slot-group-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     font-size: 12px;
     line-height: 18px;
     width: 64px;
@@ -160,24 +174,69 @@
     width: 530px;
 }
 
+.call-button {
+    display: inline-block;
+    width: 25px;
+    height: 25px;
+    background-image: url("../../public/static/webrtc/call.png");
+    background-size: cover;
+}
+
 .hang-up-button {
-    width: 30px;
-    height: 30px;
+    display: inline-block;
+    width: 25px;
+    height: 25px;
     background-image: url("../../public/static/webrtc/hang-up.png");
     background-size: cover;
-    background-color: transparent;
-    border: 0;
-    padding-left: 10px;
 }
 
-.local-video {
+.local-video video {
     width: 480px;
     max-height: 360px;
     transform: scale(-1, 1);
 }
 
-.remote-video {
+.remote-video video {
     width: 480px;
     max-height: 360px;
-    transform: scale(-1, 1);
+}
+
+.video-bar {
+    height: 30px;
+    margin-top: -5px;
+}
+
+.video-tag {
+    background-color: rgb(200, 200, 200);
+    color: black;
+    width: fit-content;
+    max-width: 60px;
+    line-height: 30px;
+}
+
+.local-audio {
+    width: 480px;
+    height: 120px;
+}
+
+.remote-audio {
+    width: 480px;
+    height: 120px;
+}
+
+.audio-bar {
+    width: 100px;
+    height: 120px;
+}
+
+.audio-bar img {
+    width: 100px;
+    height: 100px;
+}
+
+.audio-bar .username {
+    margin-top: -4px;
+    line-height: 20px;
+    background-color: rgb(200, 200, 200);
+    color: black;
 }
