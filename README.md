@@ -219,6 +219,8 @@ B -> received answerC
 * 测试服务器是否可用 https://icetest.atec-systems.com/
   > 注：TURN Server需要大量带宽
 
+![TURN](./doc/webrtc-turn.png "webrtc-turn")
+
 ## 支持的浏览器
 1. Chrome
 2. Firefox
