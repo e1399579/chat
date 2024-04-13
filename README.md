@@ -62,7 +62,7 @@ verify_peer=false
 ##### nginx [https服务器]
 1. 修改nginx配置`docker/conf/nginx/www.conf`的server段，示例（xxx替换为域名）：
 ```
-listen              443 default_server;
+listen              443 ssl;
 server_name         xxx;
 ssl_protocols       TLSv1.2 TLSv1.3;
 ssl_ciphers         AES128-SHA:AES256-SHA:RC4-SHA:DES-CBC3-SHA:RC4-MD5;
@@ -162,32 +162,35 @@ A ->open media
         B received -> accept
                     -> open media
                      -> create new RTCPeerConnection
-                      -> setLocalDescription
+                      -> setLocalDescription (triggers onicecandidate -> send RTCIceCandidate to A)
                        -> send offerB to A (through S)
                         -> request S to JOIN room
         C received -> accept
                     -> open media
                      -> create new RTCPeerConnection
-                      -> setLocalDescription
+                      -> setLocalDescription (triggers onicecandidate -> send RTCIceCandidate to A)
                        -> send offerC to A (through S)
                         -> request S to JOIN room
         D received -> deny
 
 A -> received offerB
    -> create new RTCPeerConnection
-    -> setRemoteDescription(offerB)
-     -> setLocalDescription
+    -> setRemoteDescription(offerB) and addIceCandidate
+     -> setLocalDescription (triggers onicecandidate -> send RTCIceCandidate to B)
       -> send answerA to B
   -> received offerC
    -> create new RTCPeerConnection
-    -> setRemoteDescription(offerC)
-    -> send answerA to C
+    -> setRemoteDescription(offerC) and addIceCandidate
+     -> setLocalDescription (triggers onicecandidate -> send RTCIceCandidate to C)
+      -> send answerA to C
 
 B -> received answerA
-   -> setRemoteDescription(answerA)
+   -> setRemoteDescription(answerA) and addIceCandidate
+    -> (B-A connected)
   
 C -> received answerA
-   -> setRemoteDescription(answerA)
+   -> setRemoteDescription(answerA) and addIceCandidate
+    -> (C-A connected)
 
 S -> received B JOIN request
    -> send to members(except B and A), but only A and B in room, so do nothing
@@ -196,17 +199,18 @@ S -> received B JOIN request
 
 B -> received C JOIN request
    -> create new RTCPeerConnection
-    -> setLocalDescription
+    -> setLocalDescription (triggers onicecandidate -> send RTCIceCandidate to C)
      -> send offerB to C (through S)
 
 C -> received offerB
    -> create new RTCPeerConnection
-    -> setRemoteDescription(offerB)
-     -> setLocalDescription
+    -> setRemoteDescription(offerB) and addIceCandidate
+     -> setLocalDescription (triggers onicecandidate -> send RTCIceCandidate to B)
       -> send answerC to B
 
 B -> received answerC
-   -> setRemoteDescription(answerC)
+   -> setRemoteDescription(answerC) and addIceCandidate
+    -> (B-C connected)
 ```
 
 ### WebRTC
