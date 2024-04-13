@@ -1,7 +1,7 @@
 FROM php:8.3.4-cli-bullseye
 
-ARG BUILD_ID=1 \
-    VERSION=8.3
+ARG BUILD_ID=1
+ARG VERSION=8.3
 
 ENV BUILD_ID=$BUILD_ID \
     APP_VERSION=$VERSION \
@@ -16,6 +16,13 @@ LABEL build_id="$BUILD_ID" \
 
 WORKDIR /home
 
+RUN echo "\
+    deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bullseye main contrib non-free\n \
+    deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bullseye-updates main contrib non-free\n \
+    deb https://mirrors.tuna.tsinghua.edu.cn/debian/ bullseye-backports main contrib non-free\n \
+    deb https://mirrors.tuna.tsinghua.edu.cn/debian-security bullseye-security main contrib non-free\n \
+    " > /etc/apt/sources.list
+
 # install extensions
 RUN apt-get update  \
     && apt-get install -y \
@@ -29,7 +36,7 @@ RUN apt-get update  \
 # curl 'https://github.com/phpredis/phpredis/archive/refs/tags/6.0.2.tar.gz' -o phpredis-6.0.2.tar.gz
 # curl 'https://bitbucket.org/osmanov/pecl-event/get/9099a9e890e8752b715c7d9305ef095869fabc4b.tar.gz' -o osmanov-pecl-event-9099a9e890e8.tar.gz
 # curl 'https://github.com/msgpack/msgpack-php/archive/refs/tags/msgpack-2.2.0.tar.gz' -o msgpack-php-msgpack-2.2.0.tar.gz
-COPY ./source/* .
+COPY ./source/* /home/
 
 # compile and install extra extensions
 RUN cd /home \
