@@ -180,6 +180,9 @@
     height: 25px;
     background-image: url("../../public/static/webrtc/call.png");
     background-size: cover;
+    border: 0;
+    padding: 0;
+    background-color: transparent;
 }
 
 .hang-up-button {
@@ -188,6 +191,21 @@
     height: 25px;
     background-image: url("../../public/static/webrtc/hang-up.png");
     background-size: cover;
+    border: 0;
+    padding: 0;
+    background-color: transparent;
+}
+
+.minimize-button {
+    height: 30px;
+}
+
+.minimize-call {
+    position: fixed;
+    width: 70px;
+    top: 50px;
+    right: 50px;
+    z-index: 10;
 }
 
 .local-video video {

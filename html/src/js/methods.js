@@ -205,9 +205,11 @@ export default {
             {
                 let data = mess.mess;
                 let sender_id = mess.sender_id;
+                let receiver_id = mess.receiver_id;
                 if (sender_id === this.user.id) {
                     // 本人创建，仅更新room_id
                     this.rtc_room_id = data.room_id;
+                    this.rtc_receiver_id = receiver_id;
                     return;
                 } else if (this.rtc_running) {
                     // 已经在聊天，忽略
@@ -251,6 +253,7 @@ export default {
                                     // 接受，显示弹窗
                                     this.$modal.show('rtc-modal');
                                     this.rtc_room_id = data.room_id; // 更新room_id
+                                    this.rtc_receiver_id = receiver_id;
                                     this.video_flag = video;
                                     this.rtc.setConstraints({ audio: true, video });
                                     // 打开摄像头，创建连接，添加轨道，设置local，稍后(onNegotiateReady)发送offer
@@ -361,12 +364,21 @@ export default {
             }
             case Constant.RTC_EXIT:
             {
-                this.$notify({
-                    group: 'tip',
-                    text: '聊天已经结束',
-                    type: 'warn',
-                });
-                this.hangUp(false);
+                let sender_id = mess.sender_id;
+                if (sender_id === this.user.id) return;
+                let data = mess.mess;
+                if (this.rtc_running && (data.room_id === this.rtc_room_id)) {
+                    // 已接听，关闭聊天窗口
+                    this.$notify({
+                        group: 'tip',
+                        text: '聊天已经结束',
+                        type: 'warn',
+                    });
+                    this.hangUp(false);
+                } else {
+                    // 未接听，关闭弹窗提示
+                    this.$modal.hide('dialog');
+                }
                 break;
             }
 
@@ -1030,9 +1042,22 @@ export default {
         this.closeVisualize();
 
         // 通知其他人
-        notify && this.sendMessage(Constant.RTC_CLOSE, '0', {
-            room_id: this.rtc_room_id,
-        });
+        if (notify) {
+            let contact = this.im.findContact(this.rtc_receiver_id);
+            this.sendMessage(Constant.RTC_CLOSE, this.rtc_receiver_id, {
+                is_group: contact.is_group,
+                room_id: this.rtc_room_id,
+            });
+        }
+
+        this.rtc_room_id = "";
+        this.rtc_receiver_id = "";
+    },
+    minimize() {
+        this.rtc_minimize = true;
+    },
+    maximize() {
+        this.rtc_minimize = false;
     },
     setMute(e) {
         // muted prop not working, used js

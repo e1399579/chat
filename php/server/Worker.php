@@ -549,8 +549,9 @@ class Worker implements IClient {
             case self::RTC_CLOSE:
                 $data = $this->request['mess'];
                 $room_id = $data['room_id'];
+                $is_group = $data['is_group'];
                 // 查询成员
-                $members = $this->user->getRTCRoom($room_id);
+//                $members = $this->user->getRTCRoom($room_id);
                 $user_id = $this->request['sender_id'];
                 if ($room_id === $user_id) {
                     // 房主退出，解散
@@ -563,8 +564,14 @@ class Worker implements IClient {
                 }
                 $this->response['mess'] = $data;
                 // 通知其他人
-                $members = array_diff($members, [$user_id]);
-                $members and $this->sendRTCMessage($type, $key, $members);
+//                $members = array_diff($members, [$user_id]);
+//                $members and $this->sendRTCMessage($type, $key, $members);
+                // 通知所有群成员（可能有人未接听，关闭弹窗）
+                if ($is_group) {
+                    $this->sendCommonMessage($type, $this->request['receiver_id'], $key, [], false);
+                } else {
+                    $this->sendRTCMessage($type, $key, [$this->request['receiver_id']]);
+                }
                 break;
             case self::HISTORY_MESSAGE_COMMON:
                 $timestamp = empty($this->request['mess']) ? $this->timestamp : $this->request['mess'];

@@ -150,7 +150,7 @@
         </modal>
 
         <!--WebRTC-->
-        <modal name="rtc-modal" :clickToClose="false" :height="'auto'" :width="960" :scrollable="true" draggable="true">
+        <modal name="rtc-modal" :clickToClose="false" :height="'auto'" :width="960" :scrollable="true" draggable="true" v-show="!rtc_minimize">
             <div class="flex flex-wrap horizontal-center vertical-center">
                 <template v-if="video_flag">
                     <div class="local-video">
@@ -193,15 +193,27 @@
                     </div>
                 </template>
             </div>
-            <div class="flex horizontal-right vertical-center">
-                <span>{{clock_text}}</span>
-                <button @click="hangUp" class="flex vertical-center">
-                    <span class="hang-up-button"></span>
-                    <span>结束通话</span>
-                </button>
+            <div class="flex space-between vertical-center">
+                <div>
+                    <button @click="minimize" class="minimize-button">➖最小化</button>
+                </div>
+                <div>
+                    <span>{{clock_text}}</span>
+                    <button @click="hangUp" class="flex vertical-center">
+                        <span class="hang-up-button"></span>
+                        <span>结束通话</span>
+                    </button>
+                </div>
             </div>
         </modal>
+
+        <!--对话框-->
         <v-dialog />
+
+        <div class="minimize-call flex flex-wrap horizontal-center" v-show="rtc_minimize">
+            <button @click="maximize" class="call-button"></button>
+            <div>{{clock_text}}</div>
+        </div>
     </main>
 </template>
 
@@ -281,6 +293,14 @@ export default {
                 name: "videoChat",
                 title: "视频聊天",
                 click: () => {
+                    if (this.rtc_minimize) {
+                        return this.$notify({
+                            group: 'tip',
+                            text: '已在通话中',
+                            type: 'warn',
+                        });
+                    }
+
                     this.$modal.show('rtc-modal');
 
                     this.rtc_room_id = "";
@@ -310,6 +330,14 @@ export default {
                 name: "VoiceChat",
                 title: "语音聊天",
                 click: () => {
+                    if (this.rtc_minimize) {
+                        return this.$notify({
+                            group: 'tip',
+                            text: '已在通话中',
+                            type: 'warn',
+                        });
+                    }
+
                     this.$modal.show('rtc-modal');
 
                     this.rtc_room_id = "";

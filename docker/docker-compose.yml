@@ -12,7 +12,7 @@ services:
     volumes:
       - ./conf/nginx/nginx.conf:/etc/nginx/nginx.conf
       - ./conf/nginx/www.conf:/etc/nginx/conf.d/www.conf
-      - /home/chat/html_v2/dist:/home
+      - /home/chat/html/dist:/home
       - /home/chat/php/upload:/home/upload
 
   redis:

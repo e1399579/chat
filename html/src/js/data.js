@@ -33,7 +33,9 @@ export default function () {
         rtc_key_sender: new Map(),
         rtc_sender_key: new Map(),
         rtc_room_id: "",
+        rtc_receiver_id: "",
         rtc_running: false,
+        rtc_minimize: false,
         images: [],
         image_crop: {
             show: false,
