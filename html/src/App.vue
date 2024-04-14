@@ -222,17 +222,22 @@ import './css/login.css';
 import './css/main.css';
 import 'weui-icon';
 
-import data from './js/data.js';
-import methods from './js/methods.js';
 import emoji from './js/emoji.js';
 import WebRTC from "./js/webrtc.js";
 import Constant from "./js/constant.js";
+import {GeneralMessage, GeneralProcessor} from "./js/general.js";
+import {GroupMessage, GroupProcessor} from "./js/group.js";
+import {RTCMessage, RTCProcessor} from "./js/rtc.js";
+import {UnknownMessage} from "./js/unknown.js";
 
 export default {
     name: 'App',
-    components: {},
-    data,
-    methods,
+    // data和methods在Processor中
+    mixins: [
+        new GeneralProcessor(),
+        new GroupProcessor(),
+        new RTCProcessor(),
+    ],
     mounted() {
         const {im} = this.$refs;
         this.im = im;
@@ -251,6 +256,16 @@ export default {
 
         // 初始化表情包
         this.im.initEmoji(emoji);
+
+        // 初始化消息处理
+        let general = new GeneralMessage();
+        let group = new GroupMessage();
+        let rtc = new RTCMessage();
+        let unknown = new UnknownMessage();
+        general.setNext(group);
+        group.setNext(rtc);
+        rtc.setNext(unknown);
+        this.message_handler = general;
 
         // 初始化RTC
         this.rtc = new WebRTC();
