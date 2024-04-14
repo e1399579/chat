@@ -197,7 +197,7 @@
                 <div>
                     <button @click="minimize" class="minimize-button">➖最小化</button>
                 </div>
-                <div>
+                <div class="flex vertical-center">
                     <span>{{clock_text}}</span>
                     <button @click="hangUp" class="flex vertical-center">
                         <span class="hang-up-button"></span>

@@ -18,7 +18,10 @@ export default class WebRTC {
                 },
             ],
         };
-        this.constraints = { audio: true, video: true };
+        this.constraints = {
+            audio: true,
+            video: true
+        };
 
         this.callbacks = {};
         this.pcs = new Map();
@@ -77,7 +80,9 @@ export default class WebRTC {
         pc.onnegotiationneeded = async () => {
             try {
                 // [Caller] b. ready to negotiate: 1. create(set) an SDP offer
-                await pc.setLocalDescription();
+                let offer = await pc.createOffer();
+                offer.sdp = this.replaceSDP(offer.sdp);
+                await pc.setLocalDescription(offer);
 
                 // [Caller] b. ready to negotiate: 2. send the offer
                 // type: video-offer
@@ -174,7 +179,9 @@ export default class WebRTC {
         // [Callee] a. received video-offer: 5. create(set) an SDP answer
         await this.open();
         this.addTrack(key);
-        await pc.setLocalDescription();
+        let answer = await pc.createAnswer();
+        answer.sdp = this.replaceSDP(answer.sdp);
+        await pc.setLocalDescription(answer);
         // [Callee] a. received video-offer: 6. send the answer
         // type: video-answer
         return {key, description: pc.localDescription};
@@ -189,5 +196,10 @@ export default class WebRTC {
     async handleNewICECandidateMsg(key, candidate) {
         let pc = this.pcs.get(key);
         return await pc.addIceCandidate(candidate);
+    }
+
+    replaceSDP(sdp) {
+        // audio quality https://stackoverflow.com/questions/46063374/is-it-really-possible-for-webrtc-to-stream-high-quality-audio-without-noise
+        return sdp.replace('useinbandfec=1', 'useinbandfec=1; stereo=1; maxaveragebitrate=320000');
     }
 }
