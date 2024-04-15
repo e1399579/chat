@@ -1,11 +1,10 @@
 #!/bin/bash
-// node test_connections.js
 // npm install -g ws msgpackr
 // linux: export NODE_PATH=/usr/lib/node_modules/
 // windows: NODE_PATH=%AppData%\npm\node_modules
+// node --env-file=../.env.local .\test_connections.js 10
 
-const ws = require('ws');
-const WebSocket = ws.WebSocket;
+const WebSocket = require('ws');
 // const msgpack = require('msgpackr');
 
 let success = 0, fail = 0, closed = 0;
@@ -22,10 +21,7 @@ const ERROR = 900;//错误消息
 const WARNING = 901;//警告消息
 const SYSTEM = 902;//系统消息
 
-const PORT = 8080;
-const PROTOCOL = 'wss://';
-const HOST = 'www.e1399579.publicvm.com';
-const SERVER_URL = PROTOCOL + HOST + ':' + PORT;
+const SERVER_URL = process.env.VUE_APP_SERVER_URL;
 
 class DataHelper {
     static encode(obj) {
@@ -67,15 +63,6 @@ function init_sockets(num, sockets) {
                     ++success;
                     console.log("success:", success, "fail:", fail);
                     socket.ping();
-                    break;
-                case USER_ONLINE: // 每次登录会通知所有人，去重数量
-                    // let prev = success;
-                    // let user_id = dec.user.user_id;
-                    // success_set.add(user_id);
-                    // success = success_set.size;
-                    // if (success > prev) {
-                    //     console.log("success:", success, "fail:", fail);
-                    // }
                     break;
                 case USER_QUIT:
                 default:

@@ -2,6 +2,7 @@
     <main>
         <lemon-imui :user="user" ref="im"
                     :hide-message-name="false"
+                    :avatarCricle="true"
                     @pull-messages="getHistory"
                     @message-click="messageClick"
                     @change-contact="changeContact"
@@ -52,7 +53,7 @@
                     <hr/>
                     <div class="slot-group-title">群成员</div>
                     <input class="slot-search" placeholder="搜索群成员"/>
-                    <div class="slot-group-panel flex flex-wrap">
+                    <div class="slot-group-panel flex flex-top">
                         <lemon-contact
                             v-for="item of contact.members.values()"
                             :key="item.user_id"
@@ -71,27 +72,19 @@
         </lemon-imui>
 
         <!--注册/登录弹框-->
-        <modal name="login-modal" :clickToClose="false" :height="250" :width="500">
+        <modal name="login-modal" :clickToClose="false" :height="250" :width="250" :adaptive="true">
             <dialog class="box" open>
-                <div id="bp-left" class="box-part">
-                    <div id="partition-register" class="partition">
-                        <div class="partition-title">请登录/注册</div>
-                        <div class="partition-form">
-                            <form autocomplete="off">
-                                <input type="text" id="username" v-model="username" placeholder="起个名吧，亲:)"
-                                       maxlength="30" autocomplete/>
-                                <input type="password" id="password" v-model="password" placeholder="密码：默认123456"
-                                       maxlength="16"/>
-                                <button type="submit" class="large-btn github-btn" v-on:click="login">
-                                    登录/注册
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="bp-right" class="box-part">
-                    <div class="box-messages">{{login_mess}}</div>
+                <div class="partition-title">请登录/注册</div>
+                <div class="partition-form">
+                    <form autocomplete="off">
+                        <input type="text" id="username" v-model="username" placeholder="起个名吧，亲:)"
+                               maxlength="30" autocomplete/>
+                        <input type="password" id="password" v-model="password" placeholder="密码：默认123456"
+                               maxlength="16"/>
+                        <button type="submit" class="large-btn gold-btn" v-on:click="login">
+                            登录/注册
+                        </button>
+                    </form>
                 </div>
             </dialog>
         </modal>
@@ -117,7 +110,7 @@
         </template>
 
         <!--创建群聊-->
-        <modal name="group-modal" :clickToClose="true" :height="500" :width="666">
+        <modal name="group-modal" :clickToClose="true" :height="500" :width="666" :adaptive="true">
             <div class="modal-content">
                 <div class="modal-header">
                     <h3 class="modal-title">创建群聊</h3>
@@ -150,7 +143,7 @@
         </modal>
 
         <!--WebRTC-->
-        <modal name="rtc-modal" :clickToClose="false" :height="'auto'" :width="960" :scrollable="true" draggable="true" v-show="!rtc_minimize">
+        <modal name="rtc-modal" :clickToClose="false" :height="'auto'" :width="960" :scrollable="true" draggable="true" v-show="!rtc_minimize" :adaptive="true">
             <div class="flex flex-wrap horizontal-center vertical-center">
                 <template v-if="video_flag">
                     <div class="local-video">

@@ -1,6 +1,6 @@
 import IMessage from "./imessage.js";
 import Constant from "./constant.js";
-import {DataHelper} from "./util.js";
+import {DataHelper, generateUUID} from "./util.js";
 import IProcessor from "./iprocessor.js";
 
 export class GeneralMessage extends IMessage {
@@ -17,13 +17,16 @@ export class GeneralMessage extends IMessage {
                 vm.$modal.show('login-modal');
                 break;
             case Constant.USER_INCORRECT: // 登录出错
-                vm.login_mess = mess.mess;
+                vm.$notify({
+                    group: 'tip',
+                    text: mess.mess,
+                    type: 'error',
+                });
                 break;
             case Constant.USER_LOGIN: // 已经登录
             {
                 let user = mess.user;
                 // 隐藏modal
-                vm.login_mess = "登录成功";
                 vm.$modal.hide('login-modal');
                 // 更新vm.user
                 vm.user.id = user.user_id;
@@ -61,16 +64,18 @@ export class GeneralMessage extends IMessage {
                 let user = mess.user;
                 // 联系人
                 vm.im.appendMessage({
-                    id: DataHelper.buildTraceId(),
+                    id: generateUUID(),
                     status: "succeed",
                     type: "event",
                     sendTime: mess.timestamp,
                     content: `用户 ${user.username} 进入聊天室`,
                     toContactId: "0",
-                });
+                }, true);
                 if (vm.user.id !== user.user_id) {
                     ++vm.online_total;
+                    user.is_online = true;
                     vm.online_users.set(user.user_id, user);
+                    vm.updateContact(user.user_id, {is_online: true});
                     vm.updateContact("0", {online_total:vm.online_total, unread: "+1"});
                 }
                 break;
@@ -84,14 +89,14 @@ export class GeneralMessage extends IMessage {
                 let user = mess.user;
                 if (vm.user.id !== user.user_id) {
                     vm.im.appendMessage({
-                        id: DataHelper.buildTraceId(),
+                        id: generateUUID(),
                         status: "succeed",
                         type: "event",
                         sendTime: mess.timestamp,
                         content: `用户 ${user.username} 退出聊天室`,
                         toContactId: "0",
                         fromUser: ""
-                    });
+                    }, true);
                     vm.online_total = Math.max(--vm.online_total, 1);
                     vm.online_users.delete(user.user_id);
                     vm.updateContact("0", {online_total:vm.online_total, unread: "+1"});
@@ -203,6 +208,16 @@ export class GeneralMessage extends IMessage {
                 resolve(mess.mess);
                 break;
             }
+
+            // 通知
+            case Constant.ERROR:
+            case Constant.WARNING:
+            case Constant.SYSTEM:
+            {
+                vm.receiveMessage(mess);
+                break;
+            }
+
             default:
             {
                 this.next.process(vm, mess);
@@ -224,7 +239,6 @@ export class GeneralProcessor extends IProcessor {
             user: {id: 0, displayName: '', avatar: Constant.DEFAULT_AVATAR, is_active: 1},
             socket: null,
             reconnect_times: 0,
-            login_mess: "",
             disconnect_mess: "",
             online_total: 0,
             online_users: new Map(),
@@ -363,7 +377,8 @@ export class GeneralProcessor extends IProcessor {
                 this.socket.send(DataHelper.encode(data));
             },
             parseMessage(mess, sender = null) {
-                let type, content, fileSize, fileName;
+                let id, type, content, fileSize, fileName;
+                id = mess.id;
                 switch (mess.type) {
                     case Constant.MESSAGE_COMMON:
                     case Constant.MESSAGE_SELF:
@@ -414,6 +429,17 @@ export class GeneralProcessor extends IProcessor {
                         fileName = "";
                         break;
                     }
+                    case Constant.ERROR:
+                    case Constant.WARNING:
+                    case Constant.SYSTEM:
+                    {
+                        id = generateUUID();
+                        type = "event";
+                        content = mess.mess;
+                        fileSize = 0;
+                        fileName = "";
+                        break;
+                    }
                 }
                 let toContactId;
                 switch (mess.type) {
@@ -432,7 +458,7 @@ export class GeneralProcessor extends IProcessor {
                     }
                 }
                 return {
-                    id: mess.id,
+                    id: id,
                     status: "succeed",
                     type,
                     sendTime: mess.timestamp,
@@ -451,8 +477,8 @@ export class GeneralProcessor extends IProcessor {
             receiveMessage(mess, sender = null) {
                 let parsed = this.parseMessage(mess, sender);
                 this.trace('parsed', parsed);
-                this.im.appendMessage(parsed);
-                this.im.updateContact({unread: "+1"});
+                this.im.appendMessage(parsed, true);
+                // this.updateContact(parsed.toContactId, {unread: "+1"});
             },
             updateContact(contact_id, option) {
                 this.im.updateContact({
@@ -470,7 +496,7 @@ export class GeneralProcessor extends IProcessor {
 
                     // 新加字段
                     is_group: false,
-                    is_online: this.online_users.has(user.user_id),
+                    is_online: user.is_online,
                     query_time: ((new Date()).getTime() + performance.now()) / 1000,
                 };
                 this.im.appendContact(data);
@@ -518,10 +544,19 @@ export class GeneralProcessor extends IProcessor {
             // 交互方法
             login(e) {
                 e.preventDefault();
+                let username = this.username.trim();
+                if (username.length < 3) {
+                    this.$notify({
+                        group: 'tip',
+                        text: "用户名需要3字符以上",
+                        type: 'error',
+                    });
+                    return false;
+                }
                 // 登录/注册
                 this.socket.send(DataHelper.encode({
                     type: Constant.USER_REGISTER,
-                    username: this.username.substr(0, 30),
+                    username: username.substr(0, 30),
                     password: this.password ? this.password : '123456',
                 }));
                 return false;

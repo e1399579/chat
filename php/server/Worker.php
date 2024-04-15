@@ -318,7 +318,7 @@ class Worker implements IClient {
                 $this->sendMessage($key);
                 break;
             case self::USER_LIST:
-                $this->flushUsers($key);
+                $this->sendUsers($key);
                 break;
             case self::USER_QUERY:
                 $user = $this->request['receiver_id'] ? $this->user->getUserById($this->request['receiver_id']) : [];
@@ -705,7 +705,7 @@ class Worker implements IClient {
             $this->sendMessage($receiver_key);//给接收者发送消息
         } else {
             //用户已经离线
-            $this->response['type'] = self::MESSAGE_SELF;
+            $this->response['type'] = self::SYSTEM;
             $this->response['mess'] = '对方已经离线...';
             $this->sendMessage($key);
         }
@@ -872,13 +872,15 @@ class Worker implements IClient {
     }
 
     /**
-     * 刷新用户列表-业务处理
+     * 发送在线用户列表-业务处理
      * @param $key
      */
-    public function flushUsers($key) {
+    public function sendUsers($key) {
         $users = [];
         foreach ($this->user->getOnlineUsers() as $user_id) {
-            $users[] = $this->user->getUserById($user_id);
+            $user = $this->user->getUserById($user_id);
+            $user['is_online'] = true;
+            $users[] = $user;
         }
         $this->response = [
             'type' => self::USER_LIST,

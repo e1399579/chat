@@ -6,6 +6,11 @@
     flex-wrap: wrap;
 }
 
+.flex-top {
+    flex-flow: row wrap;
+    align-content: flex-start;
+}
+
 .space-between {
     justify-content: space-between;
 }
@@ -62,11 +67,12 @@
 }
 
 .online-status {
-    width: 6px;
-    height: 6px;
+    width: 0;
+    height: 0;
+    padding: 3px;
+    margin: 6px;
     background: #67c23a;
     border-radius: 50%;
-    margin: 6px;
     display: inline-block;
 }
 

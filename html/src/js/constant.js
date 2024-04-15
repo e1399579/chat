@@ -7,11 +7,13 @@ export default class Constant {
     static MAX_MUSIC_SIZE = 1024 * 1024 * 16; //最大音乐尺寸
     static MAX_FILE_SIZE = 1024 * 1024 * 50; //最大音乐尺寸
 
-    static MESSAGE_COMMON = 100;//公共消息
-    static MESSAGE_SELF = 101;//本人消息
-    static MESSAGE_OTHER = 102;//他人消息
-    static MESSAGE_PERSONAL = 103;//私信
+    // 文本消息
+    static MESSAGE_COMMON = 100;
+    static MESSAGE_SELF = 101;
+    static MESSAGE_OTHER = 102;
+    static MESSAGE_PERSONAL = 103;
 
+    // 用户
     static USER_ONLINE = 200;//用户上线
     static USER_QUIT = 201;//用户退出
     static USER_LIST = 202;//用户列表
@@ -27,16 +29,19 @@ export default class Constant {
     static USER_AVATAR_FAIL = 212;//上传失败
     static USER_ONLINE_TOTAL = 213; // 用户在线数量
 
-    static IMAGE_COMMON = 300;//公共图片
-    static IMAGE_SELF = 301;//本人图片
-    static IMAGE_OTHER = 302;//他人图片
-    static IMAGE_PERSONAL = 303;//私信图片
+    // 图片
+    static IMAGE_COMMON = 300;
+    static IMAGE_SELF = 301;
+    static IMAGE_OTHER = 302;
+    static IMAGE_PERSONAL = 303;
 
-    static MUSIC_COMMON = 500; //公共音乐
-    static MUSIC_SELF = 501; //本人音乐
-    static MUSIC_OTHER = 502; //他人音乐
-    static MUSIC_PERSONAL = 503; //私信音乐
+    // 音乐
+    static MUSIC_COMMON = 500;
+    static MUSIC_SELF = 501;
+    static MUSIC_OTHER = 502;
+    static MUSIC_PERSONAL = 503;
 
+    // 文件
     static FILE_COMMON = 1000;
     static FILE_SELF = 1001;
     static FILE_OTHER = 1002;
@@ -59,7 +64,13 @@ export default class Constant {
     static RTC_CLOSE = 604;
     static RTC_EXIT = 605;
 
-    static HISTORY_MESSAGE_COMMON = 800; //历史公共消息
-    static HISTORY_MESSAGE_PERSONAL = 801; //历史个人消息
-    static FILE_UPLOAD_SUCCESS = 903; // 文件上传成功
+    // 历史记录
+    static HISTORY_MESSAGE_COMMON = 800;
+    static HISTORY_MESSAGE_PERSONAL = 801;
+
+    // 通知
+    static ERROR = 900;
+    static WARNING = 901;
+    static SYSTEM = 902;
+    static FILE_UPLOAD_SUCCESS = 903;
 }

@@ -50,6 +50,10 @@ class MasterProcess extends AProcess implements IService {
     protected $child_pids = []; // 子进程PID
     protected $max_per_sent_bytes; // 每秒最大传送字节数
     protected $packet_header_size = 20 + 20; // IP+TCP
+    /**
+     * @var \Event
+     */
+    protected $signal; // 信号处理
 
     /**
      * @param int $port
@@ -126,6 +130,7 @@ class MasterProcess extends AProcess implements IService {
         $this->sockets[] = $sockets[0];
 
         $this->setChannels($sockets[0], $arg);
+        $this->setSignal();
     }
 
     public function dispatch(): void {
@@ -774,5 +779,15 @@ class MasterProcess extends AProcess implements IService {
             ++$num;
         }
         return $num;
+    }
+
+    protected function setSignal() {
+        $this->signal = \Event::signal($this->base, SIGTERM, [$this, 'signalCallback'], null);
+        $this->signal->add();
+    }
+
+    public function signalCallback(int $signal_no, $arg): void {
+        $this->debug('master caught signal ' . $signal_no);
+        $this->base->exit();
     }
 }
