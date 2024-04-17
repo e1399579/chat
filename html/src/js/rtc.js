@@ -204,7 +204,7 @@ export class RTCProcessor extends IProcessor {
             local_media: null,
             remote_medias: new Map(),
             remote_users: new Map(),
-            voice_visualizes: [],
+            voice_visualizes: new Map(),
             clock_text: "",
             clock_timer: 0,
             candidates: new Map(),
@@ -268,10 +268,10 @@ export class RTCProcessor extends IProcessor {
                 this.clock_text = "";
             },
             closeVisualize() {
-                for (let visualize of this.voice_visualizes) {
+                for (let visualize of this.voice_visualizes.values()) {
                     visualize.close();
                 }
-                this.voice_visualizes = [];
+                this.voice_visualizes.clear();
             },
             associateKeyWithSender(key, sender_id) {
                 this.rtc_key_sender.set(key, sender_id);
@@ -286,7 +286,7 @@ export class RTCProcessor extends IProcessor {
                 let canvas = document.querySelector("#local-canvas");
                 let visualize = new VoiceVisualize(stream);
                 visualize.visualize(canvas);
-                this.voice_visualizes.push(visualize);
+                this.voice_visualizes.set('local', visualize);
             },
             closeLocalStream() {
                 this.trace('close local stream');
@@ -339,9 +339,13 @@ export class RTCProcessor extends IProcessor {
                     this.$forceUpdate();
                     this.$nextTick(() => {
                         let canvas = document.querySelector("#remote-canvas-" + key);
+                        if (this.voice_visualizes.has(key)) {
+                            this.voice_visualizes.get(key).close();
+                            this.voice_visualizes.delete(key);
+                        }
                         let visualize = new VoiceVisualize(streams[0]);
                         visualize.visualize(canvas);
-                        this.voice_visualizes.push(visualize);
+                        this.voice_visualizes.set(key, visualize);
                     });
                     this.clockStart();
                 }

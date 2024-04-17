@@ -74,7 +74,7 @@ abstract class AProcess {
         $this->setEventOption($bev, 10, 8, 0);
         $bev->setCallbacks(
             [$this, 'channelReadCallback'],
-            NULL,
+            function() {},
             [$this, 'channelEventCallback'],
             $arg
         );

@@ -31,6 +31,8 @@ class MasterProcess extends AProcess implements IService {
      */
     protected $ready_connections = []; // 准备握手的服务
     protected $wait_for_close = []; // 等待关闭的索引列表
+    protected $bad_request = []; // 非WebSocket请求
+    protected $address_list = []; // IP列表
     protected $max_index = 0; // 连接索引
     
     /**
@@ -75,11 +77,12 @@ class MasterProcess extends AProcess implements IService {
             $this->ctx = new \EventSslContext(
                 \EventSslContext::TLS_SERVER_METHOD,
                 [
-                    \EventSslContext::OPT_LOCAL_CERT  => $ssl['local_cert'],
-                    \EventSslContext::OPT_LOCAL_PK    => $ssl['local_pk'],
-                    \EventSslContext::OPT_PASSPHRASE  => "",
+                    \EventSslContext::OPT_LOCAL_CERT => $ssl['local_cert'],
+                    \EventSslContext::OPT_LOCAL_PK => $ssl['local_pk'],
+                    \EventSslContext::OPT_CA_FILE => $ssl['ca_file'],
+//                    \EventSslContext::OPT_PASSPHRASE => '',
                     \EventSslContext::OPT_VERIFY_PEER => false,
-                    \EventSslContext::OPT_CIPHERS => 'ECDHE-RSA-AES128-GCM-SHA256:ECDHE:ECDH:AES:HIGH:!NULL:!aNULL:!MD5:!ADH:!RC4',
+//                    \EventSslContext::OPT_CIPHERS => '',
                 ]
             );
         }
@@ -172,8 +175,8 @@ class MasterProcess extends AProcess implements IService {
         // 使用文件描述符创建一个新的缓冲事件服务，并设置为释放时关闭底层socket
         $bev = new \EventBufferEvent(
             $this->base,
-            $fd,
-            \EventBufferEvent::OPT_CLOSE_ON_FREE
+            $fd
+//            \EventBufferEvent::OPT_CLOSE_ON_FREE
         );
         $this->prepareConnect($bev, $fd, $address);
     }
@@ -183,8 +186,8 @@ class MasterProcess extends AProcess implements IService {
             $this->base,
             $fd,
             $this->ctx,
-            \EventBufferEvent::SSL_ACCEPTING,
-            \EventBufferEvent::OPT_CLOSE_ON_FREE
+            \EventBufferEvent::SSL_ACCEPTING
+//            \EventBufferEvent::OPT_CLOSE_ON_FREE
         );
         $this->prepareConnect($bev, $fd, $address);
     }
@@ -197,7 +200,7 @@ class MasterProcess extends AProcess implements IService {
         $this->setEventOption($bev, 0, 2, 0); // 根据WebSocket协议，最小数据是2字节
         $bev->setCallbacks(
             [$this, "handShake"],
-            NULL,
+            [$this, "writeCallback"],
             [$this, "messageEventCallback"],
             $arg
         );
@@ -208,16 +211,17 @@ class MasterProcess extends AProcess implements IService {
         $buffer = $bev->input->read($bev->input->length);
         $headers = $this->getHeaders($buffer);
         $headers['REMOTE_ADDR'] = $arg['address'][0];
+        $this->address_list[$index] = $arg['address'];
 
         $this->debug($index . '# Requesting handshake...' . PHP_EOL . $buffer);
 
-        $handshake = $this->doHandShake($bev, $headers, $index);
+        $handshake = $this->doHandShake($bev, $headers, $index, $buffer);
         if ($handshake) {
             $this->established_connections[$index] = $bev;
             // 握手成功，设置读取回调
             $bev->setCallbacks(
                 [$this, "messageReadCallback"],
-                NULL,
+                function() {},
                 [$this, "messageEventCallback"],
                 $arg
             );
@@ -225,12 +229,13 @@ class MasterProcess extends AProcess implements IService {
             //握手成功，通知客户端连接已经建立
             $data = json_encode($headers);
             $this->sendToChannel($this->chooseChannel($index), self::NOTIFY_TYPE_ON_OPEN, $index, $data, 0, self::FRAME_OPCODE_TEXT);
-        } else {
-            $this->disConnect($index); //关闭连接
-        }
 
-        // 移出等待区，释放内存
-        unset($this->ready_connections[$index]);
+            // 移出等待区，释放内存
+            unset($this->ready_connections[$index]);
+        } else {
+            // 未成功的连接在write callback中释放
+            $this->bad_request[$index] = 1;
+        }
     }
 
     /**
@@ -309,7 +314,7 @@ class MasterProcess extends AProcess implements IService {
         if ($events & \EventBufferEvent::ERROR) {
             // Fetch errors from the SSL error stack
             while ($err = $bev->sslError()) {
-                $this->logger->error("{$index}# {$err}");
+                $this->logger->error("{$index}# {$err}", $this->address_list[$index] ?? []);
             }
         }
 
@@ -395,13 +400,15 @@ class MasterProcess extends AProcess implements IService {
      * @param int $index 服务下标
      */
     protected function disConnect(int $index): void {
-        if (isset($this->established_connections[$index])) {
-//            $this->established_connections[$index]->close();
-            $this->established_connections[$index]->free();
-        }
+        // 主动调用free容易导致报错 free(): double free detected in tcache 2
+        // Usually there is no need to call this method, since normally it is donewithin internal object destructors.
+//        if (isset($this->established_connections[$index])) {
+//            $this->established_connections[$index]->free();
+//        }
 
-        $this->debug($index . '# DISCONNECTED!');
+        $this->debug($index . '# disconnecting...');
         unset($this->established_connections[$index]);
+        unset($this->address_list[$index]);
     }
 
     protected function prepareClose(int $index, int $status_code = self::FRAME_STATUS_CODE_NORMAL, string $reason = ''): void {
@@ -425,18 +432,33 @@ class MasterProcess extends AProcess implements IService {
      * @param \EventBufferEvent $bev 客户端服务
      * @param array $headers
      * @param int $index
+     * @param string $buffer
      * @return bool
      */
-    protected function doHandShake(\EventBufferEvent $bev, array $headers, int $index): bool {
+    protected function doHandShake(\EventBufferEvent $bev, array $headers, int $index, string $buffer): bool {
         // TODO 请求信息校验
         $version = $headers['Sec-WebSocket-Version'] ?? '';
         $versions = explode(',', $version);
         if (!(in_array(13, $versions)
             && isset($headers['Sec-WebSocket-Key']))) {
+            /*
+            HTTP/1.1 400 Bad Request
+            Server: nginx/1.25.4
+            Date: Tue, 16 Apr 2024 23:32:17 GMT
+            Content-Type: text/html; charset=utf-8
+            Content-Length: 157
+            Connection: close
+            */
+            $date_utc = (new \DateTime('now', new \DateTimeZone('UTC')))->format(\DateTime::RFC7231);
             $str = "HTTP/1.1 400 Bad Request\r\n" .
-                "Sec-WebSocket-Version: 13\r\n\r\n";
+                "Server: nginx\r\n" .
+                "Date: " . $date_utc . "\r\n" .
+                "Content-Type: text/plain\r\n" .
+                "Content-Length: 0\r\n" .
+                "Connection: close\r\n\r\n";
             $bev->write($str);
-            $this->debug($index . '# Bad Request');
+            // 记录日志，便于分析可能的攻击者
+            $this->logger->warning($index . '# Bad Request: ' . PHP_EOL . $buffer, $this->address_list[$index]);
             return false;
         }
 
@@ -789,5 +811,16 @@ class MasterProcess extends AProcess implements IService {
     public function signalCallback(int $signal_no, $arg): void {
         $this->debug('master caught signal ' . $signal_no);
         $this->base->exit();
+    }
+
+    public function writeCallback(\EventBufferEvent $bev, $arg) {
+        $index = $arg['index'];
+        // 清除bad request
+        if (isset($this->bad_request[$index])) {
+            $this->debug($index . '# clearing bad request... ');
+            unset($this->ready_connections[$index]);
+            unset($this->bad_request[$index]);
+            unset($this->address_list[$index]);
+        }
     }
 }

@@ -160,7 +160,7 @@ class Worker implements IClient {
             $this->logger->error(sprintf('数据不完整，共 %s bytes', strlen($message)));
             $this->response = [
                 'type' => self::ERROR,
-                'mess' => '读取消息出错',
+                'mess' => 'unexpected data format',
                 'timestamp' => $this->timestamp,
             ];
             $this->sendMessage($key);

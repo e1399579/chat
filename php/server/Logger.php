@@ -4,10 +4,12 @@ namespace server;
 class Logger {
     private static $_instances;
     private $info_handler;
+    private $warning_handler;
     private $error_handler;
 
     private function __construct(string $path) {
         $this->info_handler = fopen($path . '@INFO.log', 'a');
+        $this->warning_handler = fopen($path . '@WARNING.log', 'a');
         $this->error_handler = fopen($path . '@ERROR.log', 'a');
     }
 
@@ -22,6 +24,11 @@ class Logger {
     public function info(string $message, array $context = []) {
         $content = $this->decorator($message, $context);
         return fwrite($this->info_handler, $content);
+    }
+
+    public function warning(string $message, array $context = []) {
+        $content = $this->decorator($message, $context);
+        return fwrite($this->warning_handler, $content);
     }
 
     public function error(string $message, array $context = []) {

@@ -57,7 +57,7 @@ class ChildProcess extends AProcess implements ISubject, IServer {
     }
 
     public function listen(array $sockets, array $arg): void {
-        $title = 'php: worker process ' . $arg['index'];
+        $title = 'php: child process ' . $arg['index'];
         cli_set_process_title($title);
 
         // 子进程：接收主进程程消息，处理业务。此处在每个不同的新子进程中执行1次
@@ -79,7 +79,7 @@ class ChildProcess extends AProcess implements ISubject, IServer {
     public function channelReadCallback(\EventBufferEvent $bev, $arg): void {
         $data_list = $this->receiveFromChannel($bev, $opcode);
         foreach ($data_list as list($priority, $notify_type, $index, $data)) {
-            $this->debug(posix_getpid() . '# work callback:' . sprintf('%08b', $notify_type));
+            $this->debug(posix_getpid() . '# child callback:' . sprintf('%08b', $notify_type));
             if ($notify_type === self::NOTIFY_TYPE_ON_OPEN) {
                 $data = json_decode($data, true);
             }

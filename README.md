@@ -56,7 +56,7 @@ openssl x509 -inform PEM -in certificate.cer -out certificate.crt
 [ssl]
 local_cert=/home/ssl/xxx.crt
 local_pk=/home/ssl/xxx.key
-verify_peer=false
+ca_file=/home/ssl/xxx.ca.crt
 ```
 
 ##### nginx [https服务器]
@@ -77,11 +77,11 @@ ssl_session_timeout 10m;
 ```
 nginx:
   volumes:
-    - /home/chat/ssl:/etc/nginx/ssl
+    - ../ssl:/etc/nginx/ssl
 
 php:
   volumes:
-    - /home/chat/ssl:/home/ssl
+    - ../ssl:/home/ssl
 ```
 2. 重启docker `docker-compose restart`
 3. 浏览器访问 https://xxx/index.html
