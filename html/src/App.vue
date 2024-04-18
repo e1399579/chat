@@ -3,6 +3,8 @@
         <lemon-imui :user="user" ref="im"
                     :hide-message-name="false"
                     :avatarCricle="true"
+                    :width="width"
+                    :height="height"
                     @pull-messages="getHistory"
                     @message-click="messageClick"
                     @change-contact="changeContact"

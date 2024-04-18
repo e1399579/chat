@@ -234,6 +234,8 @@ export class GeneralProcessor extends IProcessor {
             server_url: process.env.VUE_APP_SERVER_URL,
             upload_url: process.env.VUE_APP_UPLOAD_URL,
             default_avatar_url: Constant.DEFAULT_AVATAR,
+            width: window.innerWidth - 16,
+            height: window.innerHeight - 16,
             username: "",
             password: "",
             user: {id: 0, displayName: '', avatar: Constant.DEFAULT_AVATAR, is_active: 1},

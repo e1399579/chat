@@ -1,0 +1,4 @@
+[ssl]
+local_cert=/home/ssl/xxx.crt
+local_pk=/home/ssl/xxx.key
+ca_file=/home/ssl/xxx.ca.crt

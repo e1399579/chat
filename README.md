@@ -50,14 +50,8 @@ openssl x509 -inform PEM -in certificate.cer -out certificate.crt
 ```
 
 ##### PHP [wss服务器]
-1. 创建目录`mkdir /home/chat/ssl`，并将证书放于`ssl`目录中
-2. 创建PHP项目配置`php/local.ini`，示例（xxx替换为域名）：
-```
-[ssl]
-local_cert=/home/ssl/xxx.crt
-local_pk=/home/ssl/xxx.key
-ca_file=/home/ssl/xxx.ca.crt
-```
+1. 创建目录`mkdir /home/chat/ssl`，并将证书放在该目录中
+2. 创建PHP项目配置`php/local.ini`，参考`php/local.ini.example`（xxx替换为域名）：
 
 ##### nginx [https服务器]
 1. 修改nginx配置`docker/conf/nginx/www.conf`的server段，示例（xxx替换为域名）：
@@ -120,13 +114,7 @@ npm run serve
 
 #### 本地https访问[可选]
 1. 将证书文件放在某个文件夹下
-2. 修改`.env.local`环境变量，示例（xxx替换为域名）：
-```
-VUE_APP_SERVER_URL=wss://xxx:8080
-VUE_APP_UPLOAD_URL=https://xxx
-SSL_CERT=../ssl/xxx.crt
-SSL_KEY=../ssl/xxx.key
-```
+2. 修改`.env.local`环境变量，参考`.env.local.example`（xxx替换为域名）：
 3. 运行，示例（可能需要修改hosts）：
 ```
 npm run serve -- --port 443 --host xxx

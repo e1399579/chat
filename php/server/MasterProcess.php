@@ -31,7 +31,7 @@ class MasterProcess extends AProcess implements IService {
      */
     protected $ready_connections = []; // 准备握手的服务
     protected $wait_for_close = []; // 等待关闭的索引列表
-    protected $bad_request = []; // 非WebSocket请求
+    protected $closed = [];
     protected $address_list = []; // IP列表
     protected $max_index = 0; // 连接索引
     
@@ -182,6 +182,7 @@ class MasterProcess extends AProcess implements IService {
     }
 
     public function acceptConnectSSL(\EventListener $listener, int $fd, array $address): void {
+        // 开启OPT_CLOSE_ON_FREE容易报错： free(): double free detected in tcache 2
         $bev = \EventBufferEvent::sslSocket(
             $this->base,
             $fd,
@@ -221,7 +222,7 @@ class MasterProcess extends AProcess implements IService {
             // 握手成功，设置读取回调
             $bev->setCallbacks(
                 [$this, "messageReadCallback"],
-                function() {},
+                [$this, "writeCallback"],
                 [$this, "messageEventCallback"],
                 $arg
             );
@@ -234,7 +235,7 @@ class MasterProcess extends AProcess implements IService {
             unset($this->ready_connections[$index]);
         } else {
             // 未成功的连接在write callback中释放
-            $this->bad_request[$index] = 1;
+            $this->wait_for_close[$index] = 1;
         }
     }
 
@@ -266,19 +267,8 @@ class MasterProcess extends AProcess implements IService {
                 return;
             }
 
-            $channel = $this->chooseChannel($index);
             if ($params['is_closed']) {
-                if (isset($this->wait_for_close[$index])) {
-                    $this->disConnect($index);
-                    unset($this->wait_for_close[$index]);
-                } else {
-                    $this->confirmClose($index);
-
-                    // 通知事件
-                    $data = '';
-                    $this->sendToChannel($channel, self::NOTIFY_TYPE_ON_CLOSE, $index, $data, 0, self::FRAME_OPCODE_TEXT);
-                }
-
+                $this->confirmClose($index);
                 return;
             }
 
@@ -293,6 +283,7 @@ class MasterProcess extends AProcess implements IService {
             }
 
             // 通知子进程
+            $channel = $this->chooseChannel($index);
             $this->sendToChannel($channel, self::NOTIFY_TYPE_ON_MESSAGE, $index, $msg, 0, $params['opcode']);
         } while ($params['remain_length'] > 0);
     }
@@ -316,12 +307,14 @@ class MasterProcess extends AProcess implements IService {
             while ($err = $bev->sslError()) {
                 $this->logger->error("{$index}# {$err}", $this->address_list[$index] ?? []);
             }
-        }
 
-        if ($events & (\EventBufferEvent::EOF | \EventBufferEvent::ERROR)) {
             $this->disConnect($index);
-            $data = '';
-            $this->sendToChannel($this->chooseChannel($index), self::NOTIFY_TYPE_ON_CLOSE, $index, $data, 0, self::FRAME_OPCODE_TEXT);
+            // 避免重复通知（通常Edge关闭时既收到关闭帧，又触发异常，Firefox无此问题）
+            if (!isset($this->closed[$index])) {
+                $data = '';
+                $this->sendToChannel($this->chooseChannel($index), self::NOTIFY_TYPE_ON_CLOSE, $index,
+                    $data, 0, self::FRAME_OPCODE_TEXT);
+            }
         }
     }
 
@@ -339,7 +332,7 @@ class MasterProcess extends AProcess implements IService {
                     $this->sendToAll($data, $priority, $opcode);
                     break;
                 case self::CALL_TYPE_PREPARE_CLOSE:
-                    $this->prepareClose($index);
+                    $this->prepareClose($index, self::FRAME_STATUS_CODE_NORMAL);
                     break;
                 case self::CALL_TYPE_SEND_TO_MULTIPLY:
                     list($keys, $msg) = json_decode($data, true);
@@ -400,31 +393,43 @@ class MasterProcess extends AProcess implements IService {
      * @param int $index 服务下标
      */
     protected function disConnect(int $index): void {
-        // 主动调用free容易导致报错 free(): double free detected in tcache 2
-        // Usually there is no need to call this method, since normally it is donewithin internal object destructors.
-//        if (isset($this->established_connections[$index])) {
-//            $this->established_connections[$index]->free();
-//        }
-
         $this->debug($index . '# disconnecting...');
-        unset($this->established_connections[$index]);
-        unset($this->address_list[$index]);
+        $bev = $this->established_connections[$index] ?? $this->ready_connections[$index] ?? null;
+        if ($bev) {
+            $bev->close();
+            $bev->free();
+        }
+
+        unset(
+            $this->established_connections[$index],
+            $this->ready_connections[$index],
+            $this->address_list[$index],
+            $this->wait_for_close[$index],
+            $this->frame_meta_pool[$index],
+            $this->buffers[$index],
+        );
     }
 
-    protected function prepareClose(int $index, int $status_code = self::FRAME_STATUS_CODE_NORMAL, string $reason = ''): void {
-        $bev = $this->established_connections[$index];
-        $bev and $bev->write($this->frame(pack('n', $status_code) . $reason, self::FRAME_OPCODE_CLOSE));
-        $this->wait_for_close[$index] = 1;
+    protected function prepareClose(int $index, int $status_code, string $reason = ''): void {
+        if (!isset($this->wait_for_close[$index])) {
+            // 发送关闭帧
+            $this->wait_for_close[$index] = 1;
+            $bev = $this->established_connections[$index];
+            $close_frame = $this->frame(pack('n', $status_code) . $reason, self::FRAME_OPCODE_CLOSE);
+            $bev->write($close_frame);
+        }
     }
 
     protected function confirmClose($index): void {
-        // 发送关闭帧
-        $close = $this->frame(pack('n', self::FRAME_STATUS_CODE_NORMAL), self::FRAME_OPCODE_CLOSE);
-        $bev = $this->established_connections[$index];
-        $bev->write($close);
+        if (!isset($this->wait_for_close[$index])) {
+            $this->closed[$index] = 1;
+            $this->prepareClose($index, self::FRAME_STATUS_CODE_NORMAL);
 
-        // 关闭TCP连接
-        $this->disConnect($index);
+            // 通知事件
+            $data = '';
+            $channel = $this->chooseChannel($index);
+            $this->sendToChannel($channel, self::NOTIFY_TYPE_ON_CLOSE, $index, $data, 0, self::FRAME_OPCODE_TEXT);
+        }
     }
 
     /**
@@ -674,6 +679,7 @@ class MasterProcess extends AProcess implements IService {
         // 检查控制帧（Control Frames）操作码（当FIN=1时，opcode可能是0 Continuation Frame，此处以首帧为准）
         // 发送文件时，BUFFER[0]可能的结构 00000010 00000010 ... 00000000 00000000 ... 10000000 10000000 ... 10000000
         $opcode = ord($this->buffers[$index][0]) & 0b1111;
+//        $this->debug($index . '# opcode:' . sprintf('%04b', $opcode));
         $params['opcode'] = $opcode;
         switch ($opcode) {
             case self::FRAME_OPCODE_PING:
@@ -815,12 +821,9 @@ class MasterProcess extends AProcess implements IService {
 
     public function writeCallback(\EventBufferEvent $bev, $arg) {
         $index = $arg['index'];
-        // 清除bad request
-        if (isset($this->bad_request[$index])) {
-            $this->debug($index . '# clearing bad request... ');
-            unset($this->ready_connections[$index]);
-            unset($this->bad_request[$index]);
-            unset($this->address_list[$index]);
+        // 需要关闭的释放
+        if (isset($this->wait_for_close[$index])) {
+            $this->disConnect($index);
         }
     }
 }
