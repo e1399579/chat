@@ -15,6 +15,12 @@ jobs:
 
       - name: Install and Build 🔧
         run: |
+          npm ci
+          npm run build
           pwd
+          ls -al
 
-      
+      - name: Deploy 🚀
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: html/build
