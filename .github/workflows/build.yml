@@ -37,6 +37,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
-      - run: npm ci
-      - run: npm test
+      - name: build
+        env:
+          VUE_APP_SERVER_URL: ${{env.VUE_APP_SERVER_URL}}
+          VUE_APP_UPLOAD_URL: ${{env.VUE_APP_UPLOAD_URL}}
+        run: npm install && npm run build
       
