@@ -14,6 +14,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install and Build 🔧
+        env:
+          VUE_APP_SERVER_URL: ${{env.VUE_APP_SERVER_URL}}
+          VUE_APP_UPLOAD_URL: ${{env.VUE_APP_UPLOAD_URL}}
+          PUBLIC_PATH: ${{env.PUBLIC_PATH}}
         run: |
           npm ci
           npm run build

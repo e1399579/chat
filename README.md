@@ -127,6 +127,7 @@ npm run serve -- --port 443 --host xxx
 ```
 VUE_APP_SERVER_URL=ws://xxx:8080 or wss://xxx:8080
 VUE_APP_UPLOAD_URL=http://xxx or https://xxx
+PUBLIC_PATH=/ or /sub_path/
 ```
 3. 编译 `npm run build`
 4. 将`dist`目录中的文件上传至服务器nginx相应目录下

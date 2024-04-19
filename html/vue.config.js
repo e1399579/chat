@@ -9,6 +9,7 @@ const devServer = process.env.SSL_CERT && process.env.SSL_KEY
   }
   : {};
 module.exports = defineConfig({
-  transpileDependencies: true,
-  devServer: devServer
+    transpileDependencies: true,
+    publicPath: process.env.PUBLIC_PATH ? process.env.PUBLIC_PATH : '/',
+    devServer: devServer
 })
