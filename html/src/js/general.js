@@ -32,6 +32,8 @@ export class GeneralMessage extends IMessage {
                 vm.user.id = user.user_id;
                 vm.user.displayName = user.username;
                 vm.user.avatar = user.avatar ? vm.upload_url + user.avatar : Constant.DEFAULT_AVATAR;
+                vm.user.is_active = parseInt(user.is_active)
+                vm.user.is_super_admin = user.is_super_admin;
                 // 刷新cookie 在线用户列表
                 vm.setCookie("user", JSON.stringify(vm.user));
                 vm.online_users.set(user.user_id, user);
@@ -121,7 +123,7 @@ export class GeneralMessage extends IMessage {
             case Constant.USER_DISABLED: //禁用
             {
                 vm.user.is_active = 0;
-                vm.disconnect_mess = vm.disconnect_mess = mess.mess;
+                vm.disconnect_mess = mess.mess;
                 vm.$modal.show('disconnect-modal');
                 break;
             }
@@ -238,7 +240,12 @@ export class GeneralProcessor extends IProcessor {
             height: window.innerHeight - 16,
             username: "",
             password: "",
-            user: {id: 0, displayName: '', avatar: Constant.DEFAULT_AVATAR, is_active: 1},
+            user: {
+                id: 0, displayName: '',
+                avatar: Constant.DEFAULT_AVATAR,
+                is_active: 1,
+                is_super_admin: false,
+            },
             socket: null,
             reconnect_times: 0,
             disconnect_mess: "",
@@ -267,6 +274,8 @@ export class GeneralProcessor extends IProcessor {
                     this.user.id = user.id;
                     this.user.displayName = user.displayName;
                     this.user.avatar = user.avatar ? user.avatar : Constant.DEFAULT_AVATAR;
+                    this.user.is_active = parseInt(user.is_active)
+                    this.user.is_super_admin = user.is_super_admin;
                     this.sendMessage(Constant.USER_LOGIN);
                 } else {
                     this.$modal.show('login-modal');
@@ -725,7 +734,6 @@ export class GeneralProcessor extends IProcessor {
                 // 标记为已读
                 this.updateContact(contact_id, {unread: 0});
 
-                this.trace(e, key, message);
                 switch (message.type) {
                     case "image":
                     {

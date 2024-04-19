@@ -179,7 +179,7 @@ class Worker implements IClient {
             $user_id = $this->request['sender_id'];
             $res = $this->auth($key, $user_id);
             if (false === $res) {
-                $this->logger->error('非法操作', compact('key', 'user_id'));
+                $this->logger->error('非法操作', compact('key', 'user_id', 'request_type'));
                 return;
             }
         }
@@ -323,11 +323,11 @@ class Worker implements IClient {
             case self::USER_QUERY:
                 $user = $this->request['receiver_id'] ? $this->user->getUserById($this->request['receiver_id']) : [];
                 $is_online = $this->user->isOnline($this->request['receiver_id']);
+                $user and $user['is_online'] = $is_online;
                 $this->response = [
                     'type' => self::USER_QUERY,
                     'user' => $user,
                     'timestamp' => $this->timestamp,
-                    'is_online' => $is_online,
                 ];
                 $this->sendMessage($key);
                 break;
@@ -812,7 +812,7 @@ class Worker implements IClient {
             $this->tearDown($user_id, $index);//注销用户服务
         }
 
-        $user['is_admin'] = $user['role_id'] > 0;
+        $user['is_super_admin'] = $user['role_id'] > 0;
         unset($user['role_id']);
         $this->response = [
             'type' => self::USER_LOGIN,
@@ -880,7 +880,8 @@ class Worker implements IClient {
     public function sendUsers($key) {
         $users = [];
         foreach ($this->user->getOnlineUsers() as $user_id) {
-            $user = $this->user->getUserById($user_id);
+            $info = ['user_id', 'username', 'is_active', 'avatar'];
+            $user = $this->user->getUserById($user_id, $info);
             $user['is_online'] = true;
             $users[] = $user;
         }

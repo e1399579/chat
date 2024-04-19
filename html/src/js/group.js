@@ -85,6 +85,20 @@ export class GroupProcessor extends IProcessor {
                         IMUI.closeDrawer();
                     },
                 },
+                {
+                    text: "移除大厅",
+                    visible: instance => {
+                        const { IMUI, contact } = instance;
+                        return (contact.user_id !== this.user.id)
+                            && (this.user.is_super_admin)
+                            && (IMUI.getCurrentContact().id === "0");
+                    },
+                    click: (e, instance, hide) => {
+                        const { contact } = instance;
+                        this.sendMessage(Constant.USER_REMOVE, contact.user_id);
+                        hide();
+                    },
+                },
             ],
         };
     }

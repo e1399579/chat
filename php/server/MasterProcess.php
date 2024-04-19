@@ -411,13 +411,14 @@ class MasterProcess extends AProcess implements IService {
     }
 
     protected function prepareClose(int $index, int $status_code, string $reason = ''): void {
-        if (!isset($this->wait_for_close[$index])) {
+        if (!isset($this->wait_for_close[$index])
+            && isset($this->established_connections[$index])) {
             // 发送关闭帧
-            $this->wait_for_close[$index] = 1;
             $bev = $this->established_connections[$index];
             $close_frame = $this->frame(pack('n', $status_code) . $reason, self::FRAME_OPCODE_CLOSE);
             $bev->write($close_frame);
         }
+        $this->wait_for_close[$index] = 1;
     }
 
     protected function confirmClose($index): void {
