@@ -227,7 +227,7 @@ class Worker implements IClient {
 
                 unset($headers, $this->serviceIp[$key], $this->serviceAgent[$key]);
                 break;
-            case self::USER_REMOVE: //移除，由管理员发起
+            case self::USER_REMOVE: //移除，由管理员发起（仅限大厅）
                 $admin = $this->user->getUserById($this->request['sender_id'], ['role_id']);
                 $receiver_id = $this->request['receiver_id'];
                 $user = $this->user->getUserById($receiver_id, ['user_id', 'role_id', 'username']);
@@ -812,6 +812,8 @@ class Worker implements IClient {
             $this->tearDown($user_id, $index);//注销用户服务
         }
 
+        $user['is_admin'] = $user['role_id'] > 0;
+        unset($user['role_id']);
         $this->response = [
             'type' => self::USER_LOGIN,
             'user' => $user,
