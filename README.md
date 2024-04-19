@@ -221,6 +221,18 @@ B -> received answerC
 4. Opera
 5. ...
 
+## 其他
+### 设置管理员
+1. 连接redis，以docker-redis为例，执行：
+```
+docker exec -it docker-redis-1 redis-cli
+select 15
+```
+2. 获取用户id（xxx为用户名）：`get "username:xxx"`
+3. 获取用户信息（xxx为用户ID）：`hgetall "user_id:xxx"`
+4. 设置role_id（>0时为管理员）：`hset "user_id:xxx" role_id 99`
+> 管理员权限目前包括：[大厅]移除用户
+
 ## 待办
 - [ ] 界面交互优化
 
