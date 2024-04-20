@@ -1,7 +1,7 @@
 let base_url = process.env.BASE_URL;
 export default class Constant {
     static DEBUG = true;
-    static DEFAULT_AVATAR = `${base_url}/static/chat.png`;
+    static DEFAULT_AVATAR = `${base_url}static/chat.png`;
     static MAX_LIMITS = 100; //断线最大重连次数
     static COOKIE_EXPIRE_DAYS = 7; //cookie过期天数
     static MAX_IMAGE_SIZE = 1024 * 1024 * 4; //最大上传图片尺寸
