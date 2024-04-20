@@ -105,26 +105,33 @@ export class RTCMessage extends IMessage {
                 let data = mess.mess;
                 let type = data.type;
                 switch (type) {
-                    case "offer":
+                    case "offer": // role: callee
                     {
                         // 创建key<=>sender关联，后面要用
-                        let key = vm.rtc.getPeerConnectionLastId();
-                        vm.associateKeyWithSender(key, sender_id);
+                        let reuse_key = -1;
+                        if (vm.rtc_sender_key.has((sender_id))) {
+                            // when restartIce
+                            reuse_key = vm.rtc_sender_key.get(sender_id);
+                            vm.trace('reuse connection', sender_id, reuse_key);
+                        } else {
+                            let key = vm.rtc.getPeerConnectionLastId();
+                            vm.associateKeyWithSender(key, sender_id);
+                        }
                         // 创建连接，设置remote，打开摄像头，添加轨道，发送answer
                         let description = data.description;
-                        vm.rtc.handleVideoOfferMsg(description).then(({description}) => {
+                        vm.rtc.handleVideoOfferMsg(description, reuse_key).then(({description}) => {
                             vm.sendAnswer(sender_id, description);
                         });
                         break;
                     }
-                    case "answer":
+                    case "answer": // role: caller
                     {
                         // 设置remote
                         let key = vm.rtc_sender_key.get(sender_id);
                         vm.rtc.handleVideoAnswerMsg(key, data.description);
                         break;
                     }
-                    case "new-ice-candidate":
+                    case "new-ice-candidate": // role: caller or callee
                     {
                         let candidate = data.candidate;
                         if (vm.rtc_sender_key.has(sender_id)) {
@@ -305,6 +312,7 @@ export class RTCProcessor extends IProcessor {
                 });
             },
             onNegotiateReady(key, description) {
+                // role caller
                 this.trace('negotiate ready', ...arguments);
                 // 发送offer到远端
                 let sender_id = this.rtc_key_sender.get(key);
@@ -334,16 +342,20 @@ export class RTCProcessor extends IProcessor {
             },
             onTrack(key, streams) {
                 this.trace('track', ...arguments);
-                if (streams[0].active) {
-                    this.remote_medias.set(key, streams[0]);
+                let stream = streams[0];
+                let is_same = (this.remote_medias.get(key) === stream);
+                if (!is_same) {
+                    this.remote_medias.set(key, stream);
                     this.$forceUpdate();
                     this.$nextTick(() => {
                         let canvas = document.querySelector("#remote-canvas-" + key);
+                        // 销毁前一个动画
                         if (this.voice_visualizes.has(key)) {
                             this.voice_visualizes.get(key).close();
                             this.voice_visualizes.delete(key);
                         }
-                        let visualize = new VoiceVisualize(streams[0]);
+                        // 初始化动画
+                        let visualize = new VoiceVisualize(stream);
                         visualize.visualize(canvas);
                         this.voice_visualizes.set(key, visualize);
                     });

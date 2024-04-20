@@ -145,7 +145,7 @@
         </modal>
 
         <!--WebRTC-->
-        <modal name="rtc-modal" :clickToClose="false" :height="'auto'" :width="960" :scrollable="true" draggable="true" v-show="!rtc_minimize" :adaptive="true">
+        <modal name="rtc-modal" :clickToClose="false" :height="'auto'" :width="960" :scrollable="true" draggable="true" v-show="!rtc_minimize">
             <div class="flex flex-wrap horizontal-center vertical-center">
                 <template v-if="video_flag">
                     <div class="local-video">

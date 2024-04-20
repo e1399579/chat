@@ -26,6 +26,7 @@ export default class WebRTC {
         this.callbacks = {};
         this.pcs = new Map();
         this.stream = null;
+        this.timers = new Map();
     }
 
     setCallbacks(callbacks) {
@@ -77,10 +78,14 @@ export default class WebRTC {
             };
         };
 
-        pc.onnegotiationneeded = async () => {
+        pc.onnegotiationneeded = async (e) => {
             try {
+                let pc = e.target;
                 // [Caller] b. ready to negotiate: 1. create(set) an SDP offer
-                let offer = await pc.createOffer();
+                // see https://webrtc.github.io/samples/src/content/peerconnection/restart-ice/
+                let offer = await pc.createOffer({
+                    iceRestart: true,
+                });
                 offer.sdp = this.replaceSDP(offer.sdp);
                 await pc.setLocalDescription(offer);
 
@@ -88,7 +93,7 @@ export default class WebRTC {
                 // type: video-offer
                 this.callbacks.onNegotiateReady(key, pc.localDescription);
             } catch (e) {
-                console.error(e);
+                console.error('onnegotiationneeded error', e);
             }
         };
 
@@ -97,7 +102,10 @@ export default class WebRTC {
             this.callbacks.onIceCandidate(key, candidate);
         };
 
-        pc.oniceconnectionstatechange = () => {
+
+        pc.oniceconnectionstatechange = (e) => {
+            let pc = e.target;
+            console.log('oniceconnectionstatechange', pc.iceConnectionState);
             switch (pc.iceConnectionState) {
                 case "closed":
                 {
@@ -109,14 +117,30 @@ export default class WebRTC {
                     pc.restartIce();
                     break;
                 }
+                case "disconnected":
+                {
+                    this.timers.set(key, setTimeout((pc) => {
+                        console.log('restart ice');
+                        pc.restartIce();
+                    }, 3000, pc));
+                    break;
+                }
+                case "connected":
+                {
+                    this.timers.has(key) && clearTimeout(this.timers.get(key));
+                    break;
+                }
             }
         };
 
         pc.onicegatheringstatechange = (e) => {
-            console.log(e);
+            let pc = e.target;
+            console.log('onicegatheringstatechange', pc.iceGatheringState);
         };
 
-        pc.onsignalingstatechange = () => {
+        pc.onsignalingstatechange = (e) => {
+            let pc = e.target;
+            console.log('onsignalingstatechange', pc.signalingState);
             switch (pc.signalingState) {
                 case "closed":
                 {
@@ -151,6 +175,7 @@ export default class WebRTC {
         pc.close();
         pc = null;
         this.pcs.delete(key);
+        this.timers.delete(key);
 
         // stop video track
         this.callbacks.onRemoteSteamClose(key);
@@ -162,23 +187,32 @@ export default class WebRTC {
         });
         this.pcs.clear();
         this.stream = null;
+        this.timers.clear();
     }
 
     getPeerConnectionLastId() {
         return this.pcs.size;
     }
 
-    async handleVideoOfferMsg(description) {
-        // [Callee] received video-offer: 1. Create an RTCPeerConnection
-        let key = this.create();
-        let pc = this.pcs.get(key);
-        // [Callee] a. received video-offer: 2. set remote SDP
-        await pc.setRemoteDescription(description);
-        // [Callee] a. received video-offer: 3. access the webcam and microphone
-        // [Callee] a. received video-offer: 4. add the local stream's tracks
-        // [Callee] a. received video-offer: 5. create(set) an SDP answer
-        await this.open();
-        this.addTrack(key);
+    async handleVideoOfferMsg(description, reuse_key = -1) {
+        let key, pc;
+        if (-1 === reuse_key) {
+            // [Callee] received video-offer: 1. Create an RTCPeerConnection
+            key = this.create();
+            pc = this.pcs.get(key);
+            // [Callee] a. received video-offer: 2. set remote SDP
+            await pc.setRemoteDescription(description);
+            // [Callee] a. received video-offer: 3. access the webcam and microphone
+            // [Callee] a. received video-offer: 4. add the local stream's tracks
+            // [Callee] a. received video-offer: 5. create(set) an SDP answer
+            await this.open();
+            this.addTrack(key);
+        } else {
+            key = reuse_key;
+            pc = this.pcs.get(key);
+            await pc.setRemoteDescription(description);
+        }
+
         let answer = await pc.createAnswer();
         answer.sdp = this.replaceSDP(answer.sdp);
         await pc.setLocalDescription(answer);
@@ -188,18 +222,26 @@ export default class WebRTC {
     }
 
     async handleVideoAnswerMsg(key, description) {
-        // [Caller] c. received video-answer : 1. create(set) an SDP
-        let pc = this.pcs.get(key);
-        return await pc.setRemoteDescription(description);
+        try {
+            // [Caller] c. received video-answer : 1. create(set) an SDP
+            let pc = this.pcs.get(key);
+            return await pc.setRemoteDescription(description);
+        } catch (e) {
+            console.log('setRemoteDescription error', e);
+        }
     }
 
     async handleNewICECandidateMsg(key, candidate) {
-        let pc = this.pcs.get(key);
-        return await pc.addIceCandidate(candidate);
+        try {
+            let pc = this.pcs.get(key);
+            return await pc.addIceCandidate(candidate);
+        } catch (e) {
+            console.log('addIceCandidate error', e);
+        }
     }
 
     replaceSDP(sdp) {
         // audio quality https://stackoverflow.com/questions/46063374/is-it-really-possible-for-webrtc-to-stream-high-quality-audio-without-noise
-        return sdp.replace('useinbandfec=1', 'useinbandfec=1; stereo=1; maxaveragebitrate=320000');
+        return sdp.replace('useinbandfec=1', 'useinbandfec=1; stereo=1; maxaveragebitrate=128000');
     }
 }

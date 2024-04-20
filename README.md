@@ -228,7 +228,7 @@ B -> received answerC
 docker exec -it docker-redis-1 redis-cli
 select 15
 ```
-2. 获取用户id（xxx为用户名）：`get "username:xxx"`
+2. 获取用户ID（xxx为用户名）：`get "username:xxx"`
 3. 获取用户信息（xxx为用户ID）：`hgetall "user_id:xxx"`
 4. 设置role_id（>0时为管理员）：`hset "user_id:xxx" role_id 99`
 > 管理员权限目前包括：[大厅]移除用户
