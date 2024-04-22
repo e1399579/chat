@@ -1,5 +1,5 @@
 ## 简介
-WebSocket 聊天室，基于原生PHP和libevent
+WebSocket 聊天室，后端基于原生PHP和libevent，前端基于Vue 2.0
 
 ## 目录结构
 ```
@@ -26,7 +26,7 @@ chat
 ![流程图](./doc/flowchart.png "flowchart")
 
 ### 安装
-#### Docker安装
+#### Docker安装（推荐）
 1. 修改默认docker配置 `docker/docker-compose.yml` 中的目录映射
 2. 修改默认网站配置 `docker/conf/nginx/www.conf`
 3. 创建目录（保存Redis快照） `mkdir /home/chat/data`
@@ -52,6 +52,19 @@ openssl x509 -inform PEM -in certificate.cer -out certificate.crt
 ##### PHP [wss服务器]
 1. 创建目录`mkdir /home/chat/ssl`，并将证书放在该目录中
 2. 创建PHP项目配置`php/local.ini`，参考`php/local.ini.example`（xxx替换为域名）：
+```
+# 服务器带宽
+bandwidth=100
+# SSL证书配置
+[ssl]
+local_cert=/home/ssl/xxx.crt
+local_pk=/home/ssl/xxx.key
+ca_file=/home/ssl/xxx.ca.crt
+# 安全验证，对应HTTP首部Host和Origin（服务器和客户端域名），多个用“,”隔开
+[security]
+server_name=xxx
+client_name=yyy
+```
 
 ##### nginx [https服务器]
 1. 修改nginx配置`docker/conf/nginx/www.conf`的server段，示例（xxx替换为域名）：
@@ -65,6 +78,7 @@ ssl_certificate_key /etc/nginx/ssl/xxx.key;
 ssl_session_cache   shared:SSL:10m;
 ssl_session_timeout 10m;
 ```
+> 参考 https://nginx.org/en/docs/http/ngx_http_ssl_module.html
 
 ##### docker-compose
 1. 修改`docker-compose.yml`中的目录映射，示例：
@@ -98,37 +112,33 @@ php:
 9. 图标库 [weui-icon](https://github.com/weui/weui-icon)
 
 ### 安装/开发
-#### 本地http访问
+#### 本地http/https访问
 1. 创建`.env.local`环境配置文件
-2. 设置环境变量（WebSocket服务器地址和文件服务器地址），示例：
+2. 设置环境变量，参考`.env.local.example`，示例（xxx替换为域名或IP）：
 ```
-VUE_APP_SERVER_URL=ws://192.168.1.10:8080
-VUE_APP_UPLOAD_URL=http://192.168.1.10
+# WebSocket服务器地址
+VUE_APP_SERVER_URL=ws://xxx:8080 or wss://xxx:8080
+# 文件服务器地址
+VUE_APP_UPLOAD_URL=http://xxx or https://xxx
+# SSL证书路径（https访问时必填，将证书文件放在某个文件夹下）
+SSL_CERT=../ssl/xxx.crt
+SSL_KEY=../ssl/xxx.key
+# 公共资源路径（域名有二级路径时必填，比如 https://xxx.github.io/sub_path/）
+PUBLIC_PATH=/ or /sub_path/
 ```
-3. 安装，运行
+3. 安装，运行（可能需要修改hosts）
 ```
 npm install
+# http访问
 npm run serve
-```
-4. 浏览器访问 http://localhost:8080/index.html
-
-#### 本地https访问[可选]
-1. 将证书文件放在某个文件夹下
-2. 修改`.env.local`环境变量，参考`.env.local.example`（xxx替换为域名）：
-3. 运行，示例（可能需要修改hosts）：
-```
+# https访问
 npm run serve -- --port 443 --host xxx
 ```
-4. 浏览器访问 https://xxx.com/index.html
+4. 浏览器访问 http://localhost:8080/index.html 或 https://xxx.com/index.html
 
 ### 编译/部署
 1. 创建`.env.production`环境配置文件
-2. 设置环境变量
-```
-VUE_APP_SERVER_URL=ws://xxx:8080 or wss://xxx:8080
-VUE_APP_UPLOAD_URL=http://xxx or https://xxx
-PUBLIC_PATH=/ or /sub_path/
-```
+2. 设置环境变量，参考`.env.production.example`
 3. 编译 `npm run build`
 4. 将`dist`目录中的文件上传至服务器nginx相应目录下
 5. 浏览器访问 http://xxx/index.html

@@ -120,6 +120,7 @@ class Worker implements IClient {
     }
 
     public function onMessage(int $key, string $message, string $data_type = 'TEXT'): void {
+        $this->clearData();
         $this->timestamp = microtime(true);
         // 检查消息类型
         if ($data_type === 'BINARY') {
@@ -157,7 +158,8 @@ class Worker implements IClient {
         //发送消息-处理业务
         $this->request = $this->decode($message);
         if (!isset($this->request['type'])) {
-            $this->logger->error(sprintf('数据不完整，共 %s bytes', strlen($message)));
+            $this->logger->error(sprintf('数据格式不正确或不完整，共 %s bytes，截取片段：%s',
+                strlen($message), substr($message, 0, 100)));
             $this->response = [
                 'type' => self::ERROR,
                 'mess' => 'unexpected data format',
@@ -170,126 +172,36 @@ class Worker implements IClient {
         }
 
         unset($message);
-        $request_type = $this->request['type'] + 0;
-
         $this->filterRequest();
 
+        $session = [];
+        $session_id = $this->request['session_id'] ?? '';
+        $request_type = $this->request['type'] + 0;
         if ($request_type != self::USER_REGISTER) {
             //除了注册，所有操作都需要进行验证
-            $user_id = $this->request['sender_id'];
-            $res = $this->auth($key, $user_id);
+            $user_id = $this->request['sender_id'] ?? '';
+            $check_consistency = ($request_type !== self::USER_LOGIN);
+            list($res, $session) = $this->auth($key, $session_id, $user_id, $check_consistency);
             if (false === $res) {
-                $this->logger->error('非法操作', compact('key', 'user_id', 'request_type'));
                 return;
             }
         }
 
         switch ($request_type) {
             case self::USER_REGISTER: //注册，若已有账户则登录
-                $username = $this->request['username'];
-                $password = $this->request['password'];
-                if (empty($username)) {
-                    $this->register($key);
-                    break;
-                }
-                $info = ['user_id', 'username', 'role_id', 'is_active', 'password', 'avatar'];
-                $user = $this->user->getUserByName($username, $info);
-
-                $headers = ['ip' => $this->serviceIp[$key], 'agent' => $this->serviceAgent[$key]];
-                empty($user['user_id']) and $user = $this->user->register($username, $password, $headers);
-                if (empty($user['user_id'])) {
-                    $this->response = [
-                        'type' => self::ERROR,
-                        'mess' => '注册用户失败！',
-                        'timestamp' => $this->timestamp,
-                    ];
-                    $this->sendMessage($key);
-                    break;
-                }
-                if (!password_verify($password, $user['password'])) {
-                    $this->response = [
-                        'type' => self::USER_INCORRECT,
-                        'mess' => '用户名或密码错误',
-                        'timestamp' => $this->timestamp,
-                    ];
-                    $this->sendMessage($key);
-                    break;
-                }
-                unset($user['password']);
-                $this->login($key, $user);
-
+                $this->register($key);
                 break;
             case self::USER_LOGIN:
                 $headers = ['ip' => $this->serviceIp[$key], 'agent' => $this->serviceAgent[$key]];
-                $this->user->update($this->request['sender_id'], $headers);
-                $user = $this->user->getUserById($this->request['sender_id']);
-                $this->login($key, $user);
+                $user_id = $session['user_id'];
+                $this->user->update($user_id, $headers);
+                $user = $this->user->getUserById($user_id);
+                $this->login($key, $user, $session_id);
 
                 unset($headers, $this->serviceIp[$key], $this->serviceAgent[$key]);
                 break;
             case self::USER_REMOVE: //移除，由管理员发起（仅限大厅）
-                $admin = $this->user->getUserById($this->request['sender_id'], ['role_id']);
-                $receiver_id = $this->request['receiver_id'];
-                $user = $this->user->getUserById($receiver_id, ['user_id', 'role_id', 'username']);
-                if (empty($user['user_id']) || empty($admin['role_id'])) {
-                    $this->response = [
-                        'type' => self::WARNING,
-                        'mess' => '移除失败！用户不存在或者非法操作',
-                        'timestamp' => $this->timestamp,
-                    ];
-                    $this->sendMessage($key);
-                    break;
-                }
-                if ($admin['role_id'] <= $user['role_id']) {
-                    $this->response = [
-                        'type' => self::WARNING,
-                        'mess' => '移除失败！您没有该权限',
-                        'timestamp' => $this->timestamp,
-                    ];
-                    $this->sendMessage($key);
-                    break;
-                }
-
-                $info = ['is_active' => 0];
-                $res = $this->user->update($receiver_id, $info);
-                if (false === $res) {
-                    $this->response = [
-                        'type' => self::WARNING,
-                        'mess' => '移除失败！服务器出错',
-                        'timestamp' => $this->timestamp,
-                    ];
-                    $this->sendMessage($key);
-                    break;
-                }
-
-                $receiver_key = $this->user->getServiceKeyByUserId($receiver_id); // 用户的服务索引
-                if (false === $receiver_key) {
-                    $this->response = [
-                        'type' => self::SYSTEM,
-                        'mess' => "移除成功！",
-                        'timestamp' => $this->timestamp,
-                    ];
-                    $this->sendMessage($key);
-                    break;
-                }
-                $this->response = [
-                    'type' => self::USER_REMOVE,
-                    'mess' => '你已被移除聊天室',
-                    'timestamp' => $this->timestamp,
-                ];
-                $this->sendMessage($receiver_key);//发给禁用的用户
-                $this->server->close($receiver_key);//断开连接
-
-                $this->tearDown($receiver_id, $receiver_key);//注销用户服务
-
-                //系统通知
-                $this->response = [
-                    'type' => self::SYSTEM,
-                    'mess' => str_replace('%USERNAME%', $user['username'], $this->remove),
-                    'timestamp' => $this->timestamp,
-                ];
-                $this->sendAllMessage(0);
-
+                $this->remove($key);
                 break;
             case self::USER_AVATAR_UPLOAD:
                 //删除原来图片
@@ -321,7 +233,8 @@ class Worker implements IClient {
                 $this->sendUsers($key);
                 break;
             case self::USER_QUERY:
-                $user = $this->request['receiver_id'] ? $this->user->getUserById($this->request['receiver_id']) : [];
+                $info = ['user_id', 'username', 'avatar'];
+                $user = $this->request['receiver_id'] ? $this->user->getUserById($this->request['receiver_id'], $info) : [];
                 $is_online = $this->user->isOnline($this->request['receiver_id']);
                 $user and $user['is_online'] = $is_online;
                 $this->response = [
@@ -781,23 +694,104 @@ class Worker implements IClient {
         }
     }
 
-    public function auth($key, $user_id) {
+    public function auth($key, $session_id, $user_id, $check_consistency = true) {
+        // 未传session_id
+        if (empty($session_id)) {
+            $this->needRegister($key);
+            return [false, []];
+        }
+
+        session_id($session_id);
+        session_start(['read_and_close' => true]);
+        $session = $_SESSION;
+
+        // 未登录
+        if (empty($session['user_id'])) {
+            $this->needRegister($key);
+            return [false, $session];
+        }
+
+        // 用户不一致
+        $sess_user_id = $session['user_id'];
+        $is_same = ($user_id === $sess_user_id);
+        if ($check_consistency && !$is_same) {
+            $request_type = $this->request['type'] + 0;
+            $this->logger->warning('非法操作', compact('key', 'session_id', 'user_id', 'request_type'));
+
+            $this->response = [
+                'type' => self::WARNING,
+                'mess' => '非法操作',
+                'timestamp' => $this->timestamp,
+            ];
+            $this->sendMessage($key);
+            return [false, $session];
+        }
+
+        // 不存在
+        $user_id = $sess_user_id;
         $user = $this->user->getUserById($user_id, ['user_id', 'is_active']);
         if (empty($user['user_id'])) {
-            $this->register($key);
+            $this->needRegister($key);
 
-            return false;
+            return [false, $session];
         }
+
+        // 已禁用
         if (0 == $user['is_active']) {
             $this->forbidden($key, $user);
 
-            return false;
+            return [false, $session];
         }
 
-        return true;
+        return [true, $session];
     }
 
-    public function login($key, $user) {
+    public function register($key) {
+        $username = $this->request['username'] ?? '';
+        $password = $this->request['password'] ?? '';
+        // 验证是否为空
+        if (empty($username) || empty($password)) {
+            $this->needRegister($key);
+            return;
+        }
+
+        // 查询用户是否存在、验证密码
+        $info = ['user_id', 'username', 'role_id', 'is_active', 'password', 'avatar'];
+        $user = $this->user->getUserByName($username, $info);
+        $headers = ['ip' => $this->serviceIp[$key], 'agent' => $this->serviceAgent[$key]];
+        if (empty($user['user_id'])) {
+            $user = $this->user->register($username, $password, $headers);
+            if (!$user) {
+                $this->response = [
+                    'type' => self::ERROR,
+                    'mess' => '注册用户失败！',
+                    'timestamp' => $this->timestamp,
+                ];
+                $this->sendMessage($key);
+                return;
+            }
+        } else if (!password_verify($password, $user['password'])) {
+            $this->response = [
+                'type' => self::USER_INCORRECT,
+                'mess' => '用户名或密码错误',
+                'timestamp' => $this->timestamp,
+            ];
+            $this->sendMessage($key);
+            return;
+        }
+        unset($user['password']);
+
+        // 设置session，注意之前不能有输出，和ob_implicit_flush冲突
+        $session_id = session_create_id();
+        session_id($session_id);
+        session_start();
+        $_SESSION['user_id'] = $user['user_id'];
+        session_write_close();
+
+        $this->login($key, $user, $session_id);
+    }
+
+    public function login($key, $user, $session_id) {
         $user_id = $user['user_id'];
         $index = $this->user->getServiceKeyByUserId($user_id);
         if (false !== $index) {
@@ -817,6 +811,7 @@ class Worker implements IClient {
         $this->response = [
             'type' => self::USER_LOGIN,
             'user' => $user,
+            'session_id' => $session_id,
             'timestamp' => $this->timestamp,
         ];
         $this->sendMessage($key); //通知当前用户，已经登录
@@ -829,6 +824,7 @@ class Worker implements IClient {
             'user' => [
                 'user_id' => $user['user_id'],
                 'username' => $user['username'],
+                'avatar' => $user['avatar'],
             ],
             'timestamp' => $this->timestamp,
         ];
@@ -837,7 +833,7 @@ class Worker implements IClient {
 //            $this->flushUsers($key); //刷新在线用户列表
     }
 
-    public function register($key) {
+    public function needRegister($key) {
         $this->response = [
             'type' => self::USER_REGISTER,
             'timestamp' => $this->timestamp,
@@ -856,6 +852,70 @@ class Worker implements IClient {
 
         $user_id = $user['user_id'];
         $this->tearDown($user_id, $key);//注销用户服务
+    }
+
+    public function remove($key) {
+        $admin = $this->user->getUserById($this->request['sender_id'], ['role_id']);
+        $receiver_id = $this->request['receiver_id'];
+        $user = $this->user->getUserById($receiver_id, ['user_id', 'role_id', 'username']);
+        if (empty($user['user_id']) || empty($admin['role_id'])) {
+            $this->response = [
+                'type' => self::WARNING,
+                'mess' => '移除失败！用户不存在或者非法操作',
+                'timestamp' => $this->timestamp,
+            ];
+            $this->sendMessage($key);
+            return;
+        }
+        if ($admin['role_id'] <= $user['role_id']) {
+            $this->response = [
+                'type' => self::WARNING,
+                'mess' => '移除失败！您没有该权限',
+                'timestamp' => $this->timestamp,
+            ];
+            $this->sendMessage($key);
+            return;
+        }
+
+        $info = ['is_active' => 0];
+        $res = $this->user->update($receiver_id, $info);
+        if (false === $res) {
+            $this->response = [
+                'type' => self::WARNING,
+                'mess' => '移除失败！服务器出错',
+                'timestamp' => $this->timestamp,
+            ];
+            $this->sendMessage($key);
+            return;
+        }
+
+        $receiver_key = $this->user->getServiceKeyByUserId($receiver_id); // 用户的服务索引
+        if (false === $receiver_key) {
+            $this->response = [
+                'type' => self::SYSTEM,
+                'mess' => "移除成功！",
+                'timestamp' => $this->timestamp,
+            ];
+            $this->sendMessage($key);
+            return;
+        }
+        $this->response = [
+            'type' => self::USER_REMOVE,
+            'mess' => '你已被移除聊天室',
+            'timestamp' => $this->timestamp,
+        ];
+        $this->sendMessage($receiver_key);//发给禁用的用户
+        $this->server->close($receiver_key);//断开连接
+
+        $this->tearDown($receiver_id, $receiver_key);//注销用户服务
+
+        //系统通知
+        $this->response = [
+            'type' => self::SYSTEM,
+            'mess' => str_replace('%USERNAME%', $user['username'], $this->remove),
+            'timestamp' => $this->timestamp,
+        ];
+        $this->sendAllMessage(0);
     }
 
     public function sendMessage($key) {
@@ -880,7 +940,7 @@ class Worker implements IClient {
     public function sendUsers($key) {
         $users = [];
         foreach ($this->user->getOnlineUsers() as $user_id) {
-            $info = ['user_id', 'username', 'is_active', 'avatar'];
+            $info = ['user_id', 'username', 'avatar'];
             $user = $this->user->getUserById($user_id, $info);
             $user['is_online'] = true;
             $users[] = $user;

@@ -1,4 +1,8 @@
+bandwidth=100
 [ssl]
 local_cert=/home/ssl/xxx.crt
 local_pk=/home/ssl/xxx.key
 ca_file=/home/ssl/xxx.ca.crt
+[security]
+server_name=xxx
+client_name=yyy

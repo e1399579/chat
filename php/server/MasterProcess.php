@@ -42,6 +42,8 @@ class MasterProcess extends AProcess implements IService {
 
     protected $target; // 服务监听地址
 
+    protected $security;
+
     protected $frame_meta_pool = []; // 帧结构元数据，列表
     protected $buffers = []; // 数据缓冲，列表
     protected $all_messages = []; // 将要发送的全部消息列表
@@ -60,12 +62,14 @@ class MasterProcess extends AProcess implements IService {
     /**
      * @param int $port
      * @param array $ssl
+     * @param array $security
      * @param int $bandwidth // 网络带宽 Mbps
      */
-    public function __construct(int $port, array $ssl = [], int $bandwidth = 100) {
+    public function __construct(int $port, array $ssl = [], array $security = [], int $bandwidth = 100) {
         parent::__construct();
 
         $this->max_per_sent_bytes = ($bandwidth / 8 * 1024 ** 2) | 0;
+        $this->security = $security;
         ini_set('memory_limit', '8G');
 
         $this->ctx = null;
@@ -97,6 +101,7 @@ class MasterProcess extends AProcess implements IService {
      * @return void
      */
     public function run(int $num, IClient $worker): void {
+        $this->debug('Server is starting.');
         $this->setEventBase(); // 主进程，设置一次base，子进程每个都要重新设置
         for ($i = 0;$i < $num;++$i) {
             $sockets = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
@@ -442,11 +447,18 @@ class MasterProcess extends AProcess implements IService {
      * @return bool
      */
     protected function doHandShake(\EventBufferEvent $bev, array $headers, int $index, string $buffer): bool {
-        // TODO 请求信息校验
+        // 请求头处理
+        $connection = $headers['Connection'] ?? '';
+        $upgrade = $headers['Upgrade'] ?? '';
         $version = $headers['Sec-WebSocket-Version'] ?? '';
         $versions = explode(',', $version);
-        if (!(in_array(13, $versions)
-            && isset($headers['Sec-WebSocket-Key']))) {
+
+        // 请求信息校验
+        $connection_match = (false !== strrpos($connection, 'Upgrade'));
+        $upgrade_match = ('websocket' === strtolower($upgrade));
+        $version_match = in_array(13, $versions);
+        $key_exists = isset($headers['Sec-WebSocket-Key']);
+        if (!($connection_match && $upgrade_match && $version_match && $key_exists)) {
             /*
             HTTP/1.1 400 Bad Request
             Server: nginx/1.25.4
@@ -466,6 +478,28 @@ class MasterProcess extends AProcess implements IService {
             // 记录日志，便于分析可能的攻击者
             $this->logger->warning($index . '# Bad Request: ' . PHP_EOL . $buffer, $this->address_list[$index]);
             return false;
+        } else if (!empty($this->security)) {
+            $host = $headers['Host'] ?? '';
+            $hosts = explode(':', $host);
+            $server_name = $hosts[0] ?? '';
+            $origin = $headers['Origin'] ?? '';
+            preg_match('|https?://(.+)|', $origin, $matches);
+            $client_name = $matches[1] ?? '';
+            $valid_server_names = explode(',', $this->security['server_name']);
+            $valid_client_names = explode(',', $this->security['client_name']);
+            if (!(in_array($server_name, $valid_server_names)
+                && in_array($client_name, $valid_client_names))) {
+                /*
+                 HTTP/1.1 403 Forbidden
+                 Date: Wed, 21 Oct 2015 07:28:00 GMT
+                */
+                $date_utc = (new \DateTime('now', new \DateTimeZone('UTC')))->format(\DateTime::RFC7231);
+                $str = "HTTP/1.1 403 Forbidden\r\n" .
+                    "Date: " . $date_utc . "\r\n\r\n";
+                $bev->write($str);
+                $this->logger->warning($index . '# Forbidden: ' . PHP_EOL . $buffer, $this->address_list[$index]);
+                return false;
+            }
         }
 
         $key = $headers['Sec-WebSocket-Key'];
@@ -491,19 +525,23 @@ class MasterProcess extends AProcess implements IService {
      */
     protected function getHeaders(string $request): array {
         /*请求示例
-        GET ws://socket.mf.com:443/ HTTP/1.1
-        Host: socket.mf.com:443
-        Connection: Upgrade
+        GET / HTTP/1.1
+        Host: www.e1399579.publicvm.com:8080
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0
+        Accept-Language: zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2
+        Accept-Encoding: gzip, deflate, br
+        Sec-WebSocket-Version: 13
+        Origin: https://e1399579.publicvm.com
+        Sec-WebSocket-Extensions: permessage-deflate
+        Sec-WebSocket-Key: PdmKIshXTkEHAAHuBOIMvQ==
+        DNT: 1
+        Connection: keep-alive, Upgrade
+        Sec-Fetch-Dest: empty
+        Sec-Fetch-Mode: websocket
+        Sec-Fetch-Site: same-site
         Pragma: no-cache
         Cache-Control: no-cache
         Upgrade: websocket
-        Origin: http://socket.mf.com
-        Sec-WebSocket-Version: 13
-        User-Agent: Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36
-        Accept-Encoding: gzip, deflate, sdch
-        Accept-Language: zh-CN,zh;q=0.8
-        Sec-WebSocket-Key: v7RrPTGmP/iCW7pTbKcFMg==
-        Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits
         */
         $headers = explode("\r\n", $request);
         unset($headers[0]);
@@ -516,9 +554,13 @@ class MasterProcess extends AProcess implements IService {
         }
         // 只提取必要信息
         return [
+            'Connection' => $res['Connection'] ?? '',
+            'Upgrade' => $res['Upgrade'] ?? '',
             'Sec-WebSocket-Key' => $res['Sec-WebSocket-Key'] ?? '',
             'Sec-WebSocket-Version' => $res['Sec-WebSocket-Version'] ?? '',
             'User-Agent' => $res['User-Agent'] ?? '',
+            'Host' => $res['Host'] ?? '',
+            'Origin' => $res['Origin'] ?? '',
         ];
     }
 

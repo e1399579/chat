@@ -34,8 +34,9 @@ export class GeneralMessage extends IMessage {
                 vm.user.avatar = user.avatar ? vm.upload_url + user.avatar : Constant.DEFAULT_AVATAR;
                 vm.user.is_active = parseInt(user.is_active)
                 vm.user.is_super_admin = user.is_super_admin;
+                vm.session_id = mess.session_id;
                 // 刷新cookie 在线用户列表
-                vm.setCookie("user", JSON.stringify(vm.user));
+                vm.setStorage("session_id", mess.session_id);
                 vm.online_users.set(user.user_id, user);
                 vm.$notify({
                     group: 'tip',
@@ -130,8 +131,6 @@ export class GeneralMessage extends IMessage {
 
             case Constant.USER_AVATAR_SUCCESS: {
                 vm.user.avatar = vm.upload_url + mess.mess;
-                // 刷新cookie
-                vm.setCookie("user", JSON.stringify(vm.user));
                 // 刷新在线用户
                 let user = vm.online_users.get(vm.user.id);
                 user.avatar = mess.mess;
@@ -240,6 +239,7 @@ export class GeneralProcessor extends IProcessor {
             height: window.innerHeight - 16,
             username: "",
             password: "",
+            session_id: "",
             user: {
                 id: 0, displayName: '',
                 avatar: Constant.DEFAULT_AVATAR,
@@ -269,13 +269,9 @@ export class GeneralProcessor extends IProcessor {
             // 回调方法
             onOpen() {
                 // 从cookie中获取信息
-                let user = JSON.parse(this.getCookie('user'));
-                if (typeof user === 'object') {
-                    this.user.id = user.id;
-                    this.user.displayName = user.displayName;
-                    this.user.avatar = user.avatar ? user.avatar : Constant.DEFAULT_AVATAR;
-                    this.user.is_active = parseInt(user.is_active)
-                    this.user.is_super_admin = user.is_super_admin;
+                let session_id = this.getStorage('session_id');
+                if (session_id) {
+                    this.session_id = session_id;
                     this.sendMessage(Constant.USER_LOGIN);
                 } else {
                     this.$modal.show('login-modal');
@@ -352,27 +348,16 @@ export class GeneralProcessor extends IProcessor {
                 console.log(...arguments);
                 console.groupEnd();
             },
-            getCookie(name) {
-                let nameEQ = name + "=";
-                let ca = document.cookie.split(';');    //把cookie分割成组
-                for (let c of ca) {
-                    while (c.charAt(0) === ' ') {          //判断一下字符串有没有前导空格
-                        c = c.substring(1, c.length);      //有的话，从第二位开始取
-                    }
-                    if (c.indexOf(nameEQ) === 0) {       //如果含有我们要的name
-                        return unescape(c.substring(nameEQ.length, c.length));    //解码并截取我们要值
-                    }
-                }
-                return false;
+            getStorage(name) {
+                return localStorage.getItem(name);
             },
-            setCookie(name, value) {
-                let exp = new Date();
-                exp.setTime(exp.getTime() + Constant.COOKIE_EXPIRE_DAYS * 24 * 60 * 60 * 1000);
-                document.cookie = name + "=" + escape(value) + ";expires=" + exp.toGMTString();
+            setStorage(name, value) {
+                localStorage.setItem(name, value);
             },
             sendMessage(type, receiver_id = '0', mess = null, id = "", trace_id = "") {
                 let defaults = {
                     type: Constant.MESSAGE_COMMON,
+                    session_id: this.session_id,
                     receiver_id: '0',
                     mess: "",
                     trace_id: trace_id ? trace_id : DataHelper.buildTraceId(),
